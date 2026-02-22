@@ -1,0 +1,168 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  MEMBER
+}
+
+enum MemberType {
+  EMPLOYEE
+  CONTRACTOR
+  FREELANCER
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model Organization {
+  id                  String   @id @default(cuid())
+  name                String
+  slug                String   @unique
+  onboardingCompleted Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  users            User[]
+  leaveTypes       LeaveType[]
+  publicHolidays   PublicHoliday[]
+  jiraIntegration  JiraIntegration?
+  jiraUserMappings JiraUserMapping[]
+}
+
+model User {
+  id             String     @id @default(cuid())
+  email          String     @unique
+  name           String
+  passwordHash   String
+  role           Role       @default(MEMBER)
+  memberType     MemberType @default(EMPLOYEE)
+  countryCode    String     @default("NG")
+  digestOptOut   Boolean    @default(false)
+  organizationId String
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leaveRequests       LeaveRequest[]       @relation("UserLeaveRequests")
+  reviewedLeaves      LeaveRequest[]       @relation("ReviewerLeaveRequests")
+  passwordResetTokens PasswordResetToken[]
+  jiraUserMapping     JiraUserMapping?
+  jiraConnections     JiraIntegration[]    @relation("JiraConnectedBy")
+}
+
+model LeaveType {
+  id             String   @id @default(cuid())
+  name           String
+  color          String
+  isPaid         Boolean  @default(true)
+  defaultDays    Int
+  organizationId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leaveRequests LeaveRequest[]
+  leavePolicies LeavePolicy[]
+
+  @@unique([name, organizationId])
+}
+
+model LeavePolicy {
+  id              String   @id @default(cuid())
+  countryCode     String
+  annualAllowance Int
+  carryOverMax    Int      @default(0)
+  leaveTypeId     String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([countryCode, leaveTypeId])
+}
+
+model LeaveRequest {
+  id           String      @id @default(cuid())
+  startDate    DateTime
+  endDate      DateTime
+  status       LeaveStatus @default(PENDING)
+  note         String?
+  userId       String
+  leaveTypeId  String
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  user       User      @relation("UserLeaveRequests", fields: [userId], references: [id], onDelete: Cascade)
+  leaveType  LeaveType @relation(fields: [leaveTypeId], references: [id])
+  reviewedBy User?     @relation("ReviewerLeaveRequests", fields: [reviewedById], references: [id])
+}
+
+model JiraIntegration {
+  id              String   @id @default(cuid())
+  cloudId         String
+  siteUrl         String
+  accessToken     String
+  refreshToken    String
+  tokenExpiresAt  DateTime
+  organizationId  String   @unique
+  connectedByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connectedBy  User         @relation("JiraConnectedBy", fields: [connectedByUserId], references: [id])
+}
+
+model JiraUserMapping {
+  id             String @id @default(cuid())
+  jiraAccountId  String
+  jiraEmail      String
+  userId         String   @unique
+  organizationId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  userId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PublicHoliday {
+  id             String   @id @default(cuid())
+  name           String
+  date           DateTime
+  countryCode    String
+  organizationId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([date, countryCode, organizationId])
+}
