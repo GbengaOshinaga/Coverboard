@@ -46,7 +46,7 @@ export function Dialog({
       <div className="fixed inset-0 bg-black/50" />
       <div
         className={cn(
-          "relative z-50 w-full max-w-lg rounded-lg bg-white p-6 shadow-xl",
+          "relative z-50 mx-4 w-full max-w-lg rounded-lg bg-white p-4 shadow-xl sm:mx-auto sm:p-6",
           className
         )}
       >

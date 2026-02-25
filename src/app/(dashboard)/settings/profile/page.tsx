@@ -9,6 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { COUNTRY_NAMES } from "@/lib/utils";
+import { ProfileSkeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/components/ui/toast";
 import { ArrowLeft, CheckCircle, User, Lock, Bell } from "lucide-react";
 
 type Profile = {
@@ -25,6 +27,7 @@ type Profile = {
 
 export default function ProfilePage() {
   const { data: session, update: updateSession } = useSession();
+  const { toast } = useToast();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -78,6 +81,7 @@ export default function ProfilePage() {
         setProfileError(data.error ?? "Failed to update profile");
       } else {
         setProfileSuccess(true);
+        toast("Profile updated", "success");
         await updateSession({ name });
         setTimeout(() => setProfileSuccess(false), 3000);
       }
@@ -117,6 +121,7 @@ export default function ProfilePage() {
         setPasswordError(data.error ?? "Failed to change password");
       } else {
         setPasswordSuccess(true);
+        toast("Password changed", "success");
         setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
@@ -131,8 +136,8 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-2xl py-8 text-center text-sm text-gray-400">
-        Loading...
+      <div className="mx-auto max-w-2xl py-4">
+        <ProfileSkeleton />
       </div>
     );
   }
@@ -147,7 +152,7 @@ export default function ProfilePage() {
           <ArrowLeft size={18} />
         </Link>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Profile</h1>
+          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Profile</h1>
           <p className="text-sm text-gray-500">
             Manage your account settings
           </p>
@@ -253,11 +258,14 @@ export default function ProfilePage() {
                 setDigestOptOut(newValue);
                 setSavingDigest(true);
                 try {
-                  await fetch("/api/auth/profile", {
+                  const res = await fetch("/api/auth/profile", {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ digestOptOut: newValue }),
                   });
+                  if (res.ok) {
+                    toast(newValue ? "Weekly digest disabled" : "Weekly digest enabled", "success");
+                  }
                 } catch {
                   setDigestOptOut(!newValue);
                 } finally {

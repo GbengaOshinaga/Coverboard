@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { addMonths, subMonths, format, startOfMonth, endOfMonth } from "date-fns";
 import { MonthView } from "@/components/calendar/month-view";
 import { Card, CardContent } from "@/components/ui/card";
+import { CalendarSkeleton } from "@/components/ui/skeleton";
 
 export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -48,7 +49,7 @@ export default function CalendarPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Team Calendar</h1>
+        <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Team Calendar</h1>
         <p className="text-sm text-gray-500">
           View all team absences and public holidays at a glance
         </p>
@@ -57,9 +58,7 @@ export default function CalendarPage() {
       <Card>
         <CardContent className="p-4">
           {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="text-sm text-gray-400">Loading calendar...</div>
-            </div>
+            <CalendarSkeleton />
           ) : (
             <MonthView
               currentDate={currentDate}
@@ -73,7 +72,7 @@ export default function CalendarPage() {
       </Card>
 
       {/* Legend */}
-      <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-500">
         <span className="font-medium">Legend:</span>
         <div className="flex items-center gap-1.5">
           <div className="h-2.5 w-2.5 rounded-full bg-[#3b82f6]" />

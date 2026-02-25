@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/components/ui/toast";
 import { Plus, MessageSquare, CheckCircle, XCircle, User, ChevronRight, SquareKanban, ExternalLink, Unlink } from "lucide-react";
 
 type LeaveType = {
@@ -48,6 +50,7 @@ export default function SettingsPage() {
   const [jiraStatus, setJiraStatus] = useState<JiraStatus | null>(null);
   const [disconnectingJira, setDisconnectingJira] = useState(false);
 
+  const { toast } = useToast();
   const user = session?.user as Record<string, unknown> | undefined;
   const userRole = user?.role as string | undefined;
   const orgName = user?.organizationName as string | undefined;
@@ -111,12 +114,15 @@ export default function SettingsPage() {
     });
 
     if (res.ok) {
+      toast("Leave type added", "success");
       setShowAdd(false);
       setNewName("");
       setNewColor("#6366f1");
       setNewDays("20");
       setNewIsPaid(true);
       fetchLeaveTypes();
+    } else {
+      toast("Failed to add leave type", "error");
     }
 
     setSaving(false);
@@ -125,7 +131,7 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+        <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Settings</h1>
         <p className="text-sm text-gray-500">
           Manage your organization and leave policies
         </p>
@@ -193,9 +199,20 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <p className="py-4 text-center text-sm text-gray-400">
-              Loading...
-            </p>
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="flex items-center justify-between rounded-lg border border-gray-100 p-3">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-4 w-4 rounded-full" />
+                    <Skeleton className="h-4 w-28" />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-3 w-14" />
+                    <Skeleton className="h-5 w-12 rounded-full" />
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : leaveTypes.length === 0 ? (
             <p className="py-4 text-center text-sm text-gray-400">
               No leave types configured yet.
@@ -380,10 +397,13 @@ export default function SettingsPage() {
                     try {
                       const res = await fetch("/api/jira/disconnect", { method: "POST" });
                       if (res.ok) {
+                        toast("Jira disconnected", "success");
                         setJiraStatus({ configured: true, connected: false, siteUrl: null, connectedBy: null });
+                      } else {
+                        toast("Failed to disconnect Jira", "error");
                       }
                     } catch {
-                      // Silently fail
+                      toast("Failed to disconnect Jira", "error");
                     } finally {
                       setDisconnectingJira(false);
                     }

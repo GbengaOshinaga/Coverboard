@@ -30,7 +30,7 @@ export function MemberCard({
   const isOut = member._count?.leaveRequests && member._count.leaveRequests > 0;
 
   return (
-    <div className="flex items-center gap-4 rounded-lg border border-gray-200 bg-white p-4 transition-shadow hover:shadow-sm">
+    <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-3 transition-shadow hover:shadow-sm sm:gap-4 sm:p-4">
       <div className="relative">
         <Avatar name={member.name} size="lg" />
         {isOut ? (

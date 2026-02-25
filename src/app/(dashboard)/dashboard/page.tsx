@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -7,6 +8,8 @@ import { UpcomingAbsences } from "@/components/dashboard/upcoming-absences";
 import { LeaveBalances } from "@/components/dashboard/leave-balances";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, CalendarDays, Clock, AlertTriangle } from "lucide-react";
+
+export const metadata: Metadata = { title: "Dashboard" };
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
@@ -70,7 +73,7 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Dashboard</h1>
         <p className="text-sm text-gray-500">
           Team overview for{" "}
           {today.toLocaleDateString("en-US", {

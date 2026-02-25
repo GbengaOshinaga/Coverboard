@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { MemberCard } from "@/components/team/member-card";
 import { MemberForm } from "@/components/team/member-form";
+import { CardSkeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/components/ui/toast";
 import { Plus } from "lucide-react";
 
 type Member = {
@@ -27,6 +29,7 @@ export default function TeamPage() {
 
   const userRole = (session?.user as Record<string, unknown> | undefined)?.role as string | undefined;
   const canManage = userRole === "ADMIN" || userRole === "MANAGER";
+  const { toast } = useToast();
 
   const fetchMembers = useCallback(async () => {
     setLoading(true);
@@ -59,6 +62,7 @@ export default function TeamPage() {
       throw new Error(err.error || "Failed to add member");
     }
 
+    toast("Team member added", "success");
     setShowForm(false);
     fetchMembers();
   }
@@ -88,22 +92,23 @@ export default function TeamPage() {
       throw new Error(err.error || "Failed to update member");
     }
 
+    toast("Team member updated", "success");
     setEditMember(undefined);
     fetchMembers();
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Team</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Team</h1>
+          <p className="text-xs text-gray-500 sm:text-sm">
             {members.length} member{members.length !== 1 ? "s" : ""} in your
             team
           </p>
         </div>
         {canManage && (
-          <Button onClick={() => setShowForm(true)}>
+          <Button size="sm" className="self-start sm:self-auto sm:size-default" onClick={() => setShowForm(true)}>
             <Plus className="mr-1.5 h-4 w-4" />
             Add member
           </Button>
@@ -111,11 +116,13 @@ export default function TeamPage() {
       </div>
 
       {loading ? (
-        <div className="py-12 text-center text-sm text-gray-400">
-          Loading team...
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <CardSkeleton key={i} />
+          ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {members.map((member) => (
             <MemberCard
               key={member.id}

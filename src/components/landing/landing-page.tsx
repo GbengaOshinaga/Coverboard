@@ -268,7 +268,7 @@ const plans = [
       "Unlimited team members",
       "Slack integration",
       "Overlap & coverage warnings",
-      "Leave balance analytics",
+      "Jira project coverage",
       "Priority support",
     ],
     cta: "Start 14-day trial",

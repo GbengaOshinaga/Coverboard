@@ -36,15 +36,15 @@ export function DayCell({
   return (
     <div
       className={cn(
-        "min-h-[100px] border-b border-r border-gray-200 p-1",
+        "min-h-[60px] border-b border-r border-gray-200 p-0.5 sm:min-h-[100px] sm:p-1",
         !isCurrentMonth && "bg-gray-50",
         isWeekend && isCurrentMonth && "bg-gray-50/50"
       )}
     >
-      <div className="flex items-center justify-between px-1">
+      <div className="flex items-center justify-between px-0.5 sm:px-1">
         <span
           className={cn(
-            "inline-flex h-6 w-6 items-center justify-center rounded-full text-xs",
+            "inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] sm:h-6 sm:w-6 sm:text-xs",
             isToday && "bg-brand-600 text-white font-bold",
             !isToday && isCurrentMonth && "text-gray-900",
             !isToday && !isCurrentMonth && "text-gray-400"
@@ -53,7 +53,7 @@ export function DayCell({
           {dayNumber}
         </span>
         {events.length > 2 && (
-          <span className="text-[10px] text-gray-400">
+          <span className="text-[9px] text-gray-400 sm:text-[10px]">
             +{events.length - 2}
           </span>
         )}
@@ -63,17 +63,18 @@ export function DayCell({
         {holidays.map((holiday) => (
           <div
             key={holiday.id}
-            className="truncate rounded px-1 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-800"
+            className="truncate rounded px-0.5 py-px text-[8px] font-medium bg-amber-100 text-amber-800 sm:px-1 sm:py-0.5 sm:text-[10px]"
             title={`${holiday.name} (${holiday.countryCode})`}
           >
-            {holiday.name}
+            <span className="hidden sm:inline">{holiday.name}</span>
+            <span className="sm:hidden">{holiday.countryCode}</span>
           </div>
         ))}
         {events.slice(0, 2).map((event) => (
           <div
             key={event.id}
             className={cn(
-              "truncate px-1 py-0.5 text-[10px] font-medium text-white",
+              "truncate px-0.5 py-px text-[8px] font-medium text-white sm:px-1 sm:py-0.5 sm:text-[10px]",
               event.isStart && "rounded-l",
               event.isEnd && "rounded-r",
               !event.isStart && !event.isEnd && "rounded-none"

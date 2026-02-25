@@ -13,6 +13,7 @@ import {
   isSameDay,
 } from "date-fns";
 import { DayCell, type CalendarEvent, type HolidayEvent } from "./day-cell";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 type LeaveData = {
   id: string;
@@ -29,7 +30,8 @@ type HolidayData = {
   countryCode: string;
 };
 
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const WEEKDAYS_FULL = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const WEEKDAYS_SHORT = ["S", "M", "T", "W", "T", "F", "S"];
 
 export function MonthView({
   currentDate,
@@ -85,51 +87,58 @@ export function MonthView({
     <div>
       {/* Header */}
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">
+        <h2 className="text-base font-semibold text-gray-900 sm:text-lg">
           {format(currentDate, "MMMM yyyy")}
         </h2>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2">
           <button
             onClick={onPrevMonth}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-md border border-gray-300 p-1.5 text-gray-700 hover:bg-gray-50 sm:px-3 sm:py-1.5"
+            aria-label="Previous month"
           >
-            Prev
+            <ChevronLeft className="h-4 w-4 sm:hidden" />
+            <span className="hidden sm:inline text-sm font-medium">Prev</span>
           </button>
           <button
             onClick={onNextMonth}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-md border border-gray-300 p-1.5 text-gray-700 hover:bg-gray-50 sm:px-3 sm:py-1.5"
+            aria-label="Next month"
           >
-            Next
+            <ChevronRight className="h-4 w-4 sm:hidden" />
+            <span className="hidden sm:inline text-sm font-medium">Next</span>
           </button>
         </div>
       </div>
 
-      {/* Grid */}
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-        {/* Weekday headers */}
-        <div className="grid grid-cols-7 border-b border-gray-200">
-          {WEEKDAYS.map((day) => (
-            <div
-              key={day}
-              className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase"
-            >
-              {day}
-            </div>
-          ))}
-        </div>
+      {/* Grid — horizontal scroll on very small screens */}
+      <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+        <div className="min-w-[480px] overflow-hidden rounded-lg border border-gray-200 bg-white">
+          {/* Weekday headers */}
+          <div className="grid grid-cols-7 border-b border-gray-200">
+            {WEEKDAYS_FULL.map((day, i) => (
+              <div
+                key={day}
+                className="px-1 py-1.5 text-center text-[10px] font-medium text-gray-500 uppercase sm:px-2 sm:py-2 sm:text-xs"
+              >
+                <span className="sm:hidden">{WEEKDAYS_SHORT[i]}</span>
+                <span className="hidden sm:inline">{day}</span>
+              </div>
+            ))}
+          </div>
 
-        {/* Day cells */}
-        <div className="grid grid-cols-7">
-          {days.map((day) => (
-            <DayCell
-              key={day.toISOString()}
-              date={day}
-              isCurrentMonth={isSameMonth(day, currentDate)}
-              isToday={isToday(day)}
-              events={getEventsForDay(day)}
-              holidays={getHolidaysForDay(day)}
-            />
-          ))}
+          {/* Day cells */}
+          <div className="grid grid-cols-7">
+            {days.map((day) => (
+              <DayCell
+                key={day.toISOString()}
+                date={day}
+                isCurrentMonth={isSameMonth(day, currentDate)}
+                isToday={isToday(day)}
+                events={getEventsForDay(day)}
+                holidays={getHolidaysForDay(day)}
+              />
+            ))}
+          </div>
         </div>
       </div>
     </div>

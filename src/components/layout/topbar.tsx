@@ -3,24 +3,33 @@
 import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
 import { Avatar } from "@/components/ui/avatar";
-import { LogOut } from "lucide-react";
+import { LogOut, Menu } from "lucide-react";
 
-export function Topbar() {
+export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const { data: session } = useSession();
   const user = session?.user;
 
   return (
-    <header className="flex h-16 items-center justify-between border-b border-gray-200 bg-white px-6">
-      <div>
+    <header className="flex h-14 items-center justify-between border-b border-gray-200 bg-white px-4 md:h-16 md:px-6">
+      <div className="flex items-center gap-3">
+        {onMenuClick && (
+          <button
+            onClick={onMenuClick}
+            className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 md:hidden"
+            aria-label="Open menu"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+        )}
         <h2 className="text-sm font-medium text-gray-500">
           {(user as Record<string, unknown> | undefined)?.organizationName as string ?? "Team"}
         </h2>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3 md:gap-4">
         {user && (
-          <div className="flex items-center gap-3">
-            <Link href="/settings/profile" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+          <div className="flex items-center gap-2 md:gap-3">
+            <Link href="/settings/profile" className="flex items-center gap-2 md:gap-3 hover:opacity-80 transition-opacity">
               <Avatar name={user.name ?? "User"} size="sm" />
               <div className="hidden sm:block">
                 <p className="text-sm font-medium text-gray-900">

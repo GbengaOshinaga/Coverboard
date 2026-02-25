@@ -5,6 +5,8 @@ import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { RequestCard } from "@/components/leave/request-card";
+import { TableSkeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/components/ui/toast";
 import { Plus } from "lucide-react";
 
 type LeaveBalance = {
@@ -48,6 +50,7 @@ export default function RequestsPage() {
   const userId = user?.id as string | undefined;
   const userRole = user?.role as string | undefined;
   const isReviewer = userRole === "ADMIN" || userRole === "MANAGER";
+  const { toast } = useToast();
 
   const fetchRequests = useCallback(async () => {
     setLoading(true);
@@ -106,7 +109,11 @@ export default function RequestsPage() {
     });
 
     if (res.ok) {
+      const label = status === "APPROVED" ? "approved" : status === "REJECTED" ? "rejected" : "cancelled";
+      toast(`Request ${label}`, status === "APPROVED" ? "success" : status === "REJECTED" ? "error" : "info");
       fetchRequests();
+    } else {
+      toast("Failed to update request", "error");
     }
   }
 
@@ -114,17 +121,17 @@ export default function RequestsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Leave Requests</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Leave Requests</h1>
+          <p className="text-xs text-gray-500 sm:text-sm">
             {isReviewer
               ? "Review and manage all team leave requests"
               : "View and manage your leave requests"}
           </p>
         </div>
-        <Link href="/requests/new">
-          <Button>
+        <Link href="/requests/new" className="self-start sm:self-auto">
+          <Button size="sm" className="sm:size-default">
             <Plus className="mr-1.5 h-4 w-4" />
             New request
           </Button>
@@ -132,7 +139,7 @@ export default function RequestsPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-1.5 sm:gap-2">
         {filters.map((f) => (
           <button
             key={f}
@@ -150,9 +157,7 @@ export default function RequestsPage() {
 
       {/* Requests list */}
       {loading ? (
-        <div className="py-12 text-center text-sm text-gray-400">
-          Loading requests...
-        </div>
+        <TableSkeleton rows={4} />
       ) : requests.length === 0 ? (
         <div className="py-12 text-center">
           <p className="text-sm text-gray-400">No leave requests found.</p>
