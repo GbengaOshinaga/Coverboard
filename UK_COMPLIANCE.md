@@ -12,6 +12,7 @@ Existing country logic (LATAM/Africa/SEA) remains unchanged.
 Updated `prisma/schema.prisma` with new UK-related fields and models:
 
 - `Organization`
+  - `plan` (`SubscriptionPlan`: `STARTER` | `GROWTH` | `SCALE` | `PRO`; gates support tiers, audit trail, etc.)
   - `ukBankHolidayInclusive` (default `true`)
   - `ukBankHolidayRegion` (`ENGLAND_WALES` default)
   - `ukCarryOverEnabled` (default `false`)
@@ -33,6 +34,7 @@ Updated `prisma/schema.prisma` with new UK-related fields and models:
   - `BankHoliday` (region-specific UK bank holidays)
   - `UserWeeklyHours` (rolling history for variable-hours pro-rata)
   - `LeaveCarryOverBalance` (separate carry-over balance with expiry)
+  - `AuditLog` (immutable activity log; Pro plan — see main README)
 
 ## UK Leave Types Added
 
@@ -74,6 +76,7 @@ Added optional env keys in `.env.example`:
 
 - `SSP_WEEKLY_RATE` (default 116.75)
 - `SMP_WEEKLY_RATE` (default 184.03)
+- `NEXT_PUBLIC_SUPPORT_EMAIL`, `NEXT_PUBLIC_PRIORITY_SUPPORT_EMAIL`, `NEXT_PUBLIC_SLA_SUPPORT_EMAIL`, `NEXT_PUBLIC_ONBOARDING_BOOKING_URL` — Help page contact targets (see `.env.example`)
 
 ## Onboarding + Seeding Behavior
 
@@ -128,16 +131,24 @@ Supports:
 
 ## UK Compliance Reporting
 
-Added API:
-- `src/app/api/reports/uk-compliance/route.ts`
+Added APIs:
+- `src/app/api/reports/uk-compliance/route.ts` — Bradford Factor, right-to-work, holiday usage, SSP liability, parental leave (KIT days with caps and remaining)
+- `src/app/api/reports/analytics/route.ts` — absence analytics (trends, breakdowns; **Admin** and **Manager** only)
 
-Includes:
-- holiday usage dataset
-- absence trigger report (Bradford threshold default 200)
-- SSP liability report
-- parental leave tracker (KIT days with caps)
+**Reports UI** (`src/app/(dashboard)/reports/page.tsx`):
 
-Settings page includes UK Compliance summary cards consuming this API.
+- **Analytics** — monthly absence trend, leave-type and department breakdowns, top absence days
+- **UK compliance tabs** — per-report CSV export
+- **Year-end rollover** (admins) — preview and run carry-over into `LeaveCarryOverBalance` via `POST /api/carry-over/process`
+
+**Carry-over processing** (`src/app/api/carry-over/process/route.ts`):
+
+- Admin-only; uses org UK carry-over settings (max days, expiry date)
+- Supports `dryRun` to preview who would receive carried days for a given `fromYear`
+
+**Parental leave / KIT**: admins and managers can update `kitDaysUsed` on a leave request (PATCH `/api/leave-requests/[id]`) and see usage in compliance exports.
+
+Settings page includes UK Compliance summary cards consuming the uk-compliance API.
 
 ## Tests Added
 
@@ -155,3 +166,4 @@ Added script:
 - Existing country configs are preserved.
 - UK logic is additive and country-scoped.
 - Backend runtime checks now enforce leave-type evidence/notice where configured.
+- **Product-wide docs** (subscription `plan`, Help & Support env vars, audit trail, landing pricing): see **`README.md`** and **`.env.example`**.

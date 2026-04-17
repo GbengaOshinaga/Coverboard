@@ -4,6 +4,21 @@ Team leave management for small, distributed teams. See who's out, plan coverage
 
 Built for teams of 5–15 people, especially those spread across the UK, Africa, LATAM, and SEA where public holidays and statutory leave rules vary wildly. Includes full UK statutory compliance — SSP, maternity, paternity, shared parental leave, regional bank holidays, pro-rata entitlements, and Bradford Factor reporting.
 
+## Subscription plans
+
+Each organization has a **`plan`** on the `Organization` model: `STARTER`, `GROWTH`, `SCALE`, or `PRO` (see `SubscriptionPlan` in `prisma/schema.prisma`). Tier logic lives in **`src/lib/plans.ts`** (support tiers, audit trail access, admin limits, etc.). Pricing copy for the landing page is in **`src/config/pricing.ts`**.
+
+| Tier | Examples of what unlocks |
+|------|---------------------------|
+| **Starter** | Core product; up to 2 admins (unless `maxAdminUsers` is changed) |
+| **Growth** | Unlimited admins; stronger UK reporting and compliance signals (see pricing config) |
+| **Scale** | Priority support targets on **Help**; absence analytics; UK compliance report pack; year-end carry-over tooling |
+| **Pro** | SLA-backed support; dedicated onboarding booking CTA; **audit trail** viewer and CSV export; custom leave policy editing in Settings |
+
+The demo seed organization is set to **Scale** so plan-gated UI can be exercised without manual DB edits. Switch a org to **Pro** in the database (or seed) to try the audit trail at **`/audit`**.
+
+External API keys for third-party access were **not** implemented; product tiers may still mention future API access in marketing copy.
+
 ## Features
 
 ### Dashboard — "Who's out today?"
@@ -25,6 +40,8 @@ Country-aware balance engine. Each team member's allowance is determined by thei
 ### Multi-Country Leave Policies
 
 Define leave types (Annual, Sick, Parental, Compassionate) with per-country allowances via the `LeavePolicy` model. The seed includes policies for Nigeria, Kenya, Brazil, and South Africa.
+
+**Admins** can create, edit inline, and delete **country policies** (allowance and carry-over cap per leave type and country) from **Settings**, and **edit or delete leave types** when no leave requests reference them. APIs: `GET`/`POST` `/api/leave-policies`, `PATCH`/`DELETE` `/api/leave-policies/[id]`, `PATCH`/`DELETE` `/api/leave-types/[id]`.
 
 ### Mixed Team Support
 
@@ -81,6 +98,24 @@ Users are matched between Coverboard and Jira by email address, with mappings ca
 
 Country-specific public holidays are stored per organization. They appear on the team calendar alongside leave. The seed includes holidays for Nigeria, Kenya, Brazil, and South Africa (2026).
 
+### Reports, UK Compliance & Analytics
+
+The **Reports** area (`/reports`) includes:
+
+- **Analytics** — absence trends, leave-type and department breakdowns, top absence days (consumes `/api/reports/analytics`).
+- **UK compliance** — Bradford Factor, right to work, holiday usage, SSP liability, parental leave with KIT day tracking; per-tab and full-pack **CSV export**.
+- **Year-end rollover** (admins) — preview and run UK annual carry-over into `LeaveCarryOverBalance` via `/api/carry-over/process` (supports `dryRun`).
+
+UK-focused details are documented in **`UK_COMPLIANCE.md`**.
+
+### Help & Support
+
+**`/help`** shows plan-appropriate contact options: standard email for Starter/Growth, priority targets for Scale, SLA-backed messaging for Pro. Optional public env vars (`NEXT_PUBLIC_SUPPORT_EMAIL`, etc.) override defaults — see **`.env.example`**.
+
+### Audit trail (Pro)
+
+**`/audit`** lists organization activity for **admins** on **Pro** plans. Entries are written through **`src/lib/audit.ts`** (`recordAudit`) from key API routes (leave requests, team members, leave types/policies, org settings, carry-over runs, onboarding completion). **`GET /api/audit-logs`** supports filters and cursor pagination; the page can **export CSV**.
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -126,14 +161,18 @@ NEXTAUTH_URL="http://localhost:3000"
 NEXTAUTH_SECRET="generate-a-random-secret-here"
 ```
 
-See `.env.example` for all optional variables (Resend, Slack, Jira, cron secret).
+See **`.env.example`** for all optional variables (Resend, Slack, Jira, cron secret, UK statutory overrides, Help/Support and demo booking URLs).
 
 ### 3. Set up the database
 
 ```bash
-npx prisma db push      # Create tables
+npx prisma migrate dev   # Apply migrations (recommended when schema is versioned)
+# or, for a quick local sync without migration files:
+# npx prisma db push
 npm run db:seed          # Seed demo data
 ```
+
+After pulling changes that add models (e.g. `AuditLog`), run **`npx prisma generate`** and apply the latest migration (or `db push`) before starting the app.
 
 ### 4. Start the dev server
 
@@ -154,7 +193,7 @@ Open [http://localhost:3000](http://localhost:3000).
 | pedro@acme.com | password123 | Freelancer |
 | amina@acme.com | password123 | Member |
 
-The seed creates an "Acme Global" organization with 6 users across Nigeria, Kenya, and Brazil, 4 leave types, country-specific policies, sample leave requests, and 27 public holidays.
+The seed creates an "Acme Global" organization (plan **Scale** in `prisma/seed.ts`) with 6 users across Nigeria, Kenya, and Brazil, leave types, country-specific policies, sample leave requests, and public holidays.
 
 ## Slack Bot Setup
 
@@ -271,8 +310,11 @@ src/
         page.tsx                  Leave requests list (filter, approve, reject)
         new/page.tsx              New leave request form
       team/page.tsx               Team members management
+      reports/page.tsx            Analytics, UK compliance, year-end rollover, CSV exports
+      audit/page.tsx              Audit log viewer + export (Pro)
+      help/page.tsx               Plan-tiered support & resources
       settings/
-        page.tsx                  Org settings, leave types, Slack/Jira config
+        page.tsx                  Org settings, leave types, country policies, Slack/Jira
         profile/page.tsx          Profile, change password, email preferences
     api/
       auth/[...nextauth]/route.ts NextAuth handler
@@ -291,9 +333,18 @@ src/
         coverage/route.ts         Open issues + available teammates
         reassign/route.ts         One-click issue reassignment
       leave-balances/route.ts     Leave balance calculations
+      weekly-hours/route.ts       Variable-hours history (UK pro-rata)
       leave-requests/route.ts     Leave request CRUD (list + create)
-      leave-requests/[id]/route.ts  Approve/reject/cancel
-      leave-types/route.ts        Leave type management
+      leave-requests/[id]/route.ts  Approve/reject/cancel, KIT/evidence (managers)
+      leave-types/route.ts        Leave type list + create
+      leave-types/[id]/route.ts   Update/delete leave type (admin)
+      leave-policies/route.ts     Country policies list + create
+      leave-policies/[id]/route.ts  Update/delete country policy
+      organization/settings/route.ts  Org + UK settings (includes plan)
+      reports/uk-compliance/route.ts  UK compliance datasets
+      reports/analytics/route.ts  Absence analytics
+      carry-over/process/route.ts Year-end carry-over (admin)
+      audit-logs/route.ts         Audit log listing (admin, Pro)
       onboarding/complete/        Onboarding wizard completion
       overlap/route.ts            Overlap detection for date ranges
       slack/commands/route.ts     Slash command handler
@@ -305,7 +356,7 @@ src/
     ui/                           Reusable primitives (Button, Card, Badge, etc.)
     calendar/                     Month view + day cell components
     dashboard/                    Who's out, upcoming absences, leave balances
-    landing/                      Landing page (navbar, hero, features, pricing)
+    landing/                      Landing page (navbar, hero, features, pricing tiers)
     layout/                       Sidebar + topbar
     leave/                        Request form, overlap, balance, coverage warning
     onboarding/                   Multi-step onboarding wizard
@@ -317,6 +368,9 @@ src/
     email-templates.ts            HTML email templates
     jira.ts                       Jira OAuth token management, issue search, reassign
     leave-balances.ts             Balance calculation engine
+    plans.ts                      Subscription plan helpers and feature gates
+    audit.ts                      Audit log helper (`recordAudit`)
+    csv-export.ts                 CSV helpers for reports and audit export
     prisma.ts                     Prisma client singleton
     slack.ts                      Slack client, request verification, user resolution
     slack-messages.ts             Block Kit message builders
@@ -325,24 +379,27 @@ src/
     utils.ts                      cn(), date helpers, country names
     validations.ts                Zod schemas
 prisma/
-  schema.prisma                   Database schema (10 models, 3 enums)
+  schema.prisma                   Database schema (see below)
   seed.ts                         Demo data seeder
+UK_COMPLIANCE.md                  UK rules, reporting, carry-over notes
 vercel.json                       Cron job configuration (weekly digest)
 ```
 
 ## Database Schema
 
-Ten models with three enums:
+**14 models** and **9 enums** (including `SubscriptionPlan`, `EmploymentType`, `LeaveCategory`, `BankHolidayRegion`, `DataResidency`). Key entities:
 
-- **Organization** — The team/company
-- **User** — Team members with role (Admin/Manager/Member), member type (Employee/Contractor/Freelancer), and country code
-- **LeaveType** — Configurable leave categories (Annual, Sick, Parental, Compassionate) with color and default allowance
-- **LeavePolicy** — Country-specific overrides for leave type allowances (e.g., Annual Leave in Kenya = 21 days)
-- **LeaveRequest** — Individual leave requests with status workflow (Pending -> Approved/Rejected/Cancelled)
-- **PublicHoliday** — Country-specific holidays displayed on the calendar
-- **PasswordResetToken** — Secure, single-use tokens for the forgot-password flow
-- **JiraIntegration** — Per-org Jira OAuth credentials (cloud ID, tokens, site URL)
-- **JiraUserMapping** — Cached email-based mapping between Coverboard users and Jira accounts
+- **Organization** — Team/company; **`plan`** (subscription tier), UK settings, carry-over config, `maxAdminUsers`, data residency
+- **User** — Role, member type, employment type, UK/compliance fields, weekly hours relation
+- **LeaveType** — Leave categories with metadata (category, evidence, notice, etc.)
+- **LeavePolicy** — Per-country allowance and carry-over caps for a leave type
+- **LeaveRequest** — Workflow, evidence, KIT days for parental tracking
+- **PublicHoliday** / **BankHoliday** — Generic country holidays vs UK regional bank holidays
+- **UserWeeklyHours** — History for variable-hours pro-rata
+- **LeaveCarryOverBalance** — Carried days per user, leave type, and leave year
+- **PasswordResetToken** — Forgot-password tokens
+- **JiraIntegration** / **JiraUserMapping** — Jira OAuth and email cache
+- **AuditLog** — Append-only activity log (no FK to `User`; stores actor id/email/role on each row)
 
 ## API Reference
 
@@ -363,7 +420,7 @@ Ten models with three enums:
 |--------|----------|-------------|
 | GET | `/api/leave-requests` | List requests (filter by status, userId, date range) |
 | POST | `/api/leave-requests` | Create a new request |
-| PATCH | `/api/leave-requests/[id]` | Approve, reject, or cancel a request |
+| PATCH | `/api/leave-requests/[id]` | Approve, reject, cancel; admins/managers may set `kitDaysUsed` / `evidenceProvided` |
 
 ### Leave Balances
 
@@ -398,7 +455,20 @@ Ten models with three enums:
 | GET | `/api/holidays` | List public holidays (filter by country, year) |
 | GET | `/api/leave-types` | List leave types for the org |
 | POST | `/api/leave-types` | Create a new leave type (Admin only) |
+| PATCH | `/api/leave-types/[id]` | Update a leave type (Admin only) |
+| DELETE | `/api/leave-types/[id]` | Delete a leave type if unused (Admin only) |
+| GET | `/api/leave-policies` | List country leave policies (`?leaveTypeId=` optional) |
+| POST | `/api/leave-policies` | Create a country policy (Admin only) |
+| PATCH | `/api/leave-policies/[id]` | Update allowance / carry-over max (Admin only) |
+| DELETE | `/api/leave-policies/[id]` | Delete a policy (Admin only) |
+| GET | `/api/organization/settings` | Org UK settings + `plan` (any authenticated user) |
+| PATCH | `/api/organization/settings` | Update UK settings (Admin only) |
+| GET | `/api/reports/uk-compliance` | UK compliance report datasets |
+| GET | `/api/reports/analytics` | Absence analytics |
+| POST | `/api/carry-over/process` | Year-end carry-over (`fromYear`, optional `dryRun`; Admin) |
+| GET | `/api/audit-logs` | Paginated audit log (`action`, `resource`, date range, `cursor`; Admin, **Pro** plan) |
 | GET | `/api/overlap` | Check team overlap for a date range |
+| GET/POST | `/api/weekly-hours` | Rolling weekly hours for variable-hours users (UK pro-rata) |
 | GET | `/api/slack/status` | Check Slack integration status |
 | POST | `/api/cron/weekly-digest` | Send weekly digest emails (cron-triggered) |
 
@@ -425,9 +495,12 @@ npm run db:studio    # Open Prisma Studio (database GUI)
 - [x] Weekly digest email for managers
 - [x] Onboarding wizard for new organizations
 - [x] Jira project coverage (flag, suggest, one-click reassign)
+- [x] Subscription tiers (`Organization.plan`) with plan-aware Help and limits
+- [x] UK compliance reporting, analytics, CSV exports, year-end carry-over processing
+- [x] Custom leave types / per-country policies (admin CRUD) and audit trail (Pro)
+- [ ] Public HTTP API with API keys (not implemented)
 - [ ] Advanced skill-based coverage planning
-- [ ] Carry-over and accrual logic at year-end
-- [ ] Multi-organization support
+- [ ] Multi-organization support (single user across orgs)
 - [ ] Linear / Asana integration
 - [ ] Microsoft Teams bot
 - [ ] Mobile-responsive improvements
