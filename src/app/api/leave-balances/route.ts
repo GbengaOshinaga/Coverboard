@@ -13,7 +13,17 @@ export async function GET(request: Request) {
   const targetUserId = searchParams.get("userId");
   const year = searchParams.get("year");
 
-  const currentUserId = (session.user as Record<string, unknown>).id as string;
+  const sessionUser = session.user as Record<string, unknown>;
+  const currentUserId = sessionUser.id as string;
+  const userRole = sessionUser.role as string;
+
+  if (targetUserId && targetUserId !== currentUserId && userRole === "MEMBER") {
+    return NextResponse.json(
+      { error: "You can only view your own leave balances" },
+      { status: 403 }
+    );
+  }
+
   const userId = targetUserId ?? currentUserId;
   const balanceYear = year ? parseInt(year) : new Date().getFullYear();
 

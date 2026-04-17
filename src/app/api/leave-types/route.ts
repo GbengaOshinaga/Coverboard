@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { leaveTypeSchema } from "@/lib/validations";
+import { recordAudit, requestAuditContext } from "@/lib/audit";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -49,6 +50,24 @@ export async function POST(request: Request) {
         ...parsed.data,
         organizationId: orgId,
       },
+    });
+
+    recordAudit({
+      organizationId: orgId,
+      action: "leave_type.created",
+      resource: "leave_type",
+      resourceId: leaveType.id,
+      actor: {
+        id: (session.user as Record<string, unknown>).id as string,
+        email: session.user.email ?? null,
+        role: userRole,
+      },
+      metadata: {
+        name: leaveType.name,
+        defaultDays: leaveType.defaultDays,
+        isPaid: leaveType.isPaid,
+      },
+      context: requestAuditContext(request),
     });
 
     return NextResponse.json(leaveType, { status: 201 });

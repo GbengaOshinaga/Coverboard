@@ -9,6 +9,10 @@ export type CountryLeaveRule = {
   isPaid: boolean;
   annualAllowance: number;
   carryOverMax: number;
+  category?: "PAID" | "UNPAID" | "STATUTORY";
+  requiresEvidence?: boolean;
+  minNoticeDays?: number;
+  durationLogic?: string;
   note: string;
 };
 
@@ -27,6 +31,112 @@ export type CountryPolicy = {
 };
 
 export const COUNTRY_POLICIES: CountryPolicy[] = [
+  {
+    code: "GB",
+    name: "United Kingdom",
+    flag: "🇬🇧",
+    leaveRules: [
+      {
+        leaveType: "Annual Leave",
+        color: "#3b82f6",
+        isPaid: true,
+        annualAllowance: 28,
+        carryOverMax: 8,
+        category: "STATUTORY",
+        requiresEvidence: false,
+        minNoticeDays: 0,
+        durationLogic: "28 days minimum; company setting controls bank holiday inclusive/exclusive mode",
+        note: "Working Time Regulations: 5.6 weeks statutory minimum",
+      },
+      {
+        leaveType: "Statutory Sick Pay (SSP)",
+        color: "#ef4444",
+        isPaid: true,
+        annualAllowance: 0,
+        carryOverMax: 0,
+        category: "STATUTORY",
+        requiresEvidence: true,
+        minNoticeDays: 0,
+        durationLogic: "Payable after 3 waiting days from day 4 of a period of incapacity",
+        note: "Use env SSP_WEEKLY_RATE and waiting-day logic in rules engine",
+      },
+      {
+        leaveType: "Statutory Maternity Leave",
+        color: "#8b5cf6",
+        isPaid: true,
+        annualAllowance: 365,
+        carryOverMax: 0,
+        category: "STATUTORY",
+        requiresEvidence: true,
+        minNoticeDays: 28,
+        durationLogic: "52 weeks total; SMP logic in UK rules utility",
+        note: "26 ordinary + 26 additional weeks",
+      },
+      {
+        leaveType: "Statutory Paternity Leave",
+        color: "#06b6d4",
+        isPaid: true,
+        annualAllowance: 14,
+        carryOverMax: 0,
+        category: "STATUTORY",
+        requiresEvidence: true,
+        minNoticeDays: 15,
+        durationLogic: "1 or 2 consecutive weeks within 56 days of birth/adoption",
+        note: "Statutory paternity window and consecutive week constraint apply",
+      },
+      {
+        leaveType: "Shared Parental Leave (SPL)",
+        color: "#7c3aed",
+        isPaid: true,
+        annualAllowance: 350,
+        carryOverMax: 0,
+        category: "STATUTORY",
+        requiresEvidence: true,
+        minNoticeDays: 56,
+        durationLogic: "Up to 50 weeks shareable after curtailment",
+        note: "SPL entitlement depends on curtailed maternity/adoption leave",
+      },
+      {
+        leaveType: "Adoption Leave",
+        color: "#14b8a6",
+        isPaid: true,
+        annualAllowance: 365,
+        carryOverMax: 0,
+        category: "STATUTORY",
+        requiresEvidence: true,
+        minNoticeDays: 28,
+        durationLogic: "Mirrors maternity entitlement",
+        note: "52 weeks total with statutory pay phases mirroring maternity",
+      },
+      {
+        leaveType: "Parental Bereavement Leave",
+        color: "#f59e0b",
+        isPaid: true,
+        annualAllowance: 14,
+        carryOverMax: 0,
+        category: "STATUTORY",
+        requiresEvidence: true,
+        minNoticeDays: 0,
+        durationLogic: "2 weeks for eligible child loss/stillbirth criteria",
+        note: "Can usually be taken as one block or two separate weeks",
+      },
+      {
+        leaveType: "Unpaid Parental Leave",
+        color: "#6b7280",
+        isPaid: false,
+        annualAllowance: 18,
+        carryOverMax: 0,
+        category: "UNPAID",
+        requiresEvidence: false,
+        minNoticeDays: 21,
+        durationLogic: "18 weeks per child, max 4 weeks per year",
+        note: "Typically requires one year service in UK law",
+      },
+    ],
+    // UK bank holidays move with Easter and differ by nation; do not use this list for dates.
+    // Seeded per region from `getUkBankHolidaysForRegion` in `src/lib/uk-compliance.ts` (e.g. Easter Monday in England & Wales and NI, not Scotland).
+    holidays: [],
+  },
   {
     code: "NG",
     name: "Nigeria",
@@ -246,6 +356,10 @@ export function getCountryPolicies(countryCodes: string[]) {
     leaveType: string;
     annualAllowance: number;
     carryOverMax: number;
+    category: "PAID" | "UNPAID" | "STATUTORY";
+    requiresEvidence: boolean;
+    minNoticeDays: number;
+    durationLogic: string | null;
   }[] = [];
 
   for (const policy of policies) {
@@ -255,6 +369,10 @@ export function getCountryPolicies(countryCodes: string[]) {
         leaveType: rule.leaveType,
         annualAllowance: rule.annualAllowance,
         carryOverMax: rule.carryOverMax,
+        category: rule.category ?? (rule.isPaid ? "PAID" : "UNPAID"),
+        requiresEvidence: rule.requiresEvidence ?? false,
+        minNoticeDays: rule.minNoticeDays ?? 0,
+        durationLogic: rule.durationLogic ?? null,
       });
     }
   }

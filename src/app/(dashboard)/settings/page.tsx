@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
-import { Plus, MessageSquare, CheckCircle, XCircle, User, ChevronRight, SquareKanban, ExternalLink, Unlink } from "lucide-react";
+import { Plus, MessageSquare, CheckCircle, XCircle, User, ChevronRight, SquareKanban, ExternalLink, Unlink, Pencil, Trash2 } from "lucide-react";
+import { Select } from "@/components/ui/select";
 
 type LeaveType = {
   id: string;
@@ -36,6 +37,32 @@ type JiraStatus = {
   connectedBy: string | null;
 };
 
+type OrgSettings = {
+  ukBankHolidayInclusive: boolean;
+  ukBankHolidayRegion: "ENGLAND_WALES" | "SCOTLAND" | "NORTHERN_IRELAND";
+  ukCarryOverEnabled: boolean;
+  ukCarryOverMax: number;
+  ukCarryOverExpiryMonth: number;
+  ukCarryOverExpiryDay: number;
+  dataResidency: "UK" | "EU" | "US";
+  maxAdminUsers: number;
+};
+
+type LeavePolicy = {
+  id: string;
+  countryCode: string;
+  annualAllowance: number;
+  carryOverMax: number;
+  leaveType: { id: string; name: string; color: string };
+};
+
+type UKComplianceReport = {
+  holidayUsage: Array<{ name: string; taken: number; department: string | null; contractType: string }>;
+  absenceTrigger: { threshold: number; rows: Array<{ name: string; score: number; flagged: boolean }> };
+  sspLiability: Array<{ name: string; daysElapsed: number; estimatedCostToDate: number }>;
+  parentalTracker: Array<{ name: string; leaveType: string; expectedReturnDate: string; kitDaysUsed: number; kitDaysCap: number }>;
+};
+
 export default function SettingsPage() {
   const { data: session } = useSession();
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
@@ -49,6 +76,23 @@ export default function SettingsPage() {
   const [slackStatus, setSlackStatus] = useState<SlackStatus | null>(null);
   const [jiraStatus, setJiraStatus] = useState<JiraStatus | null>(null);
   const [disconnectingJira, setDisconnectingJira] = useState(false);
+  const [orgSettings, setOrgSettings] = useState<OrgSettings | null>(null);
+  const [ukReport, setUkReport] = useState<UKComplianceReport | null>(null);
+
+  const [editingType, setEditingType] = useState<LeaveType | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editColor, setEditColor] = useState("#6366f1");
+  const [editDays, setEditDays] = useState("20");
+  const [editIsPaid, setEditIsPaid] = useState(true);
+  const [editSaving, setEditSaving] = useState(false);
+
+  const [policies, setPolicies] = useState<LeavePolicy[]>([]);
+  const [showAddPolicy, setShowAddPolicy] = useState(false);
+  const [newPolicyType, setNewPolicyType] = useState("");
+  const [newPolicyCountry, setNewPolicyCountry] = useState("GB");
+  const [newPolicyAllowance, setNewPolicyAllowance] = useState("28");
+  const [newPolicyCarryOver, setNewPolicyCarryOver] = useState("0");
+  const [savingPolicy, setSavingPolicy] = useState(false);
 
   const { toast } = useToast();
   const user = session?.user as Record<string, unknown> | undefined;
@@ -85,6 +129,50 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => {
+    async function fetchOrgSettings() {
+      try {
+        const res = await fetch("/api/organization/settings");
+        if (res.ok) {
+          setOrgSettings(await res.json());
+        }
+      } catch {
+        // ignore
+      }
+    }
+    fetchOrgSettings();
+  }, []);
+
+  useEffect(() => {
+    async function fetchUkReport() {
+      try {
+        const res = await fetch("/api/reports/uk-compliance");
+        if (res.ok) {
+          setUkReport(await res.json());
+        }
+      } catch {
+        // ignore
+      }
+    }
+    fetchUkReport();
+  }, []);
+
+  async function saveOrgSettings(next: Partial<OrgSettings>) {
+    if (!orgSettings) return;
+    const merged = { ...orgSettings, ...next };
+    setOrgSettings(merged);
+    const res = await fetch("/api/organization/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(next),
+    });
+    if (!res.ok) {
+      toast("Failed to save settings", "error");
+      return;
+    }
+    toast("Settings updated", "success");
+  }
+
+  useEffect(() => {
     async function checkJira() {
       try {
         const res = await fetch("/api/jira/status");
@@ -97,6 +185,124 @@ export default function SettingsPage() {
     }
     checkJira();
   }, []);
+
+  const fetchPolicies = useCallback(async () => {
+    try {
+      const res = await fetch("/api/leave-policies");
+      if (res.ok) setPolicies(await res.json());
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isAdmin) fetchPolicies();
+  }, [isAdmin, fetchPolicies]);
+
+  function openEditType(lt: LeaveType) {
+    setEditingType(lt);
+    setEditName(lt.name);
+    setEditColor(lt.color);
+    setEditDays(String(lt.defaultDays));
+    setEditIsPaid(lt.isPaid);
+  }
+
+  async function handleEditLeaveType(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingType) return;
+    setEditSaving(true);
+    const res = await fetch(`/api/leave-types/${editingType.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: editName,
+        color: editColor,
+        isPaid: editIsPaid,
+        defaultDays: parseInt(editDays, 10),
+      }),
+    });
+    if (res.ok) {
+      toast("Leave type updated", "success");
+      setEditingType(null);
+      fetchLeaveTypes();
+    } else {
+      const data = await res.json().catch(() => null);
+      toast(data?.error ?? "Failed to update", "error");
+    }
+    setEditSaving(false);
+  }
+
+  async function handleDeleteLeaveType(lt: LeaveType) {
+    if (!confirm(`Delete leave type "${lt.name}"? This cannot be undone.`)) {
+      return;
+    }
+    const res = await fetch(`/api/leave-types/${lt.id}`, {
+      method: "DELETE",
+    });
+    if (res.ok) {
+      toast("Leave type deleted", "success");
+      fetchLeaveTypes();
+      fetchPolicies();
+    } else {
+      const data = await res.json().catch(() => null);
+      toast(data?.error ?? "Failed to delete", "error");
+    }
+  }
+
+  async function handleAddPolicy(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingPolicy(true);
+    const res = await fetch("/api/leave-policies", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        leaveTypeId: newPolicyType,
+        countryCode: newPolicyCountry.toUpperCase(),
+        annualAllowance: parseInt(newPolicyAllowance, 10),
+        carryOverMax: parseInt(newPolicyCarryOver, 10),
+      }),
+    });
+    if (res.ok) {
+      toast("Policy added", "success");
+      setShowAddPolicy(false);
+      setNewPolicyType("");
+      setNewPolicyAllowance("28");
+      setNewPolicyCarryOver("0");
+      fetchPolicies();
+    } else {
+      const data = await res.json().catch(() => null);
+      toast(data?.error ?? "Failed to add policy", "error");
+    }
+    setSavingPolicy(false);
+  }
+
+  async function handleUpdatePolicy(
+    id: string,
+    patch: { annualAllowance?: number; carryOverMax?: number }
+  ) {
+    const res = await fetch(`/api/leave-policies/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    if (res.ok) {
+      toast("Policy updated", "success");
+      fetchPolicies();
+    } else {
+      toast("Failed to update", "error");
+    }
+  }
+
+  async function handleDeletePolicy(id: string) {
+    if (!confirm("Delete this country policy?")) return;
+    const res = await fetch(`/api/leave-policies/${id}`, { method: "DELETE" });
+    if (res.ok) {
+      toast("Policy deleted", "success");
+      fetchPolicies();
+    } else {
+      toast("Failed to delete", "error");
+    }
+  }
 
   async function handleAddLeaveType(e: React.FormEvent) {
     e.preventDefault();
@@ -179,6 +385,144 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {orgSettings && (
+        <Card>
+          <CardHeader>
+            <CardTitle>UK compliance settings</CardTitle>
+            <CardDescription>Company-level UK leave and residency controls</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <label className="flex items-center justify-between gap-3 text-sm">
+              <span>Annual leave includes bank holidays</span>
+              <input
+                type="checkbox"
+                checked={orgSettings.ukBankHolidayInclusive}
+                onChange={(e) => saveOrgSettings({ ukBankHolidayInclusive: e.target.checked })}
+              />
+            </label>
+            <Select
+              id="ukRegion"
+              label="UK bank holiday region"
+              value={orgSettings.ukBankHolidayRegion}
+              onChange={(e) => saveOrgSettings({ ukBankHolidayRegion: e.target.value as OrgSettings["ukBankHolidayRegion"] })}
+              options={[
+                { value: "ENGLAND_WALES", label: "England & Wales" },
+                { value: "SCOTLAND", label: "Scotland" },
+                { value: "NORTHERN_IRELAND", label: "Northern Ireland" },
+              ]}
+            />
+            <label className="flex items-center justify-between gap-3 text-sm">
+              <span>Enable carry-over</span>
+              <input
+                type="checkbox"
+                checked={orgSettings.ukCarryOverEnabled}
+                onChange={(e) =>
+                  saveOrgSettings({
+                    ukCarryOverEnabled: e.target.checked,
+                    ukCarryOverMax: e.target.checked ? Math.min(8, Math.max(orgSettings.ukCarryOverMax, 1)) : 0,
+                  })
+                }
+              />
+            </label>
+            <Input
+              id="carryOverMax"
+              label="Carry-over max days (0-8)"
+              type="number"
+              min="0"
+              max="8"
+              value={String(orgSettings.ukCarryOverMax)}
+              onChange={(e) => saveOrgSettings({ ukCarryOverMax: parseInt(e.target.value || "0", 10) })}
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <Select
+                id="carryOverExpiryMonth"
+                label="Expiry month"
+                value={String(orgSettings.ukCarryOverExpiryMonth)}
+                onChange={(e) =>
+                  saveOrgSettings({
+                    ukCarryOverExpiryMonth: parseInt(e.target.value, 10),
+                  })
+                }
+                options={[
+                  { value: "1", label: "January" },
+                  { value: "2", label: "February" },
+                  { value: "3", label: "March" },
+                  { value: "4", label: "April" },
+                  { value: "5", label: "May" },
+                  { value: "6", label: "June" },
+                  { value: "7", label: "July" },
+                  { value: "8", label: "August" },
+                  { value: "9", label: "September" },
+                  { value: "10", label: "October" },
+                  { value: "11", label: "November" },
+                  { value: "12", label: "December" },
+                ]}
+              />
+              <Input
+                id="carryOverExpiryDay"
+                label="Expiry day"
+                type="number"
+                min="1"
+                max="31"
+                value={String(orgSettings.ukCarryOverExpiryDay)}
+                onChange={(e) =>
+                  saveOrgSettings({
+                    ukCarryOverExpiryDay: parseInt(e.target.value || "1", 10),
+                  })
+                }
+              />
+            </div>
+            <p className="text-xs text-gray-500">
+              Carried-over days expire on{" "}
+              {new Date(
+                2000,
+                orgSettings.ukCarryOverExpiryMonth - 1,
+                orgSettings.ukCarryOverExpiryDay
+              ).toLocaleDateString("en-GB", {
+                day: "numeric",
+                month: "long",
+              })}{" "}
+              of the new leave year. Run year-end rollover from the Reports
+              page when the leave year closes.
+            </p>
+            <Select
+              id="dataResidency"
+              label="Data residency"
+              value={orgSettings.dataResidency}
+              onChange={(e) => saveOrgSettings({ dataResidency: e.target.value as OrgSettings["dataResidency"] })}
+              options={[
+                { value: "UK", label: "UK" },
+                { value: "EU", label: "EU" },
+                { value: "US", label: "US" },
+              ]}
+            />
+            {orgSettings.dataResidency === "UK" && (
+              <div className="rounded bg-green-50 p-2 text-xs font-medium text-green-700">
+                Data stored in UK servers.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {ukReport && (
+        <Card>
+          <CardHeader>
+            <CardTitle>UK Compliance</CardTitle>
+            <CardDescription>Holiday usage, absence triggers, SSP, and parental leave tracking</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm text-gray-600">
+            <p>Holiday usage rows: <strong>{ukReport.holidayUsage.length}</strong></p>
+            <p>
+              Bradford triggers above {ukReport.absenceTrigger.threshold}:{" "}
+              <strong>{ukReport.absenceTrigger.rows.filter((r) => r.flagged).length}</strong>
+            </p>
+            <p>Employees currently on SSP: <strong>{ukReport.sspLiability.length}</strong></p>
+            <p>Active parental leave cases: <strong>{ukReport.parentalTracker.length}</strong></p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Leave types */}
       <Card>
         <CardHeader>
@@ -231,13 +575,34 @@ export default function SettingsPage() {
                     />
                     <span className="text-sm font-medium">{lt.name}</span>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 sm:gap-3">
                     <span className="text-xs text-gray-500">
                       {lt.defaultDays} days
                     </span>
                     <Badge variant={lt.isPaid ? "success" : "outline"}>
                       {lt.isPaid ? "Paid" : "Unpaid"}
                     </Badge>
+                    {isAdmin && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openEditType(lt)}
+                          title="Edit"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleDeleteLeaveType(lt)}
+                          title="Delete"
+                          className="text-red-600 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}
@@ -245,6 +610,115 @@ export default function SettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Country policies */}
+      {isAdmin && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Country policies</CardTitle>
+                <CardDescription>
+                  Override statutory allowances and carry-over per leave type
+                  and country. Applies to employees with the matching country
+                  code.
+                </CardDescription>
+              </div>
+              <Button size="sm" onClick={() => setShowAddPolicy(true)}>
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                Add policy
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {policies.length === 0 ? (
+              <p className="py-4 text-center text-sm text-gray-400">
+                No country policies defined. Leave types fall back to their
+                default allowance.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 text-left text-xs font-medium uppercase text-gray-500">
+                      <th className="pb-2 pr-4">Leave type</th>
+                      <th className="pb-2 pr-4">Country</th>
+                      <th className="pb-2 pr-4 text-right">Allowance</th>
+                      <th className="pb-2 pr-4 text-right">Carry-over max</th>
+                      <th className="pb-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {policies.map((p) => (
+                      <tr key={p.id} className="border-b border-gray-50">
+                        <td className="py-2.5 pr-4">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="h-3 w-3 rounded-full"
+                              style={{ backgroundColor: p.leaveType.color }}
+                            />
+                            <span className="font-medium text-gray-900">
+                              {p.leaveType.name}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-2.5 pr-4 font-mono text-gray-600">
+                          {p.countryCode}
+                        </td>
+                        <td className="py-2.5 pr-4 text-right">
+                          <input
+                            type="number"
+                            min="0"
+                            max="365"
+                            defaultValue={p.annualAllowance}
+                            onBlur={(e) => {
+                              const next = parseInt(e.target.value, 10);
+                              if (!isNaN(next) && next !== p.annualAllowance) {
+                                handleUpdatePolicy(p.id, {
+                                  annualAllowance: next,
+                                });
+                              }
+                            }}
+                            className="w-20 rounded border border-gray-200 px-2 py-1 text-right font-mono text-sm focus:border-brand-500 focus:outline-none"
+                          />
+                        </td>
+                        <td className="py-2.5 pr-4 text-right">
+                          <input
+                            type="number"
+                            min="0"
+                            max="365"
+                            defaultValue={p.carryOverMax}
+                            onBlur={(e) => {
+                              const next = parseInt(e.target.value, 10);
+                              if (!isNaN(next) && next !== p.carryOverMax) {
+                                handleUpdatePolicy(p.id, {
+                                  carryOverMax: next,
+                                });
+                              }
+                            }}
+                            className="w-20 rounded border border-gray-200 px-2 py-1 text-right font-mono text-sm focus:border-brand-500 focus:outline-none"
+                          />
+                        </td>
+                        <td className="py-2.5 text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDeletePolicy(p.id)}
+                            className="text-red-600 hover:bg-red-50"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Slack integration */}
       <Card>
@@ -520,6 +994,135 @@ export default function SettingsPage() {
               type="button"
               variant="outline"
               onClick={() => setShowAdd(false)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      {/* Edit leave type dialog */}
+      <Dialog
+        open={!!editingType}
+        onClose={() => setEditingType(null)}
+        title="Edit leave type"
+      >
+        <form onSubmit={handleEditLeaveType} className="space-y-4">
+          <Input
+            id="editLtName"
+            label="Name"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            required
+          />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="block text-sm font-medium text-gray-700">
+                Color
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={editColor}
+                  onChange={(e) => setEditColor(e.target.value)}
+                  className="h-10 w-14 cursor-pointer rounded border border-gray-300"
+                />
+                <span className="text-xs text-gray-500">{editColor}</span>
+              </div>
+            </div>
+            <Input
+              id="editLtDays"
+              label="Default days"
+              type="number"
+              min="0"
+              value={editDays}
+              onChange={(e) => setEditDays(e.target.value)}
+              required
+            />
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={editIsPaid}
+              onChange={(e) => setEditIsPaid(e.target.checked)}
+              className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+            />
+            Paid leave
+          </label>
+          <div className="flex items-center gap-3 pt-2">
+            <Button type="submit" disabled={editSaving}>
+              {editSaving ? "Saving..." : "Save changes"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setEditingType(null)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      {/* Add country policy dialog */}
+      <Dialog
+        open={showAddPolicy}
+        onClose={() => setShowAddPolicy(false)}
+        title="Add country policy"
+      >
+        <form onSubmit={handleAddPolicy} className="space-y-4">
+          <Select
+            id="policyType"
+            label="Leave type"
+            value={newPolicyType}
+            onChange={(e) => setNewPolicyType(e.target.value)}
+            required
+            options={leaveTypes.map((lt) => ({
+              value: lt.id,
+              label: lt.name,
+            }))}
+            placeholder="Select a leave type"
+          />
+          <Input
+            id="policyCountry"
+            label="Country code (ISO-2)"
+            value={newPolicyCountry}
+            onChange={(e) =>
+              setNewPolicyCountry(e.target.value.toUpperCase().slice(0, 2))
+            }
+            placeholder="GB"
+            required
+          />
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              id="policyAllowance"
+              label="Annual allowance (days)"
+              type="number"
+              min="0"
+              max="365"
+              value={newPolicyAllowance}
+              onChange={(e) => setNewPolicyAllowance(e.target.value)}
+              required
+            />
+            <Input
+              id="policyCarryOver"
+              label="Carry-over max (days)"
+              type="number"
+              min="0"
+              max="365"
+              value={newPolicyCarryOver}
+              onChange={(e) => setNewPolicyCarryOver(e.target.value)}
+              required
+            />
+          </div>
+          <div className="flex items-center gap-3 pt-2">
+            <Button type="submit" disabled={savingPolicy}>
+              {savingPolicy ? "Adding..." : "Add policy"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowAddPolicy(false)}
             >
               Cancel
             </Button>

@@ -4,10 +4,13 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { notifyRequestStatusChange } from "@/lib/slack-notifications";
 import { emailRequestStatusChange } from "@/lib/email-notifications";
+import { recordAudit, requestAuditContext, type AuditAction } from "@/lib/audit";
 import { z } from "zod";
 
 const updateSchema = z.object({
-  status: z.enum(["APPROVED", "REJECTED", "CANCELLED"]),
+  status: z.enum(["APPROVED", "REJECTED", "CANCELLED"]).optional(),
+  kitDaysUsed: z.number().int().min(0).max(20).optional(),
+  evidenceProvided: z.boolean().optional(),
 });
 
 export async function PATCH(
@@ -20,8 +23,11 @@ export async function PATCH(
   }
 
   const { id } = await params;
-  const userId = (session.user as Record<string, unknown>).id as string;
-  const userRole = (session.user as Record<string, unknown>).role as string;
+  const sessionUser = session.user as Record<string, unknown>;
+  const userId = sessionUser.id as string;
+  const userRole = sessionUser.role as string;
+  const actorEmail = sessionUser.email as string | undefined;
+  const orgId = sessionUser.organizationId as string;
 
   try {
     const body = await request.json();
@@ -34,7 +40,7 @@ export async function PATCH(
       );
     }
 
-    const { status } = parsed.data;
+    const { status, kitDaysUsed, evidenceProvided } = parsed.data;
 
     const leaveRequest = await prisma.leaveRequest.findUnique({
       where: { id },
@@ -48,7 +54,6 @@ export async function PATCH(
       );
     }
 
-    // Only the requester can cancel, only ADMIN/MANAGER can approve/reject
     if (status === "CANCELLED") {
       if (leaveRequest.userId !== userId) {
         return NextResponse.json(
@@ -56,7 +61,7 @@ export async function PATCH(
           { status: 403 }
         );
       }
-    } else {
+    } else if (status) {
       if (userRole !== "ADMIN" && userRole !== "MANAGER") {
         return NextResponse.json(
           { error: "Only admins and managers can approve or reject leave" },
@@ -65,15 +70,29 @@ export async function PATCH(
       }
     }
 
+    if ((kitDaysUsed !== undefined || evidenceProvided !== undefined) && !status) {
+      if (userRole !== "ADMIN" && userRole !== "MANAGER") {
+        return NextResponse.json(
+          { error: "Only admins and managers can edit KIT days or evidence" },
+          { status: 403 }
+        );
+      }
+    }
+
+    const updateData: Record<string, unknown> = {};
+    if (status) {
+      updateData.status = status;
+      if (status !== "CANCELLED") {
+        updateData.reviewedById = userId;
+        updateData.reviewedAt = new Date();
+      }
+    }
+    if (kitDaysUsed !== undefined) updateData.kitDaysUsed = kitDaysUsed;
+    if (evidenceProvided !== undefined) updateData.evidenceProvided = evidenceProvided;
+
     const updated = await prisma.leaveRequest.update({
       where: { id },
-      data: {
-        status,
-        reviewedById:
-          status !== "CANCELLED" ? userId : undefined,
-        reviewedAt:
-          status !== "CANCELLED" ? new Date() : undefined,
-      },
+      data: updateData,
       include: {
         user: {
           select: {
@@ -113,6 +132,49 @@ export async function PATCH(
         endDate: updated.endDate,
         reviewerName: updated.reviewedBy?.name ?? "Unknown",
       }).catch((err) => console.error("Email notification error:", err));
+    }
+
+    const actor = {
+      id: userId,
+      email: actorEmail ?? null,
+      role: userRole,
+    };
+    const ctx = requestAuditContext(request);
+    if (status) {
+      const action = (
+        {
+          APPROVED: "leave_request.approved",
+          REJECTED: "leave_request.rejected",
+          CANCELLED: "leave_request.cancelled",
+        } as Record<string, AuditAction>
+      )[status];
+      if (action) {
+        recordAudit({
+          organizationId: orgId,
+          action,
+          resource: "leave_request",
+          resourceId: id,
+          actor,
+          metadata: {
+            requesterEmail: updated.user.email,
+            leaveType: updated.leaveType.name,
+            startDate: updated.startDate,
+            endDate: updated.endDate,
+          },
+          context: ctx,
+        });
+      }
+    }
+    if (kitDaysUsed !== undefined && !status) {
+      recordAudit({
+        organizationId: orgId,
+        action: "leave_request.kit_days_updated",
+        resource: "leave_request",
+        resourceId: id,
+        actor,
+        metadata: { kitDaysUsed, requesterEmail: updated.user.email },
+        context: ctx,
+      });
     }
 
     return NextResponse.json(updated);

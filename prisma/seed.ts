@@ -1,4 +1,13 @@
-import { PrismaClient, Role, MemberType, LeaveStatus } from "@prisma/client";
+import {
+  PrismaClient,
+  Role,
+  MemberType,
+  LeaveStatus,
+  EmploymentType,
+  LeaveCategory,
+  BankHolidayRegion,
+  DataResidency,
+} from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -8,6 +17,12 @@ async function main() {
 
   // Clean existing data
   await prisma.leaveRequest.deleteMany();
+  await prisma.leaveCarryOverBalance.deleteMany();
+  await prisma.userWeeklyHours.deleteMany();
+  await prisma.bankHoliday.deleteMany();
+  await prisma.jiraUserMapping.deleteMany();
+  await prisma.jiraIntegration.deleteMany();
+  await prisma.passwordResetToken.deleteMany();
   await prisma.leavePolicy.deleteMany();
   await prisma.publicHoliday.deleteMany();
   await prisma.user.deleteMany();
@@ -270,15 +285,386 @@ async function main() {
     )
   );
 
+  // ----------------------------
+  // UK demo organization
+  // ----------------------------
+  const ukOrg = await prisma.organization.create({
+    data: {
+      name: "Britannia Health Ltd",
+      slug: "britannia-health",
+      onboardingCompleted: true,
+      ukBankHolidayInclusive: false,
+      ukBankHolidayRegion: BankHolidayRegion.ENGLAND_WALES,
+      ukCarryOverEnabled: true,
+      ukCarryOverMax: 8,
+      ukCarryOverExpiryMonth: 3,
+      ukCarryOverExpiryDay: 31,
+      dataResidency: DataResidency.UK,
+      maxAdminUsers: 2,
+      plan: "SCALE",
+    },
+  });
+
+  const [olivia, james, sophie, liam, emma] = await Promise.all([
+    prisma.user.create({
+      data: {
+        email: "olivia@britanniahealth.co.uk",
+        name: "Olivia Clarke",
+        passwordHash,
+        role: Role.ADMIN,
+        memberType: MemberType.EMPLOYEE,
+        employmentType: EmploymentType.FULL_TIME,
+        daysWorkedPerWeek: 5,
+        fteRatio: 1,
+        rightToWorkVerified: true,
+        department: "Operations",
+        countryCode: "GB",
+        organizationId: ukOrg.id,
+      },
+    }),
+    prisma.user.create({
+      data: {
+        email: "james@britanniahealth.co.uk",
+        name: "James Patel",
+        passwordHash,
+        role: Role.MANAGER,
+        memberType: MemberType.EMPLOYEE,
+        employmentType: EmploymentType.FULL_TIME,
+        daysWorkedPerWeek: 5,
+        fteRatio: 1,
+        rightToWorkVerified: true,
+        department: "Engineering",
+        countryCode: "GB",
+        organizationId: ukOrg.id,
+      },
+    }),
+    prisma.user.create({
+      data: {
+        email: "sophie@britanniahealth.co.uk",
+        name: "Sophie Williams",
+        passwordHash,
+        role: Role.MEMBER,
+        memberType: MemberType.EMPLOYEE,
+        employmentType: EmploymentType.PART_TIME,
+        daysWorkedPerWeek: 3,
+        fteRatio: 0.6,
+        rightToWorkVerified: true,
+        department: "People",
+        countryCode: "GB",
+        organizationId: ukOrg.id,
+      },
+    }),
+    prisma.user.create({
+      data: {
+        email: "liam@britanniahealth.co.uk",
+        name: "Liam O'Connor",
+        passwordHash,
+        role: Role.MEMBER,
+        memberType: MemberType.EMPLOYEE,
+        employmentType: EmploymentType.VARIABLE_HOURS,
+        daysWorkedPerWeek: 4,
+        fteRatio: 0.8,
+        rightToWorkVerified: false,
+        department: "Support",
+        countryCode: "GB",
+        organizationId: ukOrg.id,
+      },
+    }),
+    prisma.user.create({
+      data: {
+        email: "emma@britanniahealth.co.uk",
+        name: "Emma Hughes",
+        passwordHash,
+        role: Role.MEMBER,
+        memberType: MemberType.EMPLOYEE,
+        employmentType: EmploymentType.FULL_TIME,
+        daysWorkedPerWeek: 5,
+        fteRatio: 1,
+        rightToWorkVerified: null,
+        department: "Finance",
+        countryCode: "GB",
+        organizationId: ukOrg.id,
+      },
+    }),
+  ]);
+
+  // Variable-hours history (rolling 52-week calculations)
+  await Promise.all(
+    Array.from({ length: 12 }).map((_, index) =>
+      prisma.userWeeklyHours.create({
+        data: {
+          userId: liam.id,
+          weekStartDate: new Date(2026, 0, 5 + index * 7),
+          hoursWorked: 28 + (index % 4),
+        },
+      })
+    )
+  );
+
+  const ukLeaveTypes = await Promise.all([
+    prisma.leaveType.create({
+      data: {
+        name: "Annual Leave",
+        color: "#3b82f6",
+        isPaid: true,
+        category: LeaveCategory.STATUTORY,
+        defaultDays: 28,
+        requiresEvidence: false,
+        minNoticeDays: 0,
+        durationLogic:
+          "28 days minimum; company setting controls bank holiday inclusive/exclusive mode",
+        countryCode: "GB",
+        organizationId: ukOrg.id,
+      },
+    }),
+    prisma.leaveType.create({
+      data: {
+        name: "Statutory Sick Pay (SSP)",
+        color: "#ef4444",
+        isPaid: true,
+        category: LeaveCategory.STATUTORY,
+        defaultDays: 0,
+        requiresEvidence: true,
+        minNoticeDays: 0,
+        durationLogic:
+          "Payable after 3 waiting days from day 4 of a period of incapacity",
+        countryCode: "GB",
+        organizationId: ukOrg.id,
+      },
+    }),
+    prisma.leaveType.create({
+      data: {
+        name: "Statutory Maternity Leave",
+        color: "#8b5cf6",
+        isPaid: true,
+        category: LeaveCategory.STATUTORY,
+        defaultDays: 365,
+        requiresEvidence: true,
+        minNoticeDays: 28,
+        durationLogic: "52 weeks total; SMP logic in UK rules utility",
+        countryCode: "GB",
+        organizationId: ukOrg.id,
+      },
+    }),
+    prisma.leaveType.create({
+      data: {
+        name: "Statutory Paternity Leave",
+        color: "#06b6d4",
+        isPaid: true,
+        category: LeaveCategory.STATUTORY,
+        defaultDays: 14,
+        requiresEvidence: true,
+        minNoticeDays: 15,
+        durationLogic:
+          "1 or 2 consecutive weeks within 56 days of birth/adoption",
+        countryCode: "GB",
+        organizationId: ukOrg.id,
+      },
+    }),
+    prisma.leaveType.create({
+      data: {
+        name: "Shared Parental Leave (SPL)",
+        color: "#7c3aed",
+        isPaid: true,
+        category: LeaveCategory.STATUTORY,
+        defaultDays: 350,
+        requiresEvidence: true,
+        minNoticeDays: 56,
+        durationLogic: "Up to 50 weeks shareable after curtailment",
+        countryCode: "GB",
+        organizationId: ukOrg.id,
+      },
+    }),
+    prisma.leaveType.create({
+      data: {
+        name: "Adoption Leave",
+        color: "#14b8a6",
+        isPaid: true,
+        category: LeaveCategory.STATUTORY,
+        defaultDays: 365,
+        requiresEvidence: true,
+        minNoticeDays: 28,
+        durationLogic: "Mirrors maternity entitlement",
+        countryCode: "GB",
+        organizationId: ukOrg.id,
+      },
+    }),
+    prisma.leaveType.create({
+      data: {
+        name: "Parental Bereavement Leave",
+        color: "#f59e0b",
+        isPaid: true,
+        category: LeaveCategory.STATUTORY,
+        defaultDays: 14,
+        requiresEvidence: true,
+        minNoticeDays: 0,
+        durationLogic: "2 weeks for eligible child loss/stillbirth criteria",
+        countryCode: "GB",
+        organizationId: ukOrg.id,
+      },
+    }),
+    prisma.leaveType.create({
+      data: {
+        name: "Unpaid Parental Leave",
+        color: "#6b7280",
+        isPaid: false,
+        category: LeaveCategory.UNPAID,
+        defaultDays: 18,
+        requiresEvidence: false,
+        minNoticeDays: 21,
+        durationLogic: "18 weeks per child, max 4 weeks per year",
+        countryCode: "GB",
+        organizationId: ukOrg.id,
+      },
+    }),
+  ]);
+
+  await Promise.all(
+    ukLeaveTypes.map((lt) =>
+      prisma.leavePolicy.create({
+        data: {
+          countryCode: "GB",
+          annualAllowance: lt.defaultDays,
+          carryOverMax: lt.name === "Annual Leave" ? 8 : 0,
+          leaveTypeId: lt.id,
+        },
+      })
+    )
+  );
+
+  const ukAnnual = ukLeaveTypes.find((lt) => lt.name === "Annual Leave")!;
+  const ukSsp = ukLeaveTypes.find((lt) => lt.name === "Statutory Sick Pay (SSP)")!;
+  const ukSpl = ukLeaveTypes.find((lt) => lt.name === "Shared Parental Leave (SPL)")!;
+
+  await Promise.all([
+    prisma.leaveRequest.create({
+      data: {
+        startDate: new Date(2026, 6, 14),
+        endDate: new Date(2026, 6, 18),
+        status: LeaveStatus.APPROVED,
+        note: "Summer holiday",
+        userId: sophie.id,
+        leaveTypeId: ukAnnual.id,
+        reviewedById: james.id,
+        reviewedAt: new Date(2026, 5, 20),
+      },
+    }),
+    prisma.leaveRequest.create({
+      data: {
+        startDate: new Date(2026, 8, 7),
+        endDate: new Date(2026, 8, 11),
+        status: LeaveStatus.APPROVED,
+        note: "Flu recovery",
+        userId: liam.id,
+        leaveTypeId: ukSsp.id,
+        evidenceProvided: true,
+        reviewedById: olivia.id,
+        reviewedAt: new Date(2026, 8, 6),
+      },
+    }),
+    prisma.leaveRequest.create({
+      data: {
+        startDate: new Date(2026, 10, 2),
+        endDate: new Date(2026, 10, 13),
+        status: LeaveStatus.PENDING,
+        note: "Family care period",
+        userId: emma.id,
+        leaveTypeId: ukSpl.id,
+        kitDaysUsed: 3,
+      },
+    }),
+  ]);
+
+  await prisma.leaveCarryOverBalance.create({
+    data: {
+      userId: sophie.id,
+      leaveTypeId: ukAnnual.id,
+      leaveYear: 2026,
+      daysCarried: 4,
+      daysRemaining: 2,
+      expiresAt: new Date(2027, 2, 31),
+    },
+  });
+
+  const ukBankHolidaysByRegion: Record<
+    BankHolidayRegion,
+    { name: string; date: Date }[]
+  > = {
+    ENGLAND_WALES: [
+      { name: "New Year's Day", date: new Date(2026, 0, 1) },
+      { name: "Good Friday", date: new Date(2026, 3, 3) },
+      { name: "Easter Monday", date: new Date(2026, 3, 6) },
+      { name: "Early May bank holiday", date: new Date(2026, 4, 4) },
+      { name: "Spring bank holiday", date: new Date(2026, 4, 25) },
+      { name: "Summer bank holiday", date: new Date(2026, 7, 31) },
+      { name: "Christmas Day", date: new Date(2026, 11, 25) },
+      { name: "Boxing Day (substitute)", date: new Date(2026, 11, 28) },
+    ],
+    SCOTLAND: [
+      { name: "New Year's Day", date: new Date(2026, 0, 1) },
+      { name: "2nd January", date: new Date(2026, 0, 2) },
+      { name: "Good Friday", date: new Date(2026, 3, 3) },
+      { name: "Early May bank holiday", date: new Date(2026, 4, 4) },
+      { name: "Spring bank holiday", date: new Date(2026, 4, 25) },
+      { name: "Summer bank holiday", date: new Date(2026, 7, 3) },
+      { name: "St Andrew's Day", date: new Date(2026, 10, 30) },
+      { name: "Christmas Day", date: new Date(2026, 11, 25) },
+      { name: "Boxing Day (substitute)", date: new Date(2026, 11, 28) },
+    ],
+    NORTHERN_IRELAND: [
+      { name: "New Year's Day", date: new Date(2026, 0, 1) },
+      { name: "St Patrick's Day", date: new Date(2026, 2, 17) },
+      { name: "Good Friday", date: new Date(2026, 3, 3) },
+      { name: "Easter Monday", date: new Date(2026, 3, 6) },
+      { name: "Early May bank holiday", date: new Date(2026, 4, 4) },
+      { name: "Spring bank holiday", date: new Date(2026, 4, 25) },
+      {
+        name: "Battle of the Boyne (Orangemen's Day) (substitute)",
+        date: new Date(2026, 6, 13),
+      },
+      { name: "Summer bank holiday", date: new Date(2026, 7, 31) },
+      { name: "Christmas Day", date: new Date(2026, 11, 25) },
+      { name: "Boxing Day (substitute)", date: new Date(2026, 11, 28) },
+    ],
+  };
+
+  await Promise.all(
+    Object.entries(ukBankHolidaysByRegion).flatMap(([region, holidays]) =>
+      holidays.map((holiday) =>
+        prisma.bankHoliday.create({
+          data: {
+            name: holiday.name,
+            date: holiday.date,
+            region: region as BankHolidayRegion,
+            countryCode: "GB",
+            organizationId: ukOrg.id,
+          },
+        })
+      )
+    )
+  );
+
   console.log("Seeding complete!");
-  console.log(`  Organization: ${org.name}`);
-  console.log(`  Users: 6 (across NG, KE, BR)`);
-  console.log(`  Leave types: 4`);
-  console.log(`  Leave policies: 6`);
-  console.log(`  Leave requests: 4`);
-  console.log(`  Public holidays: ${allHolidays.length}`);
+  console.log(`  Organizations: ${org.name}, ${ukOrg.name}`);
+  console.log(`  Global users: 6 (across NG, KE, BR)`);
+  console.log(`  UK users: 5 (all GB)`);
+  console.log(`  Global leave types: 4`);
+  console.log(`  UK leave types: ${ukLeaveTypes.length}`);
+  console.log(`  Global leave policies: 6`);
+  console.log(`  UK leave policies: ${ukLeaveTypes.length}`);
+  console.log(`  Global leave requests: 4`);
+  console.log(`  UK leave requests: 3`);
+  console.log(`  Global public holidays: ${allHolidays.length}`);
+  console.log(
+    `  UK bank holidays: ${
+      ukBankHolidaysByRegion.ENGLAND_WALES.length +
+      ukBankHolidaysByRegion.SCOTLAND.length +
+      ukBankHolidaysByRegion.NORTHERN_IRELAND.length
+    }`
+  );
   console.log("");
   console.log("Demo login: ade@acme.com / password123 (admin)");
+  console.log("UK demo login: olivia@britanniahealth.co.uk / password123 (admin)");
 }
 
 main()

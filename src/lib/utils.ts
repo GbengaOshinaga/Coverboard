@@ -54,6 +54,7 @@ export const COUNTRY_NAMES: Record<string, string> = {
   KE: "Kenya",
   ZA: "South Africa",
   BR: "Brazil",
+  GB: "United Kingdom",
   MX: "Mexico",
   PH: "Philippines",
   ID: "Indonesia",

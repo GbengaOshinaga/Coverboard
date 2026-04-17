@@ -4,14 +4,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { X, LayoutDashboard, Calendar, FileText, Users, Settings } from "lucide-react";
+import { X, LayoutDashboard, Calendar, FileText, Users, BarChart3, Settings, LifeBuoy, ScrollText } from "lucide-react";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Calendar", href: "/calendar", icon: Calendar },
   { name: "Requests", href: "/requests", icon: FileText },
   { name: "Team", href: "/team", icon: Users },
+  { name: "Reports", href: "/reports", icon: BarChart3 },
+  { name: "Audit", href: "/audit", icon: ScrollText },
   { name: "Settings", href: "/settings", icon: Settings },
+  { name: "Help", href: "/help", icon: LifeBuoy },
 ];
 
 export function Sidebar({

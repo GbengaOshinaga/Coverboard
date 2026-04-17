@@ -8,9 +8,15 @@ type LeaveBalance = {
   leaveTypeName: string;
   leaveTypeColor: string;
   allowance: number;
+  proRatedEntitlement?: number;
   used: number;
   pending: number;
   remaining: number;
+  carryOver: {
+    carried: number;
+    remaining: number;
+    expiresAt: string | null;
+  };
 };
 
 export function LeaveBalances({ balances }: { balances: LeaveBalance[] }) {
@@ -93,6 +99,15 @@ export function LeaveBalances({ balances }: { balances: LeaveBalance[] }) {
                   <span>{balance.used} used</span>
                   {balance.pending > 0 && (
                     <span>{balance.pending} pending</span>
+                  )}
+                  {balance.proRatedEntitlement !== undefined && (
+                    <span>pro-rated {balance.proRatedEntitlement} days</span>
+                  )}
+                  {balance.carryOver.remaining > 0 && (
+                    <span>
+                      carry-over {balance.carryOver.remaining}
+                      {balance.carryOver.expiresAt ? ` (expires ${new Date(balance.carryOver.expiresAt).toLocaleDateString()})` : ""}
+                    </span>
                   )}
                 </div>
               </div>

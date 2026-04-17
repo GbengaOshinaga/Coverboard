@@ -11,12 +11,12 @@ export const metadata: Metadata = {
     template: "%s | Coverboard",
   },
   description:
-    "See who's out, plan coverage, and manage team leave in one place. Built for small, distributed teams with country-specific leave policies.",
+    "See who's out, plan coverage, and manage team leave in one place. Built for small, distributed teams with country-specific leave policies — including full UK statutory compliance.",
   metadataBase: new URL(process.env.NEXTAUTH_URL ?? "http://localhost:3000"),
   openGraph: {
     title: "Coverboard — Team Leave Management",
     description:
-      "See who's out, plan coverage, and manage team leave in one place. Built for small, distributed teams.",
+      "See who's out, plan coverage, and manage team leave in one place. Built for distributed teams across the UK, Africa, LATAM, and beyond.",
     siteName: "Coverboard",
     type: "website",
   },

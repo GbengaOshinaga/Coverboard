@@ -23,6 +23,11 @@ export const teamMemberSchema = z.object({
   email: z.string().email("Invalid email address"),
   role: z.enum(["ADMIN", "MANAGER", "MEMBER"]),
   memberType: z.enum(["EMPLOYEE", "CONTRACTOR", "FREELANCER"]),
+  employmentType: z.enum(["FULL_TIME", "PART_TIME", "VARIABLE_HOURS"]).default("FULL_TIME"),
+  daysWorkedPerWeek: z.number().min(0).max(7).default(5),
+  fteRatio: z.number().min(0).max(1).default(1),
+  rightToWorkVerified: z.boolean().nullable().optional(),
+  department: z.string().max(100).optional(),
   countryCode: z.string().min(2, "Country is required").max(2),
 });
 

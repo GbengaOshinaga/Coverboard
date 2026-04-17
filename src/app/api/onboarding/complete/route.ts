@@ -9,6 +9,9 @@ import {
   getHolidaysForYear,
 } from "@/lib/country-policies";
 import { sendTeamInviteEmail } from "@/lib/email-notifications";
+import { getUkBankHolidaysForRegion } from "@/lib/uk-compliance";
+import { BankHolidayRegion } from "@prisma/client";
+import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { z } from "zod";
 
 const onboardingSchema = z.object({
@@ -70,6 +73,7 @@ export async function POST(request: Request) {
             color: lt.color,
             isPaid: lt.isPaid,
             defaultDays: lt.defaultDays,
+            category: lt.isPaid ? "PAID" : "UNPAID",
             organizationId: orgId,
           },
           update: {},
@@ -104,10 +108,26 @@ export async function POST(request: Request) {
           carryOverMax: cp.carryOverMax,
         },
       });
+
+      await prisma.leaveType.update({
+        where: { id: leaveType.id },
+        data: {
+          ...(cp.countryCode === "GB"
+            ? {
+                category: cp.category,
+                requiresEvidence: cp.requiresEvidence,
+                minNoticeDays: cp.minNoticeDays,
+                durationLogic: cp.durationLogic,
+                countryCode: cp.countryCode,
+              }
+            : {}),
+        },
+      });
     }
 
     // Create public holidays for the current year
-    const holidays = getHolidaysForYear(countries, currentYear);
+    const standardCountries = countries.filter((code) => code !== "GB");
+    const holidays = getHolidaysForYear(standardCountries, currentYear);
 
     for (const h of holidays) {
       await prisma.publicHoliday.upsert({
@@ -129,7 +149,7 @@ export async function POST(request: Request) {
     }
 
     // Also create holidays for next year
-    const nextYearHolidays = getHolidaysForYear(countries, currentYear + 1);
+    const nextYearHolidays = getHolidaysForYear(standardCountries, currentYear + 1);
     for (const h of nextYearHolidays) {
       await prisma.publicHoliday.upsert({
         where: {
@@ -147,6 +167,39 @@ export async function POST(request: Request) {
         },
         update: {},
       });
+    }
+
+    // Create UK regional bank holidays when GB is selected
+    if (countries.includes("GB")) {
+      const ukRegions: BankHolidayRegion[] = [
+        "ENGLAND_WALES",
+        "SCOTLAND",
+        "NORTHERN_IRELAND",
+      ];
+      for (const y of [currentYear, currentYear + 1]) {
+        for (const region of ukRegions) {
+          const ukBankHolidays = getUkBankHolidaysForRegion(y, region);
+          for (const holiday of ukBankHolidays) {
+            await prisma.bankHoliday.upsert({
+              where: {
+                date_region_organizationId: {
+                  date: holiday.date,
+                  region,
+                  organizationId: orgId,
+                },
+              },
+              create: {
+                name: holiday.name,
+                date: holiday.date,
+                region,
+                countryCode: "GB",
+                organizationId: orgId,
+              },
+              update: {},
+            });
+          }
+        }
+      }
     }
 
     // Create invited team members and send invite emails
@@ -193,6 +246,20 @@ export async function POST(request: Request) {
     await prisma.organization.update({
       where: { id: orgId },
       data: { onboardingCompleted: true },
+    });
+
+    recordAudit({
+      organizationId: orgId,
+      action: "onboarding.completed",
+      resource: "onboarding",
+      resourceId: orgId,
+      actor: {
+        id: (session.user as Record<string, unknown>).id as string,
+        email: session.user.email ?? null,
+        role: (session.user as Record<string, unknown>).role as string,
+      },
+      metadata: { countries: parsed.data.countries },
+      context: requestAuditContext(request),
     });
 
     return NextResponse.json({ success: true });

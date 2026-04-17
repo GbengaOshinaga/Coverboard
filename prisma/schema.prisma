@@ -26,17 +26,58 @@ enum LeaveStatus {
   CANCELLED
 }
 
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  VARIABLE_HOURS
+}
+
+enum LeaveCategory {
+  PAID
+  UNPAID
+  STATUTORY
+}
+
+enum BankHolidayRegion {
+  ENGLAND_WALES
+  SCOTLAND
+  NORTHERN_IRELAND
+}
+
+enum DataResidency {
+  UK
+  EU
+  US
+}
+
+enum SubscriptionPlan {
+  STARTER
+  GROWTH
+  SCALE
+  PRO
+}
+
 model Organization {
   id                  String   @id @default(cuid())
   name                String
   slug                String   @unique
   onboardingCompleted Boolean  @default(false)
+  ukBankHolidayInclusive Boolean @default(true)
+  ukBankHolidayRegion    BankHolidayRegion @default(ENGLAND_WALES)
+  ukCarryOverEnabled     Boolean @default(false)
+  ukCarryOverMax         Int @default(0)
+  ukCarryOverExpiryMonth Int @default(3)
+  ukCarryOverExpiryDay   Int @default(31)
+  dataResidency          DataResidency @default(EU)
+  maxAdminUsers          Int @default(2)
+  plan                   SubscriptionPlan @default(STARTER)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
   users            User[]
   leaveTypes       LeaveType[]
   publicHolidays   PublicHoliday[]
+  bankHolidays     BankHoliday[]
   jiraIntegration  JiraIntegration?
   jiraUserMappings JiraUserMapping[]
 }
@@ -48,7 +89,14 @@ model User {
   passwordHash   String
   role           Role       @default(MEMBER)
   memberType     MemberType @default(EMPLOYEE)
+  employmentType EmploymentType @default(FULL_TIME)
+  daysWorkedPerWeek Float @default(5)
+  fteRatio       Float @default(1)
   countryCode    String     @default("NG")
+  rightToWorkVerified Boolean?
+  department     String?
+  serviceStartDate DateTime?
+  ukParentalLeaveChildCount Int @default(0)
   digestOptOut   Boolean    @default(false)
   organizationId String
   createdAt      DateTime   @default(now())
@@ -60,6 +108,8 @@ model User {
   passwordResetTokens PasswordResetToken[]
   jiraUserMapping     JiraUserMapping?
   jiraConnections     JiraIntegration[]    @relation("JiraConnectedBy")
+  weeklyHours         UserWeeklyHours[]
+  carryOverBalances   LeaveCarryOverBalance[]
 }
 
 model LeaveType {
@@ -67,7 +117,12 @@ model LeaveType {
   name           String
   color          String
   isPaid         Boolean  @default(true)
+  category       LeaveCategory @default(PAID)
   defaultDays    Int
+  requiresEvidence Boolean @default(false)
+  minNoticeDays  Int @default(0)
+  durationLogic  String?
+  countryCode    String?
   organizationId String
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -75,6 +130,7 @@ model LeaveType {
   organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   leaveRequests LeaveRequest[]
   leavePolicies LeavePolicy[]
+  carryOverBalances LeaveCarryOverBalance[]
 
   @@unique([name, organizationId])
 }
@@ -103,6 +159,8 @@ model LeaveRequest {
   leaveTypeId  String
   reviewedById String?
   reviewedAt   DateTime?
+  evidenceProvided Boolean @default(false)
+  kitDaysUsed Int @default(0)
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
@@ -165,4 +223,68 @@ model PublicHoliday {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([date, countryCode, organizationId])
+}
+
+model BankHoliday {
+  id             String   @id @default(cuid())
+  name           String
+  date           DateTime
+  region         BankHolidayRegion
+  countryCode    String   @default("GB")
+  organizationId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([date, region, organizationId])
+}
+
+model UserWeeklyHours {
+  id           String   @id @default(cuid())
+  userId       String
+  weekStartDate DateTime
+  hoursWorked  Float
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, weekStartDate])
+}
+
+model LeaveCarryOverBalance {
+  id           String   @id @default(cuid())
+  userId       String
+  leaveTypeId  String
+  leaveYear    Int
+  daysCarried  Float
+  daysRemaining Float
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, leaveTypeId, leaveYear])
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  actorId        String?
+  actorEmail     String?
+  actorRole      String?
+  action         String
+  resource       String
+  resourceId     String?
+  metadata       Json?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, action])
+  @@index([organizationId, resource])
 }

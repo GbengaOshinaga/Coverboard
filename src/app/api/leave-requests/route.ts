@@ -6,6 +6,8 @@ import { getUserLeaveBalance } from "@/lib/leave-balances";
 import { countWeekdays } from "@/lib/utils";
 import { notifyNewRequest } from "@/lib/slack-notifications";
 import { emailNewRequest } from "@/lib/email-notifications";
+import { calculateSspPayableDays, calculateEstimatedSspCost } from "@/lib/uk-compliance";
+import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { z } from "zod";
 
 export async function GET(request: Request) {
@@ -20,17 +22,23 @@ export async function GET(request: Request) {
   const from = searchParams.get("from");
   const to = searchParams.get("to");
 
-  const orgId = (session.user as Record<string, unknown>).organizationId as string;
+  const sessionUser = session.user as Record<string, unknown>;
+  const orgId = sessionUser.organizationId as string;
+  const currentUserId = sessionUser.id as string;
+  const userRole = sessionUser.role as string;
 
   const where: Record<string, unknown> = {
     user: { organizationId: orgId },
   };
 
+  if (userRole === "MEMBER") {
+    where.userId = currentUserId;
+  } else if (userId) {
+    where.userId = userId;
+  }
+
   if (status) {
     where.status = status;
-  }
-  if (userId) {
-    where.userId = userId;
   }
   if (from || to) {
     where.endDate = from ? { gte: new Date(from) } : undefined;
@@ -67,6 +75,8 @@ const createSchema = z.object({
   endDate: z.string().transform((s) => new Date(s)),
   leaveTypeId: z.string(),
   note: z.string().optional(),
+  evidenceProvided: z.boolean().optional(),
+  kitDaysUsed: z.number().int().min(0).optional(),
 });
 
 export async function POST(request: Request) {
@@ -86,8 +96,30 @@ export async function POST(request: Request) {
       );
     }
 
-    const { startDate, endDate, leaveTypeId, note } = parsed.data;
+    const { startDate, endDate, leaveTypeId, note, evidenceProvided, kitDaysUsed } = parsed.data;
     const userId = (session.user as Record<string, unknown>).id as string;
+    const leaveTypeConfig = await prisma.leaveType.findUnique({
+      where: { id: leaveTypeId },
+      select: { name: true, minNoticeDays: true, requiresEvidence: true },
+    });
+    if (!leaveTypeConfig) {
+      return NextResponse.json({ error: "Leave type not found" }, { status: 404 });
+    }
+    const now = new Date();
+    const noticeDays = Math.floor((startDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    if (noticeDays < leaveTypeConfig.minNoticeDays) {
+      return NextResponse.json(
+        { error: `This leave type requires at least ${leaveTypeConfig.minNoticeDays} days notice` },
+        { status: 400 }
+      );
+    }
+    if (leaveTypeConfig.requiresEvidence && !evidenceProvided) {
+      return NextResponse.json(
+        { error: "Evidence is required for this leave type" },
+        { status: 400 }
+      );
+    }
+
 
     if (endDate < startDate) {
       return NextResponse.json(
@@ -119,6 +151,8 @@ export async function POST(request: Request) {
         leaveTypeId,
         note,
         userId,
+        evidenceProvided: evidenceProvided ?? false,
+        kitDaysUsed: kitDaysUsed ?? 0,
       },
       include: {
         user: {
@@ -159,10 +193,35 @@ export async function POST(request: Request) {
       organizationId: orgId,
     }).catch((err) => console.error("Email notification error:", err));
 
-    return NextResponse.json(
-      { ...leaveRequest, balanceWarning },
-      { status: 201 }
-    );
+    recordAudit({
+      organizationId: orgId,
+      action: "leave_request.created",
+      resource: "leave_request",
+      resourceId: leaveRequest.id,
+      actor: {
+        id: userId,
+        email: leaveRequest.user.email,
+        role: (session.user as Record<string, unknown>).role as string,
+      },
+      metadata: {
+        leaveType: leaveRequest.leaveType.name,
+        startDate,
+        endDate,
+        daysRequested,
+      },
+      context: requestAuditContext(request),
+    });
+
+    let sspInfo: { payableDays: number; estimatedCost: number } | null = null;
+    if (leaveRequest.leaveType.name.includes("SSP")) {
+      const payableDays = calculateSspPayableDays(startDate, endDate);
+      sspInfo = {
+        payableDays,
+        estimatedCost: calculateEstimatedSspCost(startDate, endDate),
+      };
+    }
+
+    return NextResponse.json({ ...leaveRequest, balanceWarning, sspInfo }, { status: 201 });
   } catch (error) {
     console.error("Create leave request error:", error);
     return NextResponse.json(

@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { teamMemberSchema } from "@/lib/validations";
 import { sendTeamInviteEmail } from "@/lib/email-notifications";
+import { recordAudit, requestAuditContext } from "@/lib/audit";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -22,6 +23,11 @@ export async function GET() {
       email: true,
       role: true,
       memberType: true,
+      employmentType: true,
+      daysWorkedPerWeek: true,
+      fteRatio: true,
+      rightToWorkVerified: true,
+      department: true,
       countryCode: true,
       createdAt: true,
       _count: {
@@ -64,7 +70,18 @@ export async function POST(request: Request) {
       );
     }
 
-    const { name, email, role, memberType, countryCode } = parsed.data;
+    const {
+      name,
+      email,
+      role,
+      memberType,
+      employmentType,
+      daysWorkedPerWeek,
+      fteRatio,
+      rightToWorkVerified,
+      department,
+      countryCode,
+    } = parsed.data;
     const orgId = (session.user as Record<string, unknown>).organizationId as string;
 
     const existing = await prisma.user.findUnique({ where: { email } });
@@ -73,6 +90,34 @@ export async function POST(request: Request) {
         { error: "A user with this email already exists" },
         { status: 409 }
       );
+    }
+
+    if (role === "ADMIN") {
+      const [org, adminCount] = await Promise.all([
+        prisma.organization.findUnique({
+          where: { id: orgId },
+          select: { maxAdminUsers: true, plan: true },
+        }),
+        prisma.user.count({
+          where: { organizationId: orgId, role: "ADMIN" },
+        }),
+      ]);
+
+      const unlimitedAdminsPlan =
+        org?.plan === "GROWTH" || org?.plan === "SCALE" || org?.plan === "PRO";
+      if (
+        org &&
+        !unlimitedAdminsPlan &&
+        org.maxAdminUsers > 0 &&
+        adminCount >= org.maxAdminUsers
+      ) {
+        return NextResponse.json(
+          {
+            error: `Your plan allows up to ${org.maxAdminUsers} admin users. Please upgrade or change an existing admin's role first.`,
+          },
+          { status: 403 }
+        );
+      }
     }
 
     // Generate a temporary password for the new team member
@@ -86,6 +131,11 @@ export async function POST(request: Request) {
         passwordHash,
         role: role as "ADMIN" | "MANAGER" | "MEMBER",
         memberType: memberType as "EMPLOYEE" | "CONTRACTOR" | "FREELANCER",
+        employmentType: employmentType as "FULL_TIME" | "PART_TIME" | "VARIABLE_HOURS",
+        daysWorkedPerWeek,
+        fteRatio,
+        rightToWorkVerified: rightToWorkVerified ?? null,
+        department: department ?? null,
         countryCode,
         organizationId: orgId,
       },
@@ -95,6 +145,11 @@ export async function POST(request: Request) {
         email: true,
         role: true,
         memberType: true,
+        employmentType: true,
+        daysWorkedPerWeek: true,
+        fteRatio: true,
+        rightToWorkVerified: true,
+        department: true,
         countryCode: true,
         createdAt: true,
       },
@@ -110,6 +165,25 @@ export async function POST(request: Request) {
       email,
       tempPassword,
     }).catch((err) => console.error("Invite email error:", err));
+
+    recordAudit({
+      organizationId: orgId,
+      action: "team_member.created",
+      resource: "team_member",
+      resourceId: member.id,
+      actor: {
+        id: (session.user as Record<string, unknown>).id as string,
+        email: session.user.email ?? null,
+        role: userRole,
+      },
+      metadata: {
+        name: member.name,
+        email: member.email,
+        role: member.role,
+        countryCode: member.countryCode,
+      },
+      context: requestAuditContext(request),
+    });
 
     return NextResponse.json(
       { ...member, tempPassword },

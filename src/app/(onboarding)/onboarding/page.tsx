@@ -174,7 +174,9 @@ export default function OnboardingPage() {
                         {country.name}
                       </p>
                       <p className="text-[10px] text-gray-400">
-                        {country.holidays.length} holidays
+                        {country.code === "GB"
+                          ? "Regional bank holidays (by nation)"
+                          : `${country.holidays.length} holidays`}
                       </p>
                     </div>
                     {isSelected && (

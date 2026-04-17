@@ -1,14 +1,21 @@
 import { prisma } from "@/lib/prisma";
 import { countWeekdays } from "@/lib/utils";
+import { calculateUkProRatedAnnualLeave } from "@/lib/uk-compliance";
 
 export type LeaveBalance = {
   leaveTypeId: string;
   leaveTypeName: string;
   leaveTypeColor: string;
   allowance: number;
+  proRatedEntitlement?: number;
   used: number;
   pending: number;
   remaining: number;
+  carryOver: {
+    carried: number;
+    remaining: number;
+    expiresAt: string | null;
+  };
 };
 
 /**
@@ -27,15 +34,61 @@ export async function getUserLeaveBalances(
 ): Promise<LeaveBalance[]> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { countryCode: true, organizationId: true },
+    select: {
+      countryCode: true,
+      organizationId: true,
+      employmentType: true,
+      daysWorkedPerWeek: true,
+      weeklyHours: {
+        orderBy: { weekStartDate: "asc" },
+        select: { hoursWorked: true },
+      },
+    },
   });
 
   if (!user) {
     throw new Error("User not found");
   }
 
+  const orgUk = await prisma.organization.findUnique({
+    where: { id: user.organizationId },
+    select: {
+      ukBankHolidayInclusive: true,
+      ukBankHolidayRegion: true,
+    },
+  });
+  const ukBankHolidayInclusive = orgUk?.ukBankHolidayInclusive ?? true;
+  const ukBankHolidayRegion = orgUk?.ukBankHolidayRegion ?? "ENGLAND_WALES";
+
   const yearStart = new Date(year, 0, 1);
   const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
+
+  const carryOverBalances = await prisma.leaveCarryOverBalance.findMany({
+    where: {
+      userId,
+      leaveYear: year,
+    },
+    select: {
+      leaveTypeId: true,
+      daysCarried: true,
+      daysRemaining: true,
+      expiresAt: true,
+    },
+  });
+
+  let ukRegionalBankHolidayCount = 0;
+  if (user.countryCode === "GB" && !ukBankHolidayInclusive) {
+    ukRegionalBankHolidayCount = await prisma.bankHoliday.count({
+      where: {
+        organizationId: user.organizationId,
+        region: ukBankHolidayRegion,
+        date: {
+          gte: yearStart,
+          lte: yearEnd,
+        },
+      },
+    });
+  }
 
   // Fetch leave types for the org, including country-specific policies
   const leaveTypes = await prisma.leaveType.findMany({
@@ -64,19 +117,34 @@ export async function getUserLeaveBalances(
     },
   });
 
-  return leaveTypes.map((lt: any) => {
-    // Country-specific allowance, or fall back to default
+  return leaveTypes.map((lt) => {
     const policy = lt.leavePolicies[0];
-    const allowance = policy?.annualAllowance ?? lt.defaultDays;
+    const baseAllowance = policy?.annualAllowance ?? lt.defaultDays;
+    let allowance = baseAllowance;
+    let proRatedEntitlement: number | undefined;
 
-    // Calculate used and pending days (only weekdays, clamped to the year)
+    if (user.countryCode === "GB" && lt.name === "Annual Leave") {
+      proRatedEntitlement = calculateUkProRatedAnnualLeave({
+        employmentType: user.employmentType,
+        daysWorkedPerWeek: user.daysWorkedPerWeek,
+        weeklyHours: user.weeklyHours.map((h) => h.hoursWorked),
+      });
+      allowance = proRatedEntitlement;
+      if (!ukBankHolidayInclusive) {
+        allowance += ukRegionalBankHolidayCount;
+      }
+    }
+
+    const carryOver = carryOverBalances.find((c) => c.leaveTypeId === lt.id);
+    const carryOverRemaining = carryOver?.daysRemaining ?? 0;
+    allowance += carryOverRemaining;
+
     let used = 0;
     let pending = 0;
 
     for (const req of requests) {
       if (req.leaveTypeId !== lt.id) continue;
 
-      // Clamp dates to the current year boundaries
       const start = req.startDate < yearStart ? yearStart : req.startDate;
       const end = req.endDate > yearEnd ? yearEnd : req.endDate;
       const days = countWeekdays(start, end);
@@ -93,9 +161,15 @@ export async function getUserLeaveBalances(
       leaveTypeName: lt.name,
       leaveTypeColor: lt.color,
       allowance,
+      proRatedEntitlement,
       used,
       pending,
       remaining: Math.max(0, allowance - used - pending),
+      carryOver: {
+        carried: carryOver?.daysCarried ?? 0,
+        remaining: carryOverRemaining,
+        expiresAt: carryOver?.expiresAt?.toISOString() ?? null,
+      },
     };
   });
 }

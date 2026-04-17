@@ -12,6 +12,11 @@ type MemberData = {
   email: string;
   role: string;
   memberType: string;
+  employmentType: string;
+  daysWorkedPerWeek: number;
+  fteRatio: number;
+  rightToWorkVerified: boolean | null;
+  department?: string;
   countryCode: string;
 };
 
@@ -32,6 +37,12 @@ const countryOptions = Object.entries(COUNTRY_NAMES).map(([code, name]) => ({
   label: `${name} (${code})`,
 }));
 
+const employmentTypeOptions = [
+  { value: "FULL_TIME", label: "Full-time" },
+  { value: "PART_TIME", label: "Part-time" },
+  { value: "VARIABLE_HOURS", label: "Variable hours" },
+];
+
 export function MemberForm({
   initialData,
   onSubmit,
@@ -51,6 +62,21 @@ export function MemberForm({
   const [countryCode, setCountryCode] = useState(
     initialData?.countryCode ?? "NG"
   );
+  const [employmentType, setEmploymentType] = useState(
+    initialData?.employmentType ?? "FULL_TIME"
+  );
+  const [daysWorkedPerWeek, setDaysWorkedPerWeek] = useState(
+    String(initialData?.daysWorkedPerWeek ?? 5)
+  );
+  const [fteRatio, setFteRatio] = useState(String(initialData?.fteRatio ?? 1));
+  const [department, setDepartment] = useState(initialData?.department ?? "");
+  const [rightToWorkVerified, setRightToWorkVerified] = useState<string>(
+    initialData?.rightToWorkVerified === null || initialData?.rightToWorkVerified === undefined
+      ? "unknown"
+      : initialData.rightToWorkVerified
+        ? "yes"
+        : "no"
+  );
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -66,6 +92,14 @@ export function MemberForm({
         email,
         role,
         memberType,
+        employmentType,
+        daysWorkedPerWeek: parseFloat(daysWorkedPerWeek),
+        fteRatio: parseFloat(fteRatio),
+        rightToWorkVerified:
+          rightToWorkVerified === "unknown"
+            ? null
+            : rightToWorkVerified === "yes",
+        department: department.trim() || undefined,
         countryCode,
       });
     } catch (err) {
@@ -124,6 +158,58 @@ export function MemberForm({
         options={countryOptions}
         value={countryCode}
         onChange={(e) => setCountryCode(e.target.value)}
+      />
+
+      <div className="grid grid-cols-2 gap-4">
+        <Select
+          id="employmentType"
+          label="Employment"
+          options={employmentTypeOptions}
+          value={employmentType}
+          onChange={(e) => setEmploymentType(e.target.value)}
+        />
+        <Input
+          id="daysWorkedPerWeek"
+          label="Days worked/week"
+          type="number"
+          min="0"
+          max="7"
+          step="0.5"
+          value={daysWorkedPerWeek}
+          onChange={(e) => setDaysWorkedPerWeek(e.target.value)}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <Input
+          id="fteRatio"
+          label="FTE ratio"
+          type="number"
+          min="0"
+          max="1"
+          step="0.01"
+          value={fteRatio}
+          onChange={(e) => setFteRatio(e.target.value)}
+        />
+        <Input
+          id="department"
+          label="Department"
+          value={department}
+          onChange={(e) => setDepartment(e.target.value)}
+          placeholder="Engineering"
+        />
+      </div>
+
+      <Select
+        id="rightToWorkVerified"
+        label="Right to work verified"
+        options={[
+          { value: "unknown", label: "Unknown" },
+          { value: "yes", label: "Verified" },
+          { value: "no", label: "Not verified" },
+        ]}
+        value={rightToWorkVerified}
+        onChange={(e) => setRightToWorkVerified(e.target.value)}
       />
 
       <div className="flex items-center gap-3 pt-2">

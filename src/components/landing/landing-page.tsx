@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 import {
   CalendarDays,
@@ -12,6 +15,7 @@ import {
   Zap,
 } from "lucide-react";
 import { LandingNavbar } from "./navbar";
+import { PRICING } from "@/config/pricing";
 
 function HeroSection() {
   return (
@@ -22,7 +26,7 @@ function HeroSection() {
       <div className="mx-auto max-w-4xl px-6 text-center">
         <div className="inline-flex items-center gap-2 rounded-full bg-brand-50 border border-brand-200 px-4 py-1.5 text-sm text-brand-700 mb-8">
           <Zap size={14} />
-          Built for small, distributed teams
+          Built for small, distributed teams — UK compliant
         </div>
 
         <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight text-gray-900 leading-[1.1]">
@@ -134,7 +138,7 @@ const features = [
     icon: Globe,
     title: "Multi-country leave rules",
     description:
-      "Statutory allowances and public holidays for Nigeria, Kenya, South Africa, Ghana, Brazil, Mexico, Philippines, Indonesia — and growing.",
+      "Statutory allowances and public holidays for the UK, Nigeria, Kenya, South Africa, Ghana, Brazil, Mexico, Philippines, Indonesia — and growing.",
   },
   {
     icon: Users,
@@ -159,6 +163,12 @@ const features = [
     title: "Email notifications",
     description:
       "Managers get notified of new requests. Team members get instant updates when their leave is approved or rejected.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "UK statutory compliance",
+    description:
+      "Full support for UK leave types including SSP, maternity, paternity, shared parental, and bereavement leave. Regional bank holidays, pro-rata for part-time workers, and Bradford Factor reporting built in.",
   },
 ];
 
@@ -240,48 +250,13 @@ function HowItWorksSection() {
   );
 }
 
-const plans = [
-  {
-    name: "Free",
-    price: "$0",
-    period: "forever",
-    description: "For small teams getting started",
-    features: [
-      "Up to 10 team members",
-      "Unlimited leave requests",
-      "Multi-country leave rules",
-      "Who's out today dashboard",
-      "Email notifications",
-      "Public holiday calendars",
-    ],
-    cta: "Get started free",
-    ctaStyle: "border-2 border-brand-600 text-brand-600 hover:bg-brand-50",
-    highlight: false,
-  },
-  {
-    name: "Pro",
-    price: "$4",
-    period: "per user / month",
-    description: "For growing teams that need more",
-    features: [
-      "Everything in Free",
-      "Unlimited team members",
-      "Slack integration",
-      "Overlap & coverage warnings",
-      "Jira project coverage",
-      "Priority support",
-    ],
-    cta: "Start 14-day trial",
-    ctaStyle: "bg-brand-600 text-white hover:bg-brand-700 shadow-lg shadow-brand-600/20",
-    highlight: true,
-  },
-];
-
 function PricingSection() {
+  const [annual, setAnnual] = useState(false);
+
   return (
     <section id="pricing" className="py-20 md:py-28 bg-white">
-      <div className="mx-auto max-w-5xl px-6">
-        <div className="text-center max-w-2xl mx-auto mb-16">
+      <div className="mx-auto max-w-6xl px-6">
+        <div className="text-center max-w-2xl mx-auto mb-10">
           <p className="text-sm font-semibold text-brand-600 mb-3">Pricing</p>
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight">
             Simple pricing for simple teams
@@ -291,48 +266,102 @@ function PricingSection() {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-8 max-w-3xl mx-auto">
-          {plans.map((plan) => (
-            <div
-              key={plan.name}
-              className={`rounded-2xl border p-8 flex flex-col ${
-                plan.highlight
-                  ? "border-brand-200 shadow-xl shadow-brand-100/40 ring-1 ring-brand-100 relative"
-                  : "border-gray-200"
+        {/* Billing toggle */}
+        <div className="flex items-center justify-center gap-3 mb-12">
+          <span className={`text-sm font-medium ${!annual ? "text-gray-900" : "text-gray-400"}`}>Monthly</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={annual}
+            onClick={() => setAnnual(!annual)}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+              annual ? "bg-brand-600" : "bg-gray-200"
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition-transform ${
+                annual ? "translate-x-5" : "translate-x-0"
               }`}
-            >
-              {plan.highlight && (
-                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-brand-600 text-white text-xs font-semibold px-3 py-1 rounded-full">
-                  Most popular
-                </div>
-              )}
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-900">{plan.name}</h3>
-                <div className="flex items-baseline gap-1 mt-3">
-                  <span className="text-4xl font-bold text-gray-900">{plan.price}</span>
-                  <span className="text-gray-500 text-sm">/ {plan.period}</span>
-                </div>
-                <p className="text-sm text-gray-500 mt-2">{plan.description}</p>
-              </div>
-
-              <ul className="space-y-3 mb-8 flex-1">
-                {plan.features.map((f) => (
-                  <li key={f} className="flex items-start gap-3 text-sm text-gray-700">
-                    <Check size={16} className="text-brand-600 mt-0.5 shrink-0" />
-                    {f}
-                  </li>
-                ))}
-              </ul>
-
-              <Link
-                href="/signup"
-                className={`block text-center font-semibold py-3 rounded-xl transition-colors ${plan.ctaStyle}`}
-              >
-                {plan.cta}
-              </Link>
-            </div>
-          ))}
+            />
+          </button>
+          <span className={`text-sm font-medium ${annual ? "text-gray-900" : "text-gray-400"}`}>Annual</span>
+          {annual && (
+            <span className="ml-1 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
+              {PRICING.billingNote}
+            </span>
+          )}
         </div>
+
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {PRICING.tiers.map((tier) => {
+            const price = annual ? tier.price_annual_monthly : tier.price_monthly;
+            return (
+              <div
+                key={tier.name}
+                className={`rounded-2xl border p-6 flex flex-col ${
+                  tier.highlighted
+                    ? "border-brand-200 shadow-xl shadow-brand-100/40 ring-1 ring-brand-100 relative"
+                    : "border-gray-200"
+                }`}
+              >
+                {tier.badge && tier.highlighted && (
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-brand-600 text-white text-xs font-semibold px-3 py-1 rounded-full">
+                    {tier.badge}
+                  </div>
+                )}
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-gray-900">{tier.name}</h3>
+                  <p className="text-xs text-gray-500 mt-1">{tier.employees}</p>
+                  <div className="flex items-baseline gap-1 mt-3">
+                    <span className="text-4xl font-bold text-gray-900">
+                      {PRICING.currency}{price}
+                    </span>
+                    <span className="text-gray-500 text-sm">
+                      / {annual ? "mo, billed annually" : "month"}
+                    </span>
+                  </div>
+                </div>
+
+                <ul className="space-y-3 mb-8 flex-1">
+                  {tier.features.map((f) => (
+                    <li key={f} className="flex items-start gap-3 text-sm text-gray-700">
+                      <Check size={16} className="text-brand-600 mt-0.5 shrink-0" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+
+                <Link
+                  href={
+                    tier.name === "Pro"
+                      ? process.env.NEXT_PUBLIC_DEMO_BOOKING_URL ??
+                        "https://cal.com/coverboard/demo"
+                      : "/signup"
+                  }
+                  target={tier.name === "Pro" ? "_blank" : undefined}
+                  rel={tier.name === "Pro" ? "noopener noreferrer" : undefined}
+                  className={`block text-center font-semibold py-3 rounded-xl transition-colors ${
+                    tier.highlighted
+                      ? "bg-brand-600 text-white hover:bg-brand-700 shadow-lg shadow-brand-600/20"
+                      : "border-2 border-brand-600 text-brand-600 hover:bg-brand-50"
+                  }`}
+                >
+                  {tier.cta}
+                </Link>
+              </div>
+            );
+          })}
+        </div>
+
+        <p className="mt-10 text-center text-sm text-gray-500">
+          All plans include a 14-day free trial. No credit card required.
+          <br />
+          Need more than 300 employees?{" "}
+          <a href="mailto:hello@yourdomain.com" className="text-brand-600 hover:text-brand-700 font-medium underline">
+            Contact us
+          </a>{" "}
+          for enterprise pricing.
+        </p>
       </div>
     </section>
   );
@@ -352,7 +381,7 @@ function CTASection() {
           Stop guessing who&apos;s available
         </h2>
         <p className="mt-4 text-lg text-brand-100 max-w-xl mx-auto">
-          Join teams across Africa, LATAM, and Southeast Asia who use Coverboard to
+          Join teams across the UK, Africa, LATAM, and Southeast Asia who use Coverboard to
           manage leave without the spreadsheet chaos.
         </p>
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">

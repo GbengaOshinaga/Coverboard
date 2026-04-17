@@ -16,6 +16,11 @@ type Member = {
   email: string;
   role: string;
   memberType: string;
+  employmentType: string;
+  daysWorkedPerWeek: number;
+  fteRatio: number;
+  rightToWorkVerified: boolean | null;
+  department?: string | null;
   countryCode: string;
   _count?: { leaveRequests: number };
 };
@@ -49,6 +54,11 @@ export default function TeamPage() {
     email: string;
     role: string;
     memberType: string;
+    employmentType: string;
+    daysWorkedPerWeek: number;
+    fteRatio: number;
+    rightToWorkVerified: boolean | null;
+    department?: string;
     countryCode: string;
   }) {
     const res = await fetch("/api/team-members", {
@@ -72,6 +82,11 @@ export default function TeamPage() {
     name: string;
     role: string;
     memberType: string;
+    employmentType: string;
+    daysWorkedPerWeek: number;
+    fteRatio: number;
+    rightToWorkVerified: boolean | null;
+    department?: string;
     countryCode: string;
   }) {
     if (!data.id) return;
@@ -83,6 +98,11 @@ export default function TeamPage() {
         name: data.name,
         role: data.role,
         memberType: data.memberType,
+        employmentType: data.employmentType,
+        daysWorkedPerWeek: data.daysWorkedPerWeek,
+        fteRatio: data.fteRatio,
+        rightToWorkVerified: data.rightToWorkVerified,
+        department: data.department ?? null,
         countryCode: data.countryCode,
       }),
     });
@@ -133,6 +153,12 @@ export default function TeamPage() {
         </div>
       )}
 
+      {members.some((m) => m.countryCode === "GB" && (m.rightToWorkVerified === false || m.rightToWorkVerified === null)) && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Compliance alert: Some employees do not have right-to-work verification completed.
+        </div>
+      )}
+
       {/* Add member dialog */}
       <Dialog
         open={showForm}
@@ -153,7 +179,7 @@ export default function TeamPage() {
       >
         {editMember && (
           <MemberForm
-            initialData={editMember}
+            initialData={{ ...editMember, department: editMember.department ?? undefined }}
             onSubmit={handleEditMember}
             onCancel={() => setEditMember(undefined)}
           />

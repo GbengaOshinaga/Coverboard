@@ -2,7 +2,7 @@
 
 Team leave management for small, distributed teams. See who's out, plan coverage, and manage leave in one place — with built-in support for country-specific policies, email notifications, a Slack bot, and Jira project coverage.
 
-Built for teams of 5–15 people, especially those spread across Africa, LATAM, and SEA where public holidays and statutory leave rules vary wildly.
+Built for teams of 5–15 people, especially those spread across the UK, Africa, LATAM, and SEA where public holidays and statutory leave rules vary wildly. Includes full UK statutory compliance — SSP, maternity, paternity, shared parental leave, regional bank holidays, pro-rata entitlements, and Bradford Factor reporting.
 
 ## Features
 
