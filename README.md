@@ -104,9 +104,42 @@ The **Reports** area (`/reports`) includes:
 
 - **Analytics** — absence trends, leave-type and department breakdowns, top absence days (consumes `/api/reports/analytics`).
 - **UK compliance** — Bradford Factor, right to work, holiday usage, SSP liability, parental leave with KIT day tracking; per-tab and full-pack **CSV export**.
+- **Payroll export** — approved leave × **daily holiday pay rate** (see below) for any date range, with CSV export (`/api/reports/payroll`).
 - **Year-end rollover** (admins) — preview and run UK annual carry-over into `LeaveCarryOverBalance` via `/api/carry-over/process` (supports `dryRun`).
 
 UK-focused details are documented in **`UK_COMPLIANCE.md`**.
+
+### UK Holiday Pay (52-week average)
+
+Since the 2020 Working Time Regulations amendments (and Harpur Trust v Brazel), UK holiday pay must reflect **normal remuneration** — basic pay **plus** regular overtime, commission, and shift allowances — averaged over the last **52 paid weeks**. Zero-pay weeks are excluded.
+
+- **Model**: `WeeklyEarning` — `userId`, `weekStartDate`, `grossEarnings` (DECIMAL), `hoursWorked`, `isZeroPayWeek`. Unique per `(userId, weekStartDate)`.
+- **Calculator**: `src/lib/holidayPay.ts` — `calculateHolidayPayRate(weeks)` returns the **daily** rate (weekly average ÷ 5), `getDailyHolidayPayRateForUser(userId)` pulls from the DB.
+- **Capture at booking**: when an annual-leave request is created, the daily rate is computed and stored on `LeaveRequest.dailyHolidayPayRate` so payroll has the legally correct figure at the moment the leave was booked.
+- **Settings warning**: the Settings page lists employees with no earnings history and shows an amber warning that their holiday pay will fall back to basic salary only.
+- **Earnings API**: `GET /api/weekly-earnings?userId=...`, `POST /api/weekly-earnings` (single row or `{ userId, entries: [...] }` batch), `GET /api/weekly-earnings/coverage`.
+- **Tests**: `src/lib/holidayPay.test.ts` — zero-pay exclusion, fewer than 52 weeks, overtime inclusion, 52-week window cap, rounding. Run with `npm test`.
+
+### UK Statutory Sick Pay (SSP)
+
+SSP is gated on three HMRC rules that were previously approximated; the calculator in `src/lib/uk-compliance.ts` now enforces each one:
+
+- **Qualifying-day daily rate** — `calculateSspDailyRate(qualifyingDaysPerWeek)` divides the weekly rate by the employee's contracted working days (`User.qualifyingDaysPerWeek`, default 5). A 3-day-a-week employee earns `116.75 / 3` per sick day — **not** `116.75 / 7`.
+- **Lower Earnings Limit** — `calculateSspEntitlement` returns `{ eligible: false, reason: "Below Lower Earnings Limit" }` when `User.averageWeeklyEarnings < LEL_WEEKLY` (£123 for 2024/25, overridable via `LEL_WEEKLY` env).
+- **28-week cumulative cap** — `LeaveRequest.sspDaysPaid` and `LeaveRequest.sspLimitReached` track the statutory 28-week ceiling per PIW (linked with a 56-day window). When the cap is first hit, org admins/managers get an email and an `leave_request.ssp_cap_reached` audit entry is written.
+
+`POST /api/leave-requests` returns an `sspInfo` block with `eligible`, `reason`, `dailyRate`, `sspDaysPaidThisRequest`, `cumulativeSspDaysPaid`, `remainingDaysAfter`, and `limitReached`. Full details and test coverage in **`UK_COMPLIANCE.md`**.
+
+### UK Statutory Maternity Pay (SMP) — phase tracking
+
+SMP runs in two phases: **weeks 1–6 at 90% of Average Weekly Earnings**, then **weeks 7–39 at the lower of the flat rate (£184.03 for 2024/25) or 90% AWE**. Coverboard captures AWE and both phase rates when a maternity leave is booked so payroll has a legally correct weekly figure for every payslip:
+
+- **Calculator**: `src/lib/smpCalculator.ts` — `calculateAWE`, `calculateSMPPhaseRates`, `calculateSMPPhaseDates`, `getCurrentSMPPhase`, `getAweForUser`.
+- **Persisted on `LeaveRequest`**: `smpAverageWeeklyEarnings`, `smpPhase1EndDate`, `smpPhase2EndDate`, `smpPhase1WeeklyRate`, `smpPhase2WeeklyRate`.
+- **UK compliance report** (`/api/reports/uk-compliance`): the **parental tracker** row now includes an `smp` object with the current phase label ("Phase 1 (90% AWE)" / "Phase 2 (flat rate)"), weekly rate, and both phase end dates.
+- **Payroll export** (`/api/reports/payroll`): maternity rows include an `smp` block (AWE + current phase + current weekly rate + both phase rates) so the export CSV can drive payroll without manual lookups.
+- **Env override**: `SMP_WEEKLY_RATE` or `SMP_FLAT_RATE` (same value, update each April).
+- **Tests**: `src/lib/smpCalculator.test.ts` — AWE math, both phase-2 branches (low earner and high earner), phase date/rate edge cases.
 
 ### Help & Support
 
@@ -397,6 +430,7 @@ vercel.json                       Cron job configuration (weekly digest)
 - **PublicHoliday** / **BankHoliday** — Generic country holidays vs UK regional bank holidays
 - **UserWeeklyHours** — History for variable-hours pro-rata
 - **LeaveCarryOverBalance** — Carried days per user, leave type, and leave year
+- **WeeklyEarning** — Gross earnings per week for the 52-week UK holiday pay calculation
 - **PasswordResetToken** — Forgot-password tokens
 - **JiraIntegration** / **JiraUserMapping** — Jira OAuth and email cache
 - **AuditLog** — Append-only activity log (no FK to `User`; stores actor id/email/role on each row)
@@ -465,6 +499,10 @@ vercel.json                       Cron job configuration (weekly digest)
 | PATCH | `/api/organization/settings` | Update UK settings (Admin only) |
 | GET | `/api/reports/uk-compliance` | UK compliance report datasets |
 | GET | `/api/reports/analytics` | Absence analytics |
+| GET | `/api/reports/payroll` | Approved leave × daily holiday pay rate for `from`/`to` (Admin/Manager) |
+| GET | `/api/weekly-earnings` | List weekly earnings (owner or Admin/Manager) |
+| POST | `/api/weekly-earnings` | Create/update earnings row(s) for the 52-week holiday pay calc (Admin/Manager) |
+| GET | `/api/weekly-earnings/coverage` | Earnings-history coverage per employee (Admin/Manager) |
 | POST | `/api/carry-over/process` | Year-end carry-over (`fromYear`, optional `dryRun`; Admin) |
 | GET | `/api/audit-logs` | Paginated audit log (`action`, `resource`, date range, `cursor`; Admin, **Pro** plan) |
 | GET | `/api/overlap` | Check team overlap for a date range |
@@ -497,6 +535,7 @@ npm run db:studio    # Open Prisma Studio (database GUI)
 - [x] Jira project coverage (flag, suggest, one-click reassign)
 - [x] Subscription tiers (`Organization.plan`) with plan-aware Help and limits
 - [x] UK compliance reporting, analytics, CSV exports, year-end carry-over processing
+- [x] UK 52-week holiday pay calculator + payroll export
 - [x] Custom leave types / per-country policies (admin CRUD) and audit trail (Pro)
 - [ ] Public HTTP API with API keys (not implemented)
 - [ ] Advanced skill-based coverage planning

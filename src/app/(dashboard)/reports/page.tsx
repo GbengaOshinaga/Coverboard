@@ -97,7 +97,41 @@ type ActiveTab =
   | "holiday-usage"
   | "ssp"
   | "parental"
+  | "payroll"
   | "year-end";
+
+type PayrollRow = {
+  leaveRequestId: string;
+  userId: string;
+  name: string;
+  email: string;
+  department: string | null;
+  countryCode: string;
+  employmentType: string;
+  leaveType: string;
+  leaveCategory: string;
+  isPaid: boolean;
+  startDate: string;
+  endDate: string;
+  daysTaken: number;
+  dailyHolidayPayRate: number | null;
+  estimatedPay: number | null;
+  rateSource:
+    | "captured_at_booking"
+    | "recalculated"
+    | "not_applicable";
+};
+
+type PayrollReport = {
+  from: string;
+  to: string;
+  rows: PayrollRow[];
+  totals: {
+    rowCount: number;
+    totalDays: number;
+    totalEstimatedPay: number;
+  };
+};
 
 type Analytics = {
   year: number;
@@ -139,6 +173,16 @@ export default function ReportsPage() {
   const [newWeekDate, setNewWeekDate] = useState("");
   const [newHours, setNewHours] = useState("");
   const [savingHours, setSavingHours] = useState(false);
+
+  const today = new Date();
+  const monthStart = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
+  const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+    .toISOString()
+    .slice(0, 10);
+  const [payrollFrom, setPayrollFrom] = useState(monthStart);
+  const [payrollTo, setPayrollTo] = useState(monthEnd);
+  const [payrollReport, setPayrollReport] = useState<PayrollReport | null>(null);
+  const [payrollLoading, setPayrollLoading] = useState(false);
 
   const [rolloverYear, setRolloverYear] = useState(
     new Date().getFullYear() - 1
@@ -185,6 +229,75 @@ export default function ReportsPage() {
     }
     if (isReviewer) fetchAnalytics();
   }, [isReviewer]);
+
+  const fetchPayroll = useCallback(async () => {
+    setPayrollLoading(true);
+    try {
+      const qs = new URLSearchParams();
+      if (payrollFrom) qs.set("from", payrollFrom);
+      if (payrollTo) qs.set("to", payrollTo);
+      const res = await fetch(`/api/reports/payroll?${qs.toString()}`);
+      if (res.ok) {
+        setPayrollReport(await res.json());
+      } else {
+        toast("Failed to load payroll report", "error");
+      }
+    } catch {
+      toast("Failed to load payroll report", "error");
+    }
+    setPayrollLoading(false);
+  }, [payrollFrom, payrollTo, toast]);
+
+  useEffect(() => {
+    if (activeTab === "payroll" && isReviewer && !payrollReport) {
+      fetchPayroll();
+    }
+  }, [activeTab, isReviewer, payrollReport, fetchPayroll]);
+
+  function exportPayrollCsv() {
+    if (!payrollReport) return;
+    downloadCsv(
+      `payroll-export-${payrollFrom}-to-${payrollTo}`,
+      toCsv(
+        payrollReport.rows.map((r) => ({
+          name: r.name,
+          email: r.email,
+          department: r.department ?? "",
+          countryCode: r.countryCode,
+          employmentType: r.employmentType,
+          leaveType: r.leaveType,
+          leaveCategory: r.leaveCategory,
+          isPaid: r.isPaid ? "Yes" : "No",
+          startDate: r.startDate.slice(0, 10),
+          endDate: r.endDate.slice(0, 10),
+          daysTaken: r.daysTaken,
+          dailyHolidayPayRate:
+            r.dailyHolidayPayRate === null
+              ? ""
+              : r.dailyHolidayPayRate.toFixed(2),
+          estimatedPay:
+            r.estimatedPay === null ? "" : r.estimatedPay.toFixed(2),
+          rateSource: r.rateSource,
+        })),
+        [
+          { key: "name", label: "Employee" },
+          { key: "email", label: "Email" },
+          { key: "department", label: "Department" },
+          { key: "countryCode", label: "Country" },
+          { key: "employmentType", label: "Employment type" },
+          { key: "leaveType", label: "Leave type" },
+          { key: "leaveCategory", label: "Category" },
+          { key: "isPaid", label: "Paid" },
+          { key: "startDate", label: "Start" },
+          { key: "endDate", label: "End" },
+          { key: "daysTaken", label: "Days taken" },
+          { key: "dailyHolidayPayRate", label: "Daily holiday pay rate (\u00a3)" },
+          { key: "estimatedPay", label: "Estimated pay (\u00a3)" },
+          { key: "rateSource", label: "Rate source" },
+        ]
+      )
+    );
+  }
 
   async function runRollover(dryRun: boolean) {
     setRolloverProcessing(true);
@@ -369,6 +482,7 @@ export default function ReportsPage() {
     { id: "holiday-usage", label: "Holiday usage" },
     { id: "ssp", label: "SSP liability" },
     { id: "parental", label: "Parental leave" },
+    { id: "payroll", label: "Payroll export" },
     { id: "year-end", label: "Year-end rollover", adminOnly: true },
   ];
   const tabs = allTabs.filter((t) => !t.adminOnly || isAdmin);
@@ -1259,6 +1373,174 @@ export default function ReportsPage() {
                 </>
               )}
             </div>
+          )}
+
+          {/* Payroll export */}
+          {activeTab === "payroll" && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <CardTitle>Payroll export</CardTitle>
+                    <CardDescription>
+                      Approved leave in a date range with the legally
+                      compliant daily holiday pay rate (52-week average of
+                      gross earnings, zero-pay weeks excluded) multiplied
+                      by days taken. Rows show{" "}
+                      <code>captured_at_booking</code> when the rate was
+                      stored on the leave request or{" "}
+                      <code>recalculated</code> when computed now for
+                      annual leave requests lacking a stored rate.
+                    </CardDescription>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={
+                      !payrollReport || payrollReport.rows.length === 0
+                    }
+                    onClick={exportPayrollCsv}
+                  >
+                    <Download className="mr-1.5 h-3.5 w-3.5" />
+                    Export CSV
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap items-end gap-3">
+                  <Input
+                    id="payrollFrom"
+                    label="From"
+                    type="date"
+                    value={payrollFrom}
+                    onChange={(e) => setPayrollFrom(e.target.value)}
+                    className="w-44"
+                  />
+                  <Input
+                    id="payrollTo"
+                    label="To"
+                    type="date"
+                    value={payrollTo}
+                    onChange={(e) => setPayrollTo(e.target.value)}
+                    className="w-44"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={fetchPayroll}
+                    disabled={payrollLoading}
+                  >
+                    {payrollLoading ? "Loading..." : "Refresh"}
+                  </Button>
+                </div>
+
+                {payrollReport && (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div className="rounded-md border border-gray-100 bg-gray-50 p-3">
+                      <p className="text-xs text-gray-500">Rows</p>
+                      <p className="text-lg font-semibold text-gray-900">
+                        {payrollReport.totals.rowCount}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-gray-100 bg-gray-50 p-3">
+                      <p className="text-xs text-gray-500">Total days</p>
+                      <p className="text-lg font-semibold text-gray-900">
+                        {payrollReport.totals.totalDays}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-gray-100 bg-gray-50 p-3">
+                      <p className="text-xs text-gray-500">
+                        Estimated pay (£)
+                      </p>
+                      <p className="text-lg font-semibold text-gray-900">
+                        {payrollReport.totals.totalEstimatedPay.toLocaleString(
+                          "en-GB",
+                          { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {payrollLoading ? (
+                  <TableSkeleton rows={5} />
+                ) : payrollReport && payrollReport.rows.length === 0 ? (
+                  <p className="py-4 text-center text-sm text-gray-400">
+                    No approved leave in this range.
+                  </p>
+                ) : payrollReport ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-100 text-left text-xs font-medium uppercase text-gray-500">
+                          <th className="pb-2 pr-4">Employee</th>
+                          <th className="pb-2 pr-4">Leave type</th>
+                          <th className="pb-2 pr-4">Dates</th>
+                          <th className="pb-2 pr-4 text-right">Days</th>
+                          <th className="pb-2 pr-4 text-right">Daily rate</th>
+                          <th className="pb-2 pr-4 text-right">Est. pay</th>
+                          <th className="pb-2">Source</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {payrollReport.rows.map((row) => (
+                          <tr
+                            key={row.leaveRequestId}
+                            className="border-b border-gray-50"
+                          >
+                            <td className="py-2 pr-4">
+                              <div className="font-medium text-gray-900">
+                                {row.name}
+                              </div>
+                              <div className="text-[11px] text-gray-500">
+                                {row.email}
+                              </div>
+                            </td>
+                            <td className="py-2 pr-4 text-gray-700">
+                              {row.leaveType}
+                              {!row.isPaid && (
+                                <span className="ml-1 text-[10px] text-gray-500">
+                                  (unpaid)
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2 pr-4 whitespace-nowrap text-xs text-gray-600">
+                              {new Date(row.startDate).toLocaleDateString(
+                                "en-GB"
+                              )}{" "}
+                              –{" "}
+                              {new Date(row.endDate).toLocaleDateString(
+                                "en-GB"
+                              )}
+                            </td>
+                            <td className="py-2 pr-4 text-right text-gray-700">
+                              {row.daysTaken}
+                            </td>
+                            <td className="py-2 pr-4 text-right text-gray-700">
+                              {row.dailyHolidayPayRate === null
+                                ? "—"
+                                : `£${row.dailyHolidayPayRate.toFixed(2)}`}
+                            </td>
+                            <td className="py-2 pr-4 text-right font-medium text-gray-900">
+                              {row.estimatedPay === null
+                                ? "—"
+                                : `£${row.estimatedPay.toFixed(2)}`}
+                            </td>
+                            <td className="py-2">
+                              <Badge
+                                variant="outline"
+                                className="font-mono text-[10px]"
+                              >
+                                {row.rateSource}
+                              </Badge>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
           )}
 
           {/* Year-end rollover (admin) */}

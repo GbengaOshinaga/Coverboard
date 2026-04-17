@@ -254,3 +254,36 @@ export function leaveRequestStatusEmail(data: {
     `),
   };
 }
+
+// ─── SSP 28-week cap reached (to admins) ────────────────────────────
+
+export function sspCapReachedEmail(data: {
+  employeeName: string;
+  sspEndDate: Date;
+  dashboardUrl: string;
+}): { subject: string; html: string } {
+  const endDateLabel = data.sspEndDate.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
+  return {
+    subject: `${data.employeeName} has reached the 28-week SSP limit`,
+    html: layout(`
+      <h1 style="margin:0 0 8px;font-size:20px;color:#111827;">SSP 28-week limit reached</h1>
+      <p style="margin:0 0 16px;font-size:14px;color:#6b7280;line-height:1.6;">
+        ${data.employeeName} has reached the 28-week Statutory Sick Pay limit.
+        SSP ends <strong style="color:#111827;">${endDateLabel}</strong>.
+      </p>
+      <div style="background-color:#fef3c7;border-radius:6px;padding:12px 16px;margin-bottom:16px;">
+        <p style="margin:0;font-size:13px;color:#92400e;line-height:1.6;">
+          The employee may be eligible for Employment Support Allowance (ESA).
+          Issue form SSP1 within 7 days of SSP ending so the employee can
+          claim ESA from the DWP.
+        </p>
+      </div>
+      ${button("Review in Coverboard", data.dashboardUrl)}
+    `),
+  };
+}

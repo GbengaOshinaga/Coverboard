@@ -4,6 +4,7 @@ import {
   teamInviteEmail,
   leaveRequestSubmittedEmail,
   leaveRequestStatusEmail,
+  sspCapReachedEmail,
 } from "@/lib/email-templates";
 import { countWeekdays } from "@/lib/utils";
 
@@ -91,4 +92,32 @@ export async function emailRequestStatusChange(data: {
   });
 
   await sendEmail({ to: data.requesterEmail, subject, html });
+}
+
+// ─── SSP 28-week cap reached (notify admins) ─────────────────────────
+
+export async function emailSspCapReached(data: {
+  employeeName: string;
+  sspEndDate: Date;
+  organizationId: string;
+}) {
+  const admins: EmailRecipient[] = await prisma.user.findMany({
+    where: {
+      organizationId: data.organizationId,
+      role: { in: ["ADMIN", "MANAGER"] },
+    },
+    select: { email: true },
+  });
+
+  if (admins.length === 0) return;
+
+  const { subject, html } = sspCapReachedEmail({
+    employeeName: data.employeeName,
+    sspEndDate: data.sspEndDate,
+    dashboardUrl: `${BASE_URL}/reports?tab=uk`,
+  });
+
+  await Promise.all(
+    admins.map((m) => sendEmail({ to: m.email, subject, html }))
+  );
 }

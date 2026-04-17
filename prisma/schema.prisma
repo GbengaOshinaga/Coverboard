@@ -92,6 +92,8 @@ model User {
   employmentType EmploymentType @default(FULL_TIME)
   daysWorkedPerWeek Float @default(5)
   fteRatio       Float @default(1)
+  qualifyingDaysPerWeek Int @default(5)
+  averageWeeklyEarnings Decimal? @db.Decimal(8, 2)
   countryCode    String     @default("NG")
   rightToWorkVerified Boolean?
   department     String?
@@ -110,6 +112,7 @@ model User {
   jiraConnections     JiraIntegration[]    @relation("JiraConnectedBy")
   weeklyHours         UserWeeklyHours[]
   carryOverBalances   LeaveCarryOverBalance[]
+  weeklyEarnings      WeeklyEarning[]
 }
 
 model LeaveType {
@@ -161,6 +164,14 @@ model LeaveRequest {
   reviewedAt   DateTime?
   evidenceProvided Boolean @default(false)
   kitDaysUsed Int @default(0)
+  dailyHolidayPayRate Decimal? @db.Decimal(10, 2)
+  sspDaysPaid Int @default(0)
+  sspLimitReached Boolean @default(false)
+  smpAverageWeeklyEarnings Decimal? @db.Decimal(8, 2)
+  smpPhase1EndDate DateTime? @db.Date
+  smpPhase2EndDate DateTime? @db.Date
+  smpPhase1WeeklyRate Decimal? @db.Decimal(8, 2)
+  smpPhase2WeeklyRate Decimal? @db.Decimal(8, 2)
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
@@ -268,6 +279,21 @@ model LeaveCarryOverBalance {
   leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
 
   @@unique([userId, leaveTypeId, leaveYear])
+}
+
+model WeeklyEarning {
+  id             String   @id @default(cuid())
+  userId         String
+  weekStartDate  DateTime @db.Date
+  grossEarnings  Decimal  @db.Decimal(10, 2)
+  hoursWorked    Decimal  @db.Decimal(6, 2)
+  isZeroPayWeek  Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, weekStartDate])
+  @@index([userId, weekStartDate])
 }
 
 model AuditLog {

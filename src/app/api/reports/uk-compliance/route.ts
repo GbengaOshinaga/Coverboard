@@ -2,7 +2,18 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { calculateBradfordFactor, calculateEstimatedSspCost } from "@/lib/uk-compliance";
+import {
+  SSP_MAX_WEEKS,
+  UK_LEL_WEEKLY,
+  calculateBradfordFactor,
+  calculateEstimatedSspCost,
+  calculateSspPayableDays,
+  calculateSspDailyRate,
+} from "@/lib/uk-compliance";
+import {
+  getCurrentSMPPhase,
+  isMaternityLeaveType,
+} from "@/lib/smpCalculator";
 import { countWeekdays } from "@/lib/utils";
 
 function absenceSpells(requests: { startDate: Date; endDate: Date }[]): number {
@@ -50,6 +61,8 @@ export async function GET(request: Request) {
       name: true,
       department: true,
       employmentType: true,
+      qualifyingDaysPerWeek: true,
+      averageWeeklyEarnings: true,
       leaveRequests: {
         where: {
           status: "APPROVED",
@@ -98,18 +111,42 @@ export async function GET(request: Request) {
     };
   });
 
-  const sspCurrent = users.flatMap((user) =>
-    user.leaveRequests
+  const sspCurrent = users.flatMap((user) => {
+    const qDays = user.qualifyingDaysPerWeek ?? 5;
+    const dailyRate = calculateSspDailyRate(qDays);
+    const maxDays = SSP_MAX_WEEKS * qDays;
+    return user.leaveRequests
       .filter((r) => r.leaveType.name.includes("SSP") && r.endDate >= new Date())
-      .map((r) => ({
-        userId: user.id,
-        name: user.name,
-        startDate: r.startDate,
-        endDate: r.endDate,
-        daysElapsed: countWeekdays(r.startDate, new Date()),
-        estimatedCostToDate: calculateEstimatedSspCost(r.startDate, new Date()),
-      }))
-  );
+      .map((r) => {
+        const daysElapsed = countWeekdays(r.startDate, new Date());
+        const payableToDate = calculateSspPayableDays(r.startDate, new Date());
+        return {
+          userId: user.id,
+          name: user.name,
+          startDate: r.startDate,
+          endDate: r.endDate,
+          qualifyingDaysPerWeek: qDays,
+          dailyRate,
+          daysElapsed,
+          payableDaysToDate: payableToDate,
+          estimatedCostToDate: calculateEstimatedSspCost(
+            r.startDate,
+            new Date(),
+            undefined,
+            qDays
+          ),
+          sspDaysPaid: r.sspDaysPaid ?? 0,
+          sspLimitReached: r.sspLimitReached ?? false,
+          maxDays,
+          remainingDays: Math.max(0, maxDays - (r.sspDaysPaid ?? 0)),
+          belowLel:
+            user.averageWeeklyEarnings === null ||
+            user.averageWeeklyEarnings === undefined
+              ? null
+              : Number(user.averageWeeklyEarnings) < UK_LEL_WEEKLY,
+        };
+      });
+  });
 
   const today = new Date();
   const parental = users.flatMap((user) =>
@@ -125,6 +162,23 @@ export async function GET(request: Request) {
       )
       .map((r) => {
         const cap = r.leaveType.name === "Shared Parental Leave (SPL)" ? 20 : 10;
+        const isMaternity = isMaternityLeaveType(r.leaveType.name);
+        const smp = isMaternity
+          ? getCurrentSMPPhase({
+              startDate: r.startDate,
+              phase1EndDate: r.smpPhase1EndDate,
+              phase2EndDate: r.smpPhase2EndDate,
+              phase1Weekly:
+                r.smpPhase1WeeklyRate === null
+                  ? null
+                  : Number(r.smpPhase1WeeklyRate),
+              phase2Weekly:
+                r.smpPhase2WeeklyRate === null
+                  ? null
+                  : Number(r.smpPhase2WeeklyRate),
+              referenceDate: today,
+            })
+          : null;
         return {
           requestId: r.id,
           userId: user.id,
@@ -135,6 +189,27 @@ export async function GET(request: Request) {
           kitDaysUsed: r.kitDaysUsed,
           kitDaysCap: cap,
           kitDaysRemaining: Math.max(0, cap - r.kitDaysUsed),
+          smp: smp
+            ? {
+                phase: smp.phase,
+                label: smp.label,
+                weeklyRate: smp.weeklyRate,
+                phase1EndDate: smp.phase1EndDate,
+                phase2EndDate: smp.phase2EndDate,
+                averageWeeklyEarnings:
+                  r.smpAverageWeeklyEarnings === null
+                    ? null
+                    : Number(r.smpAverageWeeklyEarnings),
+                phase1WeeklyRate:
+                  r.smpPhase1WeeklyRate === null
+                    ? null
+                    : Number(r.smpPhase1WeeklyRate),
+                phase2WeeklyRate:
+                  r.smpPhase2WeeklyRate === null
+                    ? null
+                    : Number(r.smpPhase2WeeklyRate),
+              }
+            : null,
         };
       })
   );

@@ -5,6 +5,12 @@ import { prisma } from "@/lib/prisma";
 import { notifyRequestStatusChange } from "@/lib/slack-notifications";
 import { emailRequestStatusChange } from "@/lib/email-notifications";
 import { recordAudit, requestAuditContext, type AuditAction } from "@/lib/audit";
+import {
+  calculateSMPPhaseDates,
+  calculateSMPPhaseRates,
+  getAweForUser,
+  isMaternityLeaveType,
+} from "@/lib/smpCalculator";
 import { z } from "zod";
 
 const updateSchema = z.object({
@@ -44,7 +50,7 @@ export async function PATCH(
 
     const leaveRequest = await prisma.leaveRequest.findUnique({
       where: { id },
-      include: { user: true },
+      include: { user: true, leaveType: { select: { name: true } } },
     });
 
     if (!leaveRequest) {
@@ -89,6 +95,34 @@ export async function PATCH(
     }
     if (kitDaysUsed !== undefined) updateData.kitDaysUsed = kitDaysUsed;
     if (evidenceProvided !== undefined) updateData.evidenceProvided = evidenceProvided;
+
+    // Back-fill SMP phase data for maternity requests created before the
+    // SMP phase-tracking feature landed. Runs on any approval/rejection/
+    // admin edit as a safety-net; no-ops when fields are already set.
+    if (
+      isMaternityLeaveType(leaveRequest.leaveType.name) &&
+      leaveRequest.smpPhase1EndDate === null
+    ) {
+      const phases = calculateSMPPhaseDates(leaveRequest.startDate);
+      updateData.smpPhase1EndDate = phases.phase1EndDate;
+      updateData.smpPhase2EndDate = phases.phase2EndDate;
+      if (leaveRequest.smpAverageWeeklyEarnings === null) {
+        try {
+          const awe = await getAweForUser(
+            leaveRequest.userId,
+            leaveRequest.startDate
+          );
+          if (awe !== null) {
+            const rates = calculateSMPPhaseRates(awe);
+            updateData.smpAverageWeeklyEarnings = awe;
+            updateData.smpPhase1WeeklyRate = rates.phase1Weekly;
+            updateData.smpPhase2WeeklyRate = rates.phase2Weekly;
+          }
+        } catch (err) {
+          console.error("SMP backfill failed:", err);
+        }
+      }
+    }
 
     const updated = await prisma.leaveRequest.update({
       where: { id },

@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
-import { Plus, MessageSquare, CheckCircle, XCircle, User, ChevronRight, SquareKanban, ExternalLink, Unlink, Pencil, Trash2 } from "lucide-react";
+import { Plus, MessageSquare, CheckCircle, XCircle, User, ChevronRight, SquareKanban, ExternalLink, Unlink, Pencil, Trash2, AlertTriangle, Banknote } from "lucide-react";
 import { Select } from "@/components/ui/select";
 
 type LeaveType = {
@@ -56,6 +56,19 @@ type LeavePolicy = {
   leaveType: { id: string; name: string; color: string };
 };
 
+type EarningsCoverage = {
+  id: string;
+  name: string;
+  email: string;
+  countryCode: string;
+  department: string | null;
+  employmentType: string;
+  totalWeeks: number;
+  paidWeeks: number;
+  lastWeekStartDate: string | null;
+  hasAnyHistory: boolean;
+};
+
 type UKComplianceReport = {
   holidayUsage: Array<{ name: string; taken: number; department: string | null; contractType: string }>;
   absenceTrigger: { threshold: number; rows: Array<{ name: string; score: number; flagged: boolean }> };
@@ -85,6 +98,8 @@ export default function SettingsPage() {
   const [editDays, setEditDays] = useState("20");
   const [editIsPaid, setEditIsPaid] = useState(true);
   const [editSaving, setEditSaving] = useState(false);
+
+  const [earningsCoverage, setEarningsCoverage] = useState<EarningsCoverage[] | null>(null);
 
   const [policies, setPolicies] = useState<LeavePolicy[]>([]);
   const [showAddPolicy, setShowAddPolicy] = useState(false);
@@ -155,6 +170,21 @@ export default function SettingsPage() {
     }
     fetchUkReport();
   }, []);
+
+  useEffect(() => {
+    async function fetchCoverage() {
+      try {
+        const res = await fetch("/api/weekly-earnings/coverage");
+        if (res.ok) {
+          const data = await res.json();
+          setEarningsCoverage(data.employees);
+        }
+      } catch {
+        // ignore
+      }
+    }
+    if (userRole === "ADMIN" || userRole === "MANAGER") fetchCoverage();
+  }, [userRole]);
 
   async function saveOrgSettings(next: Partial<OrgSettings>) {
     if (!orgSettings) return;
@@ -519,6 +549,131 @@ export default function SettingsPage() {
             </p>
             <p>Employees currently on SSP: <strong>{ukReport.sspLiability.length}</strong></p>
             <p>Active parental leave cases: <strong>{ukReport.parentalTracker.length}</strong></p>
+          </CardContent>
+        </Card>
+      )}
+
+      {earningsCoverage && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Banknote className="h-5 w-5 text-brand-500" />
+                  Holiday pay earnings history
+                </CardTitle>
+                <CardDescription>
+                  UK law requires holiday pay to reflect normal remuneration
+                  (basic + regular overtime + commission + shift allowances)
+                  averaged over the last 52 paid weeks. Employees without
+                  earnings history will fall back to basic salary only.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {earningsCoverage.length === 0 ? (
+              <p className="py-4 text-center text-sm text-gray-400">
+                No employees in this organization yet.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {earningsCoverage
+                  .filter((e) => !e.hasAnyHistory)
+                  .map((emp) => (
+                    <div
+                      key={emp.id}
+                      className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm"
+                    >
+                      <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
+                      <div className="flex-1">
+                        <p className="text-amber-900">
+                          Holiday pay for{" "}
+                          <strong>{emp.name}</strong> is based on basic
+                          salary only — add earnings history for legally
+                          compliant holiday pay calculation.
+                        </p>
+                        {(emp.department || emp.countryCode) && (
+                          <p className="mt-0.5 text-xs text-amber-700">
+                            {[emp.department, emp.countryCode]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+
+                {earningsCoverage.some((e) => !e.hasAnyHistory) && (
+                  <p className="text-xs text-gray-500">
+                    Earnings rows are written via{" "}
+                    <code className="rounded bg-gray-100 px-1 py-0.5">
+                      POST /api/weekly-earnings
+                    </code>{" "}
+                    with <code>userId</code>, <code>weekStartDate</code>,{" "}
+                    <code>grossEarnings</code>, <code>hoursWorked</code>{" "}
+                    (and <code>isZeroPayWeek</code> for unpaid weeks).
+                  </p>
+                )}
+
+                {earningsCoverage.every((e) => e.hasAnyHistory) && (
+                  <p className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                    All employees have at least some earnings history on
+                    file. Keep it up to date weekly for accurate holiday
+                    pay calculations.
+                  </p>
+                )}
+
+                {earningsCoverage.some((e) => e.hasAnyHistory) && (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs font-medium text-gray-600 hover:text-gray-900">
+                      Coverage per employee (
+                      {earningsCoverage.filter((e) => e.hasAnyHistory).length}{" "}
+                      of {earningsCoverage.length} with history)
+                    </summary>
+                    <div className="mt-2 overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-gray-100 text-left text-gray-500">
+                            <th className="py-1.5 pr-4">Employee</th>
+                            <th className="py-1.5 pr-4">Paid weeks</th>
+                            <th className="py-1.5 pr-4">Total weeks</th>
+                            <th className="py-1.5">Last week on file</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {earningsCoverage.map((e) => (
+                            <tr
+                              key={e.id}
+                              className="border-b border-gray-50"
+                            >
+                              <td className="py-1.5 pr-4 text-gray-900">
+                                {e.name}
+                              </td>
+                              <td
+                                className={`py-1.5 pr-4 ${e.paidWeeks >= 52 ? "text-emerald-700" : e.paidWeeks > 0 ? "text-amber-700" : "text-red-700"}`}
+                              >
+                                {e.paidWeeks}
+                              </td>
+                              <td className="py-1.5 pr-4 text-gray-600">
+                                {e.totalWeeks}
+                              </td>
+                              <td className="py-1.5 text-gray-600">
+                                {e.lastWeekStartDate
+                                  ? new Date(
+                                      e.lastWeekStartDate
+                                    ).toLocaleDateString("en-GB")
+                                  : "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </details>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

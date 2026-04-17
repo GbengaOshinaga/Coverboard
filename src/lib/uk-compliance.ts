@@ -19,8 +19,14 @@ export const BankHolidayRegion = {
 export type BankHolidayRegion =
   (typeof BankHolidayRegion)[keyof typeof BankHolidayRegion];
 
+// Statutory Sick Pay weekly rate for 2024/25 (as of 6 April 2024).
+// Update each April via HMRC guidance (https://www.gov.uk/employers-sick-pay).
 const DEFAULT_SSP_WEEKLY_RATE = 116.75;
 const DEFAULT_SMP_WEEKLY_RATE = 184.03;
+// Lower Earnings Limit for Class 1 NICs (2024/25 tax year). Employees below
+// this weekly average earnings threshold are not entitled to SSP.
+// Update each April via HMRC guidance.
+const DEFAULT_LEL_WEEKLY = 123;
 
 export const UK_SSP_WEEKLY_RATE = Number(
   process.env.SSP_WEEKLY_RATE ?? DEFAULT_SSP_WEEKLY_RATE
@@ -28,6 +34,24 @@ export const UK_SSP_WEEKLY_RATE = Number(
 export const UK_SMP_WEEKLY_RATE = Number(
   process.env.SMP_WEEKLY_RATE ?? DEFAULT_SMP_WEEKLY_RATE
 );
+/**
+ * Lower Earnings Limit (LEL) — weekly earnings threshold below which SSP
+ * is not payable. Update each April via HMRC guidance.
+ */
+export const UK_LEL_WEEKLY = Number(
+  process.env.LEL_WEEKLY ?? DEFAULT_LEL_WEEKLY
+);
+
+/**
+ * Maximum cumulative SSP payable per period of incapacity for work (PIW).
+ * Statute caps SSP at 28 weeks — at 5 qualifying days per week that is 140
+ * days, but the 28-week limit is a calendar limit, not a day limit, so we
+ * track both. The day-count field (`sspDaysPaid`) is compared against the
+ * employee's own `qualifyingDaysPerWeek × 28` derived limit.
+ */
+export const SSP_MAX_WEEKS = 28;
+/** Legacy constant kept for compatibility with callers that hard-code 140. */
+export const SSP_MAX_DAYS_AT_5_DAY_WEEK = SSP_MAX_WEEKS * 5;
 
 export type UKContractInput = {
   employmentType: EmploymentType;
@@ -57,15 +81,128 @@ export function calculateBradfordFactor(absenceSpells: number, absenceDays: numb
   return absenceSpells * absenceSpells * absenceDays;
 }
 
+/**
+ * Payable SSP days = consecutive weekdays of sickness less the 3 waiting
+ * days. Waiting-day logic is unchanged — do not touch.
+ */
 export function calculateSspPayableDays(startDate: Date, endDate: Date): number {
   const consecutiveDays = countWeekdays(startDate, endDate);
   if (consecutiveDays <= 3) return 0;
   return consecutiveDays - 3;
 }
 
-export function calculateEstimatedSspCost(startDate: Date, endDate: Date, weeklyRate = UK_SSP_WEEKLY_RATE): number {
+/**
+ * SSP is only payable on qualifying days (typically the employee's usual
+ * working days). Dividing the weekly rate by `qualifyingDaysPerWeek`
+ * produces the correct daily figure; dividing by 7 under-pays employees
+ * who don't work weekends and exposes the employer to HMRC penalties.
+ *
+ * @param qualifyingDaysPerWeek Working days the employee is contracted for
+ *        (1–7). Defaults to 5. Missing/invalid values fall back to 5.
+ */
+export function calculateSspDailyRate(
+  qualifyingDaysPerWeek: number | null | undefined,
+  weeklyRate: number = UK_SSP_WEEKLY_RATE
+): number {
+  const qDays = Number(qualifyingDaysPerWeek);
+  const safeQDays =
+    Number.isFinite(qDays) && qDays >= 1 && qDays <= 7 ? qDays : 5;
+  return Number((weeklyRate / safeQDays).toFixed(2));
+}
+
+export type SspEligibilityInput = {
+  /** Employee's average weekly earnings over the relevant 8-week period. */
+  averageWeeklyEarnings: number | null | undefined;
+  /** Cumulative SSP days already paid in this PIW. */
+  sspDaysPaidInPeriod: number;
+  /** Working days per week used for the daily rate and the day-cap. */
+  qualifyingDaysPerWeek: number | null | undefined;
+  /** Weekly SSP rate (defaults to the current HMRC rate from env). */
+  weeklyRate?: number;
+  /** LEL override for tests (defaults to UK_LEL_WEEKLY). */
+  lelWeekly?: number;
+};
+
+export type SspEligibilityResult =
+  | {
+      eligible: true;
+      dailyRate: number;
+      remainingDays: number;
+      maxDays: number;
+      qualifyingDaysPerWeek: number;
+    }
+  | {
+      eligible: false;
+      reason:
+        | "Below Lower Earnings Limit"
+        | "SSP 28-week limit reached"
+        | "Missing average weekly earnings";
+      dailyRate?: number;
+    };
+
+/**
+ * Gate an SSP calculation on the two statutory eligibility checks:
+ *
+ *   1. Average weekly earnings must be **at least** the Lower Earnings
+ *      Limit (≥ £123/wk for 2024/25). Below the LEL → not eligible.
+ *   2. Cumulative SSP paid in this PIW must be under the 28-week cap
+ *      (28 × qualifyingDaysPerWeek; 140 days at a 5-day week).
+ *
+ * Callers should resolve `averageWeeklyEarnings` from HR records or the
+ * 8-week running total of `WeeklyEarning` rows.
+ */
+export function calculateSspEntitlement(
+  input: SspEligibilityInput
+): SspEligibilityResult {
+  const lel = input.lelWeekly ?? UK_LEL_WEEKLY;
+  const weeklyRate = input.weeklyRate ?? UK_SSP_WEEKLY_RATE;
+  const qDaysRaw = Number(input.qualifyingDaysPerWeek);
+  const qualifyingDaysPerWeek =
+    Number.isFinite(qDaysRaw) && qDaysRaw >= 1 && qDaysRaw <= 7
+      ? qDaysRaw
+      : 5;
+  const maxDays = SSP_MAX_WEEKS * qualifyingDaysPerWeek;
+
+  if (
+    input.averageWeeklyEarnings === null ||
+    input.averageWeeklyEarnings === undefined
+  ) {
+    return { eligible: false, reason: "Missing average weekly earnings" };
+  }
+
+  const avg = Number(input.averageWeeklyEarnings);
+  if (avg < lel) {
+    return { eligible: false, reason: "Below Lower Earnings Limit" };
+  }
+
+  if (input.sspDaysPaidInPeriod >= maxDays) {
+    return { eligible: false, reason: "SSP 28-week limit reached" };
+  }
+
+  return {
+    eligible: true,
+    dailyRate: calculateSspDailyRate(qualifyingDaysPerWeek, weeklyRate),
+    remainingDays: maxDays - input.sspDaysPaidInPeriod,
+    maxDays,
+    qualifyingDaysPerWeek,
+  };
+}
+
+/**
+ * Legacy helper kept so existing call sites compile. The returned figure
+ * assumes a 5-day working week — callers that have access to employee
+ * metadata should prefer {@link calculateSspEntitlement} followed by
+ * `dailyRate × payableDays`.
+ */
+export function calculateEstimatedSspCost(
+  startDate: Date,
+  endDate: Date,
+  weeklyRate = UK_SSP_WEEKLY_RATE,
+  qualifyingDaysPerWeek = 5
+): number {
   const payableDays = calculateSspPayableDays(startDate, endDate);
-  return Number(((weeklyRate / 7) * payableDays).toFixed(2));
+  const daily = calculateSspDailyRate(qualifyingDaysPerWeek, weeklyRate);
+  return Number((daily * payableDays).toFixed(2));
 }
 
 type BankHolidayEntry = {

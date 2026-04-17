@@ -5,9 +5,24 @@ import { prisma } from "@/lib/prisma";
 import { getUserLeaveBalance } from "@/lib/leave-balances";
 import { countWeekdays } from "@/lib/utils";
 import { notifyNewRequest } from "@/lib/slack-notifications";
-import { emailNewRequest } from "@/lib/email-notifications";
-import { calculateSspPayableDays, calculateEstimatedSspCost } from "@/lib/uk-compliance";
+import { emailNewRequest, emailSspCapReached } from "@/lib/email-notifications";
+import {
+  SSP_MAX_WEEKS,
+  calculateSspPayableDays,
+  calculateSspEntitlement,
+  UK_SSP_WEEKLY_RATE,
+} from "@/lib/uk-compliance";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
+import {
+  getDailyHolidayPayRateForUser,
+  isAnnualLeaveType,
+} from "@/lib/holidayPay";
+import {
+  calculateSMPPhaseDates,
+  calculateSMPPhaseRates,
+  getAweForUser,
+  isMaternityLeaveType,
+} from "@/lib/smpCalculator";
 import { z } from "zod";
 
 export async function GET(request: Request) {
@@ -144,6 +159,157 @@ export async function POST(request: Request) {
       // Don't block request creation if balance check fails
     }
 
+    // For annual-leave requests, capture the 52-week average daily rate so
+    // payroll has a legally compliant figure at the moment the request was
+    // booked. Never block the request if this calculation fails.
+    let dailyHolidayPayRate: number | null = null;
+    if (isAnnualLeaveType(leaveTypeConfig.name)) {
+      try {
+        dailyHolidayPayRate = await getDailyHolidayPayRateForUser(userId);
+      } catch (err) {
+        console.error("Holiday pay rate calculation failed:", err);
+      }
+    }
+
+    // ── SMP phase tracking ─────────────────────────────────────────────
+    // For maternity leave, compute Average Weekly Earnings from the last
+    // 8 paid weeks and derive the two phase rates:
+    //   • Phase 1 (weeks 1–6):  90% AWE
+    //   • Phase 2 (weeks 7–39): min(flat SMP rate, 90% AWE)
+    // Failure is non-blocking — the leave request still gets created so
+    // HR can record the absence, and payroll is flagged via null rates.
+    let smpAverageWeeklyEarnings: number | null = null;
+    let smpPhase1WeeklyRate: number | null = null;
+    let smpPhase2WeeklyRate: number | null = null;
+    let smpPhase1EndDate: Date | null = null;
+    let smpPhase2EndDate: Date | null = null;
+    if (isMaternityLeaveType(leaveTypeConfig.name)) {
+      try {
+        smpAverageWeeklyEarnings = await getAweForUser(userId, startDate);
+        if (smpAverageWeeklyEarnings !== null) {
+          const rates = calculateSMPPhaseRates(smpAverageWeeklyEarnings);
+          smpPhase1WeeklyRate = rates.phase1Weekly;
+          smpPhase2WeeklyRate = rates.phase2Weekly;
+        }
+        const phases = calculateSMPPhaseDates(startDate);
+        smpPhase1EndDate = phases.phase1EndDate;
+        smpPhase2EndDate = phases.phase2EndDate;
+      } catch (err) {
+        console.error("SMP phase calculation failed:", err);
+      }
+    }
+
+    // ── SSP eligibility & 28-week cap ──────────────────────────────────
+    // Checked up-front so that (a) `sspDaysPaid` / `sspLimitReached` are
+    // persisted on the record and (b) the API response surfaces the
+    // reason when SSP is not payable. We never block the underlying
+    // leave request — the absence is still a fact — but the monetary
+    // side is gated on statutory eligibility.
+    const isSspLeave = leaveTypeConfig.name.includes("SSP");
+    let sspInfo:
+      | {
+          eligible: boolean;
+          reason?: string;
+          payableDays: number;
+          sspDaysPaidThisRequest: number;
+          cumulativeSspDaysPaid: number;
+          dailyRate: number;
+          estimatedCost: number;
+          remainingDaysAfter: number;
+          limitReached: boolean;
+        }
+      | null = null;
+    let sspDaysPaid = 0;
+    let sspLimitReached = false;
+    let notifyCapReached = false;
+    let sspEmployeeSnapshot:
+      | { name: string; organizationId: string }
+      | null = null;
+
+    if (isSspLeave) {
+      const employee = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          name: true,
+          organizationId: true,
+          qualifyingDaysPerWeek: true,
+          averageWeeklyEarnings: true,
+        },
+      });
+      if (employee) {
+        sspEmployeeSnapshot = {
+          name: employee.name,
+          organizationId: employee.organizationId,
+        };
+        // Linked PIW: any SSP leave within the last 56 calendar days
+        // counts as the same period of incapacity for work.
+        const piwFloor = new Date(startDate);
+        piwFloor.setDate(piwFloor.getDate() - 56);
+        const priorSsp = await prisma.leaveRequest.findMany({
+          where: {
+            userId,
+            leaveType: { name: { contains: "SSP" } },
+            endDate: { gte: piwFloor, lt: startDate },
+          },
+          select: { sspDaysPaid: true },
+        });
+        const cumulativePrior = priorSsp.reduce(
+          (sum, r) => sum + (r.sspDaysPaid ?? 0),
+          0
+        );
+
+        const entitlement = calculateSspEntitlement({
+          averageWeeklyEarnings:
+            employee.averageWeeklyEarnings === null
+              ? null
+              : Number(employee.averageWeeklyEarnings),
+          sspDaysPaidInPeriod: cumulativePrior,
+          qualifyingDaysPerWeek: employee.qualifyingDaysPerWeek,
+        });
+
+        if (!entitlement.eligible) {
+          sspInfo = {
+            eligible: false,
+            reason: entitlement.reason,
+            payableDays: 0,
+            sspDaysPaidThisRequest: 0,
+            cumulativeSspDaysPaid: cumulativePrior,
+            dailyRate: 0,
+            estimatedCost: 0,
+            remainingDaysAfter: Math.max(
+              0,
+              SSP_MAX_WEEKS *
+                Number(employee.qualifyingDaysPerWeek ?? 5) -
+                cumulativePrior
+            ),
+            limitReached: entitlement.reason === "SSP 28-week limit reached",
+          };
+        } else {
+          const requestedPayable = calculateSspPayableDays(startDate, endDate);
+          const capped = Math.min(requestedPayable, entitlement.remainingDays);
+          sspDaysPaid = capped;
+          const cumulativeAfter = cumulativePrior + capped;
+          sspLimitReached = cumulativeAfter >= entitlement.maxDays;
+          notifyCapReached = sspLimitReached && cumulativePrior < entitlement.maxDays;
+          sspInfo = {
+            eligible: true,
+            payableDays: capped,
+            sspDaysPaidThisRequest: capped,
+            cumulativeSspDaysPaid: cumulativeAfter,
+            dailyRate: entitlement.dailyRate,
+            estimatedCost: Number(
+              (entitlement.dailyRate * capped).toFixed(2)
+            ),
+            remainingDaysAfter: Math.max(
+              0,
+              entitlement.maxDays - cumulativeAfter
+            ),
+            limitReached: sspLimitReached,
+          };
+        }
+      }
+    }
+
     const leaveRequest = await prisma.leaveRequest.create({
       data: {
         startDate,
@@ -153,6 +319,14 @@ export async function POST(request: Request) {
         userId,
         evidenceProvided: evidenceProvided ?? false,
         kitDaysUsed: kitDaysUsed ?? 0,
+        dailyHolidayPayRate: dailyHolidayPayRate ?? undefined,
+        sspDaysPaid,
+        sspLimitReached,
+        smpAverageWeeklyEarnings: smpAverageWeeklyEarnings ?? undefined,
+        smpPhase1EndDate: smpPhase1EndDate ?? undefined,
+        smpPhase2EndDate: smpPhase2EndDate ?? undefined,
+        smpPhase1WeeklyRate: smpPhase1WeeklyRate ?? undefined,
+        smpPhase2WeeklyRate: smpPhase2WeeklyRate ?? undefined,
       },
       include: {
         user: {
@@ -212,13 +386,33 @@ export async function POST(request: Request) {
       context: requestAuditContext(request),
     });
 
-    let sspInfo: { payableDays: number; estimatedCost: number } | null = null;
-    if (leaveRequest.leaveType.name.includes("SSP")) {
-      const payableDays = calculateSspPayableDays(startDate, endDate);
-      sspInfo = {
-        payableDays,
-        estimatedCost: calculateEstimatedSspCost(startDate, endDate),
-      };
+    if (notifyCapReached && sspEmployeeSnapshot) {
+      const sspEndDate = new Date(endDate);
+      emailSspCapReached({
+        employeeName: sspEmployeeSnapshot.name,
+        sspEndDate,
+        organizationId: sspEmployeeSnapshot.organizationId,
+      }).catch((err) =>
+        console.error("SSP cap reached email error:", err)
+      );
+      recordAudit({
+        organizationId: sspEmployeeSnapshot.organizationId,
+        action: "leave_request.ssp_cap_reached",
+        resource: "leave_request",
+        resourceId: leaveRequest.id,
+        actor: {
+          id: userId,
+          email: leaveRequest.user.email,
+          role: (session.user as Record<string, unknown>).role as string,
+        },
+        metadata: {
+          employee: sspEmployeeSnapshot.name,
+          sspEndDate,
+          weeklyRate: UK_SSP_WEEKLY_RATE,
+          cumulativeDays: sspInfo?.cumulativeSspDaysPaid ?? null,
+        },
+        context: requestAuditContext(request),
+      });
     }
 
     return NextResponse.json({ ...leaveRequest, balanceWarning, sspInfo }, { status: 201 });

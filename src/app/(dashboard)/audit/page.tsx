@@ -34,6 +34,11 @@ type AuditLog = {
   createdAt: string;
 };
 
+type AuditLogsApiResponse = {
+  logs: AuditLog[];
+  nextCursor: string | null;
+};
+
 const RESOURCES = [
   "leave_request",
   "team_member",
@@ -142,9 +147,11 @@ export default function AuditPage() {
     let cursor: string | null = null;
     try {
       do {
-        const res = await fetch(`/api/audit-logs?${buildQuery(cursor ?? undefined)}`);
+        const res: Response = await fetch(
+          `/api/audit-logs?${buildQuery(cursor ?? undefined)}`
+        );
         if (!res.ok) break;
-        const data = await res.json();
+        const data: AuditLogsApiResponse = await res.json();
         all.push(...data.logs);
         cursor = data.nextCursor;
       } while (cursor && all.length < 50000);
