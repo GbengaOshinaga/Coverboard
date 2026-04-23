@@ -53,21 +53,21 @@ test("Phase 1 is always 90% of AWE", () => {
 });
 
 test("Phase 2 uses 90% AWE when that is LOWER than the flat rate (low earner)", () => {
-  // 90% of £200 = £180 < flat £184.03 → phase 2 is £180
+  // 90% of £200 = £180 < flat £194.32 → phase 2 is £180
   const { phase1Weekly, phase2Weekly } = calculateSMPPhaseRates(200);
   assert.equal(phase1Weekly, 180);
   assert.equal(phase2Weekly, 180);
 });
 
 test("Phase 2 uses the flat rate when that is LOWER than 90% AWE (higher earner)", () => {
-  // 90% of £500 = £450 > flat £184.03 → phase 2 capped at £184.03
+  // 90% of £500 = £450 > flat £194.32 → phase 2 capped at £194.32
   const { phase1Weekly, phase2Weekly } = calculateSMPPhaseRates(500);
   assert.equal(phase1Weekly, 450);
-  assert.equal(phase2Weekly, 184.03);
+  assert.equal(phase2Weekly, 194.32);
 });
 
 test("Phase 2 equals flat rate when 90% AWE exactly matches it", () => {
-  const awe = SMP_FLAT_RATE / 0.9; // 204.47 approx
+  const awe = SMP_FLAT_RATE / 0.9; // ~215.91 for 2026/27 default flat rate
   const { phase2Weekly } = calculateSMPPhaseRates(awe);
   // Rounding of toFixed(2) can drift ±0.01 — accept both.
   assert.ok(Math.abs(phase2Weekly - SMP_FLAT_RATE) <= 0.01);
@@ -110,7 +110,7 @@ test("getCurrentSMPPhase returns phase_1 in the first 6 weeks", () => {
   const result = getCurrentSMPPhase({
     startDate: start,
     phase1Weekly: 450,
-    phase2Weekly: 184.03,
+    phase2Weekly: 194.32,
     referenceDate: new Date("2026-06-15T00:00:00.000Z"),
   });
   assert.equal(result.phase, "phase_1");
@@ -123,12 +123,12 @@ test("getCurrentSMPPhase returns phase_2 between weeks 7 and 39", () => {
   const result = getCurrentSMPPhase({
     startDate: start,
     phase1Weekly: 450,
-    phase2Weekly: 184.03,
+    phase2Weekly: 194.32,
     referenceDate: new Date("2026-10-01T00:00:00.000Z"),
   });
   assert.equal(result.phase, "phase_2");
   assert.equal(result.label, "Phase 2 (flat rate)");
-  assert.equal(result.weeklyRate, 184.03);
+  assert.equal(result.weeklyRate, 194.32);
 });
 
 test("getCurrentSMPPhase returns ended after week 39", () => {
@@ -136,7 +136,7 @@ test("getCurrentSMPPhase returns ended after week 39", () => {
   const result = getCurrentSMPPhase({
     startDate: start,
     phase1Weekly: 450,
-    phase2Weekly: 184.03,
+    phase2Weekly: 194.32,
     referenceDate: new Date("2027-06-01T00:00:00.000Z"),
   });
   assert.equal(result.phase, "ended");
@@ -148,7 +148,7 @@ test("getCurrentSMPPhase returns not_started before the start date", () => {
   const result = getCurrentSMPPhase({
     startDate: start,
     phase1Weekly: 450,
-    phase2Weekly: 184.03,
+    phase2Weekly: 194.32,
     referenceDate: new Date("2026-05-01T00:00:00.000Z"),
   });
   assert.equal(result.phase, "not_started");
@@ -168,8 +168,8 @@ test("isMaternityLeaveType matches common variants", () => {
 
 // ─── Default flat rate sanity ──────────────────────────────────────────
 
-test("SMP_FLAT_RATE default is 184.03 (2024/25)", () => {
+test("SMP_FLAT_RATE default is 194.32 (2026/27)", () => {
   if (!process.env.SMP_FLAT_RATE && !process.env.SMP_WEEKLY_RATE) {
-    assert.equal(SMP_FLAT_RATE, 184.03);
+    assert.equal(SMP_FLAT_RATE, 194.32);
   }
 });

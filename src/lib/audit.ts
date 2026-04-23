@@ -15,6 +15,7 @@ export const AUDIT_ACTIONS = [
   "team_member.updated",
   "team_member.deleted",
   "team_member.role_changed",
+  "team_member.bulk_imported",
   "leave_type.created",
   "leave_type.updated",
   "leave_type.deleted",
@@ -24,6 +25,7 @@ export const AUDIT_ACTIONS = [
   "organization.settings_updated",
   "carry_over.rollover_run",
   "onboarding.completed",
+  "data_retention.anonymised",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -38,7 +40,8 @@ export type AuditResource =
   | "leave_policy"
   | "organization"
   | "carry_over"
-  | "onboarding";
+  | "onboarding"
+  | "data_retention";
 
 export type AuditActor = {
   id?: string | null;

@@ -51,10 +51,12 @@ enum DataResidency {
 }
 
 enum SubscriptionPlan {
+  TRIAL
   STARTER
   GROWTH
   SCALE
   PRO
+  LOCKED
 }
 
 model Organization {
@@ -70,7 +72,16 @@ model Organization {
   ukCarryOverExpiryDay   Int @default(31)
   dataResidency          DataResidency @default(EU)
   maxAdminUsers          Int @default(2)
-  plan                   SubscriptionPlan @default(STARTER)
+  plan                   SubscriptionPlan @default(TRIAL)
+  fullTimeHoursPerWeek   Decimal @default(37.5) @db.Decimal(4, 1)
+  stripeCustomerId       String? @unique
+  stripeSubscriptionId   String? @unique
+  stripePriceId          String?
+  subscriptionStatus     String?
+  trialEndsAt            DateTime?
+  cardAdded              Boolean @default(false)
+  cancelAtPeriodEnd      Boolean @default(false)
+  currentPeriodEnd       DateTime?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
@@ -94,6 +105,7 @@ model User {
   fteRatio       Float @default(1)
   qualifyingDaysPerWeek Int @default(5)
   averageWeeklyEarnings Decimal? @db.Decimal(8, 2)
+  bradfordScore  Float @default(0)
   countryCode    String     @default("NG")
   rightToWorkVerified Boolean?
   department     String?
@@ -106,6 +118,8 @@ model User {
 
   organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   leaveRequests       LeaveRequest[]       @relation("UserLeaveRequests")
+
+  @@index([organizationId, countryCode])
   reviewedLeaves      LeaveRequest[]       @relation("ReviewerLeaveRequests")
   passwordResetTokens PasswordResetToken[]
   jiraUserMapping     JiraUserMapping?
@@ -126,6 +140,7 @@ model LeaveType {
   minNoticeDays  Int @default(0)
   durationLogic  String?
   countryCode    String?
+  applyProRata   Boolean @default(false)
   organizationId String
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -164,6 +179,10 @@ model LeaveRequest {
   reviewedAt   DateTime?
   evidenceProvided Boolean @default(false)
   kitDaysUsed Int @default(0)
+  splitDaysUsed Int @default(0)
+  sicknessNote String?
+  childBirthDate DateTime? @db.Date
+  splCurtailmentConfirmed Boolean @default(false)
   dailyHolidayPayRate Decimal? @db.Decimal(10, 2)
   sspDaysPaid Int @default(0)
   sspLimitReached Boolean @default(false)
@@ -178,6 +197,9 @@ model LeaveRequest {
   user       User      @relation("UserLeaveRequests", fields: [userId], references: [id], onDelete: Cascade)
   leaveType  LeaveType @relation(fields: [leaveTypeId], references: [id])
   reviewedBy User?     @relation("ReviewerLeaveRequests", fields: [reviewedById], references: [id])
+
+  @@index([userId, status])
+  @@index([userId, leaveTypeId])
 }
 
 model JiraIntegration {
@@ -249,6 +271,7 @@ model BankHoliday {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([date, region, organizationId])
+  @@index([organizationId, date])
 }
 
 model UserWeeklyHours {
@@ -279,6 +302,7 @@ model LeaveCarryOverBalance {
   leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
 
   @@unique([userId, leaveTypeId, leaveYear])
+  @@index([userId, leaveTypeId])
 }
 
 model WeeklyEarning {

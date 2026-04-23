@@ -96,8 +96,8 @@ Added `src/lib/uk-compliance.ts` with:
 
 Added optional env keys in `.env.example`. **Update each April via HMRC guidance.**
 
-- `SSP_WEEKLY_RATE` (default `116.75` — 2024/25)
-- `SMP_WEEKLY_RATE` (default `184.03` — 2024/25)
+- `SSP_WEEKLY_RATE` (default `123.25` — 2026/27)
+- `SMP_WEEKLY_RATE` (default `194.32` — 2026/27)
 - `SMP_FLAT_RATE` (alias of `SMP_WEEKLY_RATE` consumed by the SMP phase calculator; either env key is honoured)
 - `LEL_WEEKLY` (default `123` — Lower Earnings Limit for 2024/25; SSP is not payable below this average weekly earnings)
 - `NEXT_PUBLIC_SUPPORT_EMAIL`, `NEXT_PUBLIC_PRIORITY_SUPPORT_EMAIL`, `NEXT_PUBLIC_SLA_SUPPORT_EMAIL`, `NEXT_PUBLIC_ONBOARDING_BOOKING_URL` — Help page contact targets (see `.env.example`)
@@ -221,7 +221,7 @@ SMP has two statutory phases:
 
 - **Phase 1** (weeks 1–6): **90% of Average Weekly Earnings (AWE)**.
 - **Phase 2** (weeks 7–39): the **lower** of the flat weekly rate
-  (`SMP_FLAT_RATE`, £184.03 for 2024/25) **or** 90% AWE.
+  (`SMP_FLAT_RATE`, £194.32 for 2026/27) **or** 90% AWE.
 
 Even when payroll issues the actual payment, Coverboard records AWE and the
 phase rates at the moment the leave is booked so payroll is supplied with
@@ -278,7 +278,7 @@ Added `src/lib/uk-compliance.test.ts` for:
 - SSP daily-rate regression guard: rate must NOT equal `weekly / 7`
 - Lower Earnings Limit boundary (below, exactly at, and above £123/wk)
 - 28-week cap boundary at 5-, 4-, and 3-day qualifying weeks (139/140/141, 111/112, 83/84)
-- `UK_SSP_WEEKLY_RATE` default still matches the 2024/25 rate (116.75)
+- `UK_SSP_WEEKLY_RATE` default still matches the 2026/27 rate (123.25)
 - UK bank holiday region filtering
 
 Added `src/lib/smpCalculator.test.ts` for:
@@ -287,7 +287,7 @@ Added `src/lib/smpCalculator.test.ts` for:
 - `calculateSMPPhaseDates` — +6/+39 weeks, no input mutation
 - `getCurrentSMPPhase` — phase_1, phase_2, ended, not_started branches
 - `isMaternityLeaveType` — variants / null safety
-- `SMP_FLAT_RATE` default guard (184.03 for 2024/25)
+- `SMP_FLAT_RATE` default guard (194.32 for 2026/27)
 
 Added `src/lib/holidayPay.test.ts` for:
 - zero-pay-week exclusion

@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { MemberCard } from "@/components/team/member-card";
 import { MemberForm } from "@/components/team/member-form";
+import { BulkImportDialog } from "@/components/team/bulk-import-dialog";
 import { CardSkeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
-import { Plus } from "lucide-react";
+import { Plus, Upload } from "lucide-react";
 
 type Member = {
   id: string;
@@ -30,6 +31,7 @@ export default function TeamPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [showBulkImport, setShowBulkImport] = useState(false);
   const [editMember, setEditMember] = useState<Member | undefined>();
 
   const userRole = (session?.user as Record<string, unknown> | undefined)?.role as string | undefined;
@@ -128,10 +130,25 @@ export default function TeamPage() {
           </p>
         </div>
         {canManage && (
-          <Button size="sm" className="self-start sm:self-auto sm:size-default" onClick={() => setShowForm(true)}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            Add member
-          </Button>
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            <Button
+              size="sm"
+              variant="outline"
+              className="sm:size-default"
+              onClick={() => setShowBulkImport(true)}
+            >
+              <Upload className="mr-1.5 h-4 w-4" />
+              Bulk import
+            </Button>
+            <Button
+              size="sm"
+              className="sm:size-default"
+              onClick={() => setShowForm(true)}
+            >
+              <Plus className="mr-1.5 h-4 w-4" />
+              Add member
+            </Button>
+          </div>
         )}
       </div>
 
@@ -185,6 +202,12 @@ export default function TeamPage() {
           />
         )}
       </Dialog>
+
+      <BulkImportDialog
+        open={showBulkImport}
+        onClose={() => setShowBulkImport(false)}
+        onImported={fetchMembers}
+      />
     </div>
   );
 }

@@ -11,12 +11,16 @@ import {
   getAweForUser,
   isMaternityLeaveType,
 } from "@/lib/smpCalculator";
+import { calculateBradfordFactor } from "@/lib/uk-compliance";
+import { countWeekdays } from "@/lib/utils";
 import { z } from "zod";
 
 const updateSchema = z.object({
   status: z.enum(["APPROVED", "REJECTED", "CANCELLED"]).optional(),
   kitDaysUsed: z.number().int().min(0).max(20).optional(),
+  splitDaysUsed: z.number().int().min(0).max(20).optional(),
   evidenceProvided: z.boolean().optional(),
+  splCurtailmentConfirmed: z.boolean().optional(),
 });
 
 export async function PATCH(
@@ -46,7 +50,7 @@ export async function PATCH(
       );
     }
 
-    const { status, kitDaysUsed, evidenceProvided } = parsed.data;
+    const { status, kitDaysUsed, splitDaysUsed, evidenceProvided, splCurtailmentConfirmed } = parsed.data;
 
     const leaveRequest = await prisma.leaveRequest.findUnique({
       where: { id },
@@ -76,7 +80,7 @@ export async function PATCH(
       }
     }
 
-    if ((kitDaysUsed !== undefined || evidenceProvided !== undefined) && !status) {
+    if ((kitDaysUsed !== undefined || splitDaysUsed !== undefined || evidenceProvided !== undefined || splCurtailmentConfirmed !== undefined) && !status) {
       if (userRole !== "ADMIN" && userRole !== "MANAGER") {
         return NextResponse.json(
           { error: "Only admins and managers can edit KIT days or evidence" },
@@ -94,7 +98,9 @@ export async function PATCH(
       }
     }
     if (kitDaysUsed !== undefined) updateData.kitDaysUsed = kitDaysUsed;
+    if (splitDaysUsed !== undefined) updateData.splitDaysUsed = splitDaysUsed;
     if (evidenceProvided !== undefined) updateData.evidenceProvided = evidenceProvided;
+    if (splCurtailmentConfirmed !== undefined) updateData.splCurtailmentConfirmed = splCurtailmentConfirmed;
 
     // Back-fill SMP phase data for maternity requests created before the
     // SMP phase-tracking feature landed. Runs on any approval/rejection/
@@ -145,6 +151,32 @@ export async function PATCH(
         },
       },
     });
+
+    // ── Bradford Factor recalculation on SSP approval ─────────────────
+    if (status === "APPROVED" && /SSP/i.test(leaveRequest.leaveType.name)) {
+      prisma.leaveRequest
+        .findMany({
+          where: {
+            userId: leaveRequest.userId,
+            leaveType: { name: { contains: "SSP" } },
+            status: "APPROVED",
+          },
+          select: { startDate: true, endDate: true },
+        })
+        .then((sspRequests) => {
+          const spells = sspRequests.length;
+          const days = sspRequests.reduce(
+            (sum, r) => sum + countWeekdays(r.startDate, r.endDate),
+            0
+          );
+          const score = calculateBradfordFactor(spells, days);
+          return prisma.user.update({
+            where: { id: leaveRequest.userId },
+            data: { bradfordScore: score },
+          });
+        })
+        .catch((err) => console.error("Bradford Factor update error:", err));
+    }
 
     // Send notifications (fire and forget)
     if (status === "APPROVED" || status === "REJECTED") {
@@ -199,14 +231,14 @@ export async function PATCH(
         });
       }
     }
-    if (kitDaysUsed !== undefined && !status) {
+    if ((kitDaysUsed !== undefined || splitDaysUsed !== undefined) && !status) {
       recordAudit({
         organizationId: orgId,
         action: "leave_request.kit_days_updated",
         resource: "leave_request",
         resourceId: id,
         actor,
-        metadata: { kitDaysUsed, requesterEmail: updated.user.email },
+        metadata: { kitDaysUsed, splitDaysUsed, requesterEmail: updated.user.email },
         context: ctx,
       });
     }

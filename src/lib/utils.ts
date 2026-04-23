@@ -39,11 +39,11 @@ export function countWeekdays(start: Date, end: Date): number {
   const endDate = new Date(end);
 
   while (current <= endDate) {
-    const day = current.getDay();
+    const day = current.getUTCDay();
     if (day !== 0 && day !== 6) {
       count++;
     }
-    current.setDate(current.getDate() + 1);
+    current.setUTCDate(current.getUTCDate() + 1);
   }
 
   return count;

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { COUNTRY_NAMES } from "@/lib/utils";
@@ -69,14 +70,22 @@ export function MemberCard({
         )}
       </div>
 
-      {onEdit && (
-        <button
-          onClick={() => onEdit(member)}
-          className="rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
+      <div className="flex flex-col gap-1.5">
+        <Link
+          href={`/team/${member.id}`}
+          className="rounded-md px-3 py-1.5 text-xs font-medium text-brand-600 border border-brand-200 hover:bg-brand-50 transition-colors text-center"
         >
-          Edit
-        </button>
-      )}
+          View
+        </Link>
+        {onEdit && (
+          <button
+            onClick={() => onEdit(member)}
+            className="rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
+          >
+            Edit
+          </button>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import {
   CalendarDays,
@@ -13,6 +12,7 @@ import {
   ArrowRight,
   MessageSquare,
   Zap,
+  Building2,
 } from "lucide-react";
 import { LandingNavbar } from "./navbar";
 import { PRICING } from "@/config/pricing";
@@ -26,7 +26,7 @@ function HeroSection() {
       <div className="mx-auto max-w-4xl px-6 text-center">
         <div className="inline-flex items-center gap-2 rounded-full bg-brand-50 border border-brand-200 px-4 py-1.5 text-sm text-brand-700 mb-8">
           <Zap size={14} />
-          Built for small, distributed teams — UK compliant
+          From lean teams to People Ops — UK compliant
         </div>
 
         <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight text-gray-900 leading-[1.1]">
@@ -36,9 +36,9 @@ function HeroSection() {
         </h1>
 
         <p className="mt-6 text-lg md:text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
-          Coverboard is the dead-simple leave management tool for teams of 5&ndash;50.
+          Coverboard is the leave management tool for distributed teams.
           Country-specific rules, overlap detection, and a single &ldquo;Who&apos;s out today?&rdquo;
-          view &mdash; without the BambooHR price tag.
+          view &mdash; with the UK compliance depth a spreadsheet can&apos;t give you.
         </p>
 
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -56,8 +56,14 @@ function HeroSection() {
           </a>
         </div>
 
-        <p className="mt-5 text-sm text-gray-400">
-          Free for up to 10 team members &middot; No credit card required
+        <p className="mt-6 text-sm text-gray-500">
+          Running HR, payroll handoffs, or compliance reviews?{" "}
+          <a
+            href="#scale-pro"
+            className="font-medium text-brand-600 hover:text-brand-700 underline underline-offset-2"
+          >
+            See Scale &amp; Pro
+          </a>
         </p>
       </div>
 
@@ -138,7 +144,7 @@ const features = [
     icon: Globe,
     title: "Multi-country leave rules",
     description:
-      "Statutory allowances and public holidays for the UK, Nigeria, Kenya, South Africa, Ghana, Brazil, Mexico, Philippines, Indonesia — and growing.",
+      "Statutory allowances and public holidays for the UK, Nigeria, Kenya, South Africa, Ghana, Egypt, Brazil, Colombia, Mexico, Philippines, and Indonesia — and growing.",
   },
   {
     icon: Users,
@@ -154,9 +160,9 @@ const features = [
   },
   {
     icon: MessageSquare,
-    title: "Slack integration",
+    title: "Slack & Jira integrations",
     description:
-      "Use /whosout, /mybalance, and /requestleave right from Slack. Approve requests with one click.",
+      "Run /whosout, /mybalance, and /requestleave from Slack. Auto-reassign Jira tickets when someone's out, so engineering work doesn't stall.",
   },
   {
     icon: Bell,
@@ -168,9 +174,115 @@ const features = [
     icon: ShieldCheck,
     title: "UK statutory compliance",
     description:
-      "Full support for UK leave types including SSP, maternity, paternity, shared parental, and bereavement leave. Regional bank holidays, pro-rata for part-time workers, and Bradford Factor reporting built in.",
+      "SSP with LEL checks and 28-week cap tracking, SMP phase tracking with AWE, 52-week holiday pay averaging, KIT/SPLIT day tracking, parental leave tracker, Bradford Factor, pro-rata for part-time and zero-hours, regional bank holidays, and GDPR data retention — built in.",
   },
 ];
+
+const scaleHighlights = [
+  "Parental leave tracker, KIT & SPLIT day tracking",
+  "Holiday pay earnings history & 52-week average calculation",
+  "Custom carry-over rules & absence analytics dashboard",
+  "UK compliance report pack & priority support",
+];
+
+const proHighlights = [
+  "Custom leave policies tailored to your organisation",
+  "GDPR data residency configuration",
+  "Audit trail exports for governance and investigations",
+  "Priority email support — everything in Scale included",
+];
+
+function ScaleAndProSection() {
+  return (
+    <section id="scale-pro" className="py-20 md:py-28 bg-slate-50 border-y border-slate-100">
+      <div className="mx-auto max-w-6xl px-6">
+        <div className="text-center max-w-3xl mx-auto mb-14">
+          <div className="inline-flex items-center justify-center gap-2 rounded-full bg-white border border-slate-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600 mb-4">
+            <Building2 className="h-3.5 w-3.5 text-brand-600" />
+            Scale &amp; Pro
+          </div>
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight">
+            When leave touches payroll, compliance, and audits
+          </h2>
+          <p className="mt-4 text-gray-600 text-lg leading-relaxed">
+            Starter and Growth keep day-to-day leave effortless.{" "}
+            <span className="font-medium text-gray-800">Scale</span> adds HR
+            operations depth — statutory tracking, payroll-ready figures, and
+            reporting your finance team can rely on.{" "}
+            <span className="font-medium text-gray-800">Pro</span> layers on
+            policy control, residency, and exportable audit history for
+            organisations that answer to regulators, boards, or insurers.
+          </p>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-2">
+          <div className="rounded-2xl border border-gray-200 bg-white p-6 md:p-8 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">
+              Scale
+            </p>
+            <p className="mt-1 text-sm text-gray-500">Advanced HR operations</p>
+            <p className="mt-4 text-sm text-gray-700 leading-relaxed">
+              For People teams who need parental programmes, holiday pay
+              defensibility, and compliance reporting — without bolting on a
+              second HRIS.
+            </p>
+            <ul className="mt-6 space-y-3">
+              {scaleHighlights.map((item) => (
+                <li
+                  key={item}
+                  className="flex items-start gap-3 text-sm text-gray-800"
+                >
+                  <Check
+                    size={16}
+                    className="text-brand-600 mt-0.5 shrink-0"
+                    aria-hidden
+                  />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="rounded-2xl border border-brand-200 bg-white p-6 md:p-8 shadow-md shadow-brand-100/30 ring-1 ring-brand-100">
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">
+              Pro
+            </p>
+            <p className="mt-1 text-sm text-gray-500">Enterprise-ready</p>
+            <p className="mt-4 text-sm text-gray-700 leading-relaxed">
+              For employers who need configurable policies, data residency
+              choices, and a tamper-evident activity trail alongside the same
+              leave engine your managers already use.
+            </p>
+            <ul className="mt-6 space-y-3">
+              {proHighlights.map((item) => (
+                <li
+                  key={item}
+                  className="flex items-start gap-3 text-sm text-gray-800"
+                >
+                  <Check
+                    size={16}
+                    className="text-brand-600 mt-0.5 shrink-0"
+                    aria-hidden
+                  />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        <p className="mt-10 text-center text-sm text-gray-600">
+          <a
+            href="#pricing"
+            className="font-medium text-brand-600 hover:text-brand-700 underline underline-offset-2"
+          >
+            Compare plans and pricing
+          </a>
+        </p>
+      </div>
+    </section>
+  );
+}
 
 function FeaturesSection() {
   return (
@@ -179,10 +291,12 @@ function FeaturesSection() {
         <div className="text-center max-w-2xl mx-auto mb-16">
           <p className="text-sm font-semibold text-brand-600 mb-3">Features</p>
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight">
-            Everything a small team needs. Nothing it doesn&apos;t.
+            Leave ops that scale with you
           </h2>
           <p className="mt-4 text-gray-600 text-lg">
-            Built for the way distributed teams actually work &mdash; across countries, time zones, and tools.
+            Start with calendars, approvals, and notifications. Add statutory depth,
+            payroll-ready figures, analytics, and governance when People Ops and
+            compliance need more than a spreadsheet.
           </p>
         </div>
 
@@ -213,7 +327,7 @@ const steps = [
     step: "2",
     title: "Invite your team",
     description:
-      "Add team members by email. They get an invite with login credentials and are ready to request leave immediately.",
+      "Add team members one at a time or bulk-import a CSV. Everyone gets an invite email with login credentials and can start requesting leave immediately.",
   },
   {
     step: "3",
@@ -251,50 +365,22 @@ function HowItWorksSection() {
 }
 
 function PricingSection() {
-  const [annual, setAnnual] = useState(false);
-
   return (
     <section id="pricing" className="py-20 md:py-28 bg-white">
       <div className="mx-auto max-w-6xl px-6">
         <div className="text-center max-w-2xl mx-auto mb-10">
           <p className="text-sm font-semibold text-brand-600 mb-3">Pricing</p>
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight">
-            Simple pricing for simple teams
+            Plans that grow with your organisation
           </h2>
           <p className="mt-4 text-gray-600 text-lg">
-            Start free, upgrade when you need to. No hidden fees.
+            Same core product — add HR depth, compliance reporting, and
+            enterprise controls when you need them. No hidden fees.
           </p>
-        </div>
-
-        {/* Billing toggle */}
-        <div className="flex items-center justify-center gap-3 mb-12">
-          <span className={`text-sm font-medium ${!annual ? "text-gray-900" : "text-gray-400"}`}>Monthly</span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={annual}
-            onClick={() => setAnnual(!annual)}
-            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-              annual ? "bg-brand-600" : "bg-gray-200"
-            }`}
-          >
-            <span
-              className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition-transform ${
-                annual ? "translate-x-5" : "translate-x-0"
-              }`}
-            />
-          </button>
-          <span className={`text-sm font-medium ${annual ? "text-gray-900" : "text-gray-400"}`}>Annual</span>
-          {annual && (
-            <span className="ml-1 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
-              {PRICING.billingNote}
-            </span>
-          )}
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {PRICING.tiers.map((tier) => {
-            const price = annual ? tier.price_annual_monthly : tier.price_monthly;
             return (
               <div
                 key={tier.name}
@@ -311,14 +397,12 @@ function PricingSection() {
                 )}
                 <div className="mb-6">
                   <h3 className="text-lg font-semibold text-gray-900">{tier.name}</h3>
-                  <p className="text-xs text-gray-500 mt-1">{tier.employees}</p>
+                  <p className="text-xs text-gray-500 mt-1">{tier.tagline}</p>
                   <div className="flex items-baseline gap-1 mt-3">
                     <span className="text-4xl font-bold text-gray-900">
-                      {PRICING.currency}{price}
+                      {PRICING.currency}{tier.price_monthly}
                     </span>
-                    <span className="text-gray-500 text-sm">
-                      / {annual ? "mo, billed annually" : "month"}
-                    </span>
+                    <span className="text-gray-500 text-sm">/month</span>
                   </div>
                 </div>
 
@@ -333,13 +417,8 @@ function PricingSection() {
 
                 <Link
                   href={
-                    tier.name === "Pro"
-                      ? process.env.NEXT_PUBLIC_DEMO_BOOKING_URL ??
-                        "https://cal.com/coverboard/demo"
-                      : "/signup"
+                    "/signup"
                   }
-                  target={tier.name === "Pro" ? "_blank" : undefined}
-                  rel={tier.name === "Pro" ? "noopener noreferrer" : undefined}
                   className={`block text-center font-semibold py-3 rounded-xl transition-colors ${
                     tier.highlighted
                       ? "bg-brand-600 text-white hover:bg-brand-700 shadow-lg shadow-brand-600/20"
@@ -354,13 +433,9 @@ function PricingSection() {
         </div>
 
         <p className="mt-10 text-center text-sm text-gray-500">
-          All plans include a 14-day free trial. No credit card required.
-          <br />
-          Need more than 300 employees?{" "}
-          <a href="mailto:hello@yourdomain.com" className="text-brand-600 hover:text-brand-700 font-medium underline">
-            Contact us
-          </a>{" "}
-          for enterprise pricing.
+          All plans include a 14-day free trial. No credit card required. Every
+          plan works for any team size — choose based on the features you need,
+          not your headcount.
         </p>
       </div>
     </section>
@@ -382,7 +457,7 @@ function CTASection() {
         </h2>
         <p className="mt-4 text-lg text-brand-100 max-w-xl mx-auto">
           Join teams across the UK, Africa, LATAM, and Southeast Asia who use Coverboard to
-          manage leave without the spreadsheet chaos.
+          manage leave without the spreadsheet chaos — and People teams who rely on Scale and Pro for audit-ready statutory depth.
         </p>
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
           <Link
@@ -391,6 +466,12 @@ function CTASection() {
           >
             Get started free <ArrowRight size={18} />
           </Link>
+          <a
+            href="#scale-pro"
+            className="inline-flex items-center gap-2 rounded-xl border-2 border-white/40 bg-transparent px-8 py-3.5 text-base font-semibold text-white transition-colors hover:bg-white/10"
+          >
+            Scale &amp; Pro overview
+          </a>
         </div>
       </div>
     </section>
@@ -410,7 +491,7 @@ function Footer() {
               <span className="font-semibold text-white text-lg">Coverboard</span>
             </div>
             <p className="text-gray-400 text-sm max-w-xs leading-relaxed">
-              Team leave management for distributed teams. Know who&apos;s out, plan coverage, stay sane.
+              Team leave management for distributed teams and People Ops. Know who&apos;s out, plan coverage, stay compliant.
             </p>
           </div>
 
@@ -419,6 +500,7 @@ function Footer() {
               <p className="font-semibold text-white mb-3">Product</p>
               <ul className="space-y-2 text-gray-400">
                 <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
+                <li><a href="#scale-pro" className="hover:text-white transition-colors">Scale &amp; Pro</a></li>
                 <li><a href="#pricing" className="hover:text-white transition-colors">Pricing</a></li>
                 <li><a href="#how-it-works" className="hover:text-white transition-colors">How it works</a></li>
               </ul>
@@ -447,6 +529,7 @@ export function LandingPage() {
       <LandingNavbar />
       <HeroSection />
       <FeaturesSection />
+      <ScaleAndProSection />
       <HowItWorksSection />
       <PricingSection />
       <CTASection />

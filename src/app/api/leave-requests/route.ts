@@ -15,7 +15,6 @@ import {
 import { recordAudit, requestAuditContext } from "@/lib/audit";
 import {
   getDailyHolidayPayRateForUser,
-  isAnnualLeaveType,
 } from "@/lib/holidayPay";
 import {
   calculateSMPPhaseDates,
@@ -23,6 +22,7 @@ import {
   getAweForUser,
   isMaternityLeaveType,
 } from "@/lib/smpCalculator";
+import { calculateBradfordFactor } from "@/lib/uk-compliance";
 import { z } from "zod";
 
 export async function GET(request: Request) {
@@ -90,8 +90,12 @@ const createSchema = z.object({
   endDate: z.string().transform((s) => new Date(s)),
   leaveTypeId: z.string(),
   note: z.string().optional(),
+  sicknessNote: z.string().optional(),
   evidenceProvided: z.boolean().optional(),
   kitDaysUsed: z.number().int().min(0).optional(),
+  splitDaysUsed: z.number().int().min(0).optional(),
+  childBirthDate: z.string().transform((s) => new Date(s)).optional(),
+  splCurtailmentConfirmed: z.boolean().optional(),
 });
 
 export async function POST(request: Request) {
@@ -111,11 +115,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const { startDate, endDate, leaveTypeId, note, evidenceProvided, kitDaysUsed } = parsed.data;
+    const { startDate, endDate, leaveTypeId, note, sicknessNote, evidenceProvided, kitDaysUsed, splitDaysUsed, childBirthDate, splCurtailmentConfirmed } = parsed.data;
     const userId = (session.user as Record<string, unknown>).id as string;
     const leaveTypeConfig = await prisma.leaveType.findUnique({
       where: { id: leaveTypeId },
-      select: { name: true, minNoticeDays: true, requiresEvidence: true },
+      select: { name: true, minNoticeDays: true, requiresEvidence: true, applyProRata: true },
     });
     if (!leaveTypeConfig) {
       return NextResponse.json({ error: "Leave type not found" }, { status: 404 });
@@ -159,11 +163,52 @@ export async function POST(request: Request) {
       // Don't block request creation if balance check fails
     }
 
+    // ── Paternity leave: 56-day birth window ──────────────────────────
+    const isPaternityLeave = /paternity/i.test(leaveTypeConfig.name);
+    if (isPaternityLeave && childBirthDate) {
+      const windowEnd = new Date(childBirthDate);
+      windowEnd.setUTCDate(windowEnd.getUTCDate() + 56);
+      if (startDate > windowEnd) {
+        return NextResponse.json(
+          { error: "Paternity leave must start within 56 days of the child's birth or placement date" },
+          { status: 400 }
+        );
+      }
+    }
+
+    // ── Unpaid Parental Leave: 4 weeks/year cap ────────────────────────
+    const isUpl = /unpaid parental/i.test(leaveTypeConfig.name);
+    if (isUpl) {
+      const yearStart = new Date(Date.UTC(startDate.getUTCFullYear(), 0, 1));
+      const yearEnd = new Date(Date.UTC(startDate.getUTCFullYear(), 11, 31, 23, 59, 59, 999));
+      const existingUpl = await prisma.leaveRequest.findMany({
+        where: {
+          userId,
+          leaveType: { name: { contains: "Unpaid Parental" } },
+          status: { in: ["APPROVED", "PENDING"] },
+          startDate: { lte: yearEnd },
+          endDate: { gte: yearStart },
+        },
+        select: { startDate: true, endDate: true },
+      });
+      const usedUplDays = existingUpl.reduce(
+        (sum, r) => sum + countWeekdays(r.startDate, r.endDate),
+        0
+      );
+      const requestedDays = countWeekdays(startDate, endDate);
+      if (usedUplDays + requestedDays > 20) {
+        return NextResponse.json(
+          { error: `Unpaid Parental Leave is capped at 4 weeks (20 working days) per year. You have ${20 - usedUplDays} days remaining.` },
+          { status: 400 }
+        );
+      }
+    }
+
     // For annual-leave requests, capture the 52-week average daily rate so
     // payroll has a legally compliant figure at the moment the request was
     // booked. Never block the request if this calculation fails.
     let dailyHolidayPayRate: number | null = null;
-    if (isAnnualLeaveType(leaveTypeConfig.name)) {
+    if (leaveTypeConfig.applyProRata) {
       try {
         dailyHolidayPayRate = await getDailyHolidayPayRateForUser(userId);
       } catch (err) {
@@ -316,9 +361,13 @@ export async function POST(request: Request) {
         endDate,
         leaveTypeId,
         note,
+        sicknessNote: sicknessNote ?? undefined,
         userId,
         evidenceProvided: evidenceProvided ?? false,
         kitDaysUsed: kitDaysUsed ?? 0,
+        splitDaysUsed: splitDaysUsed ?? 0,
+        childBirthDate: childBirthDate ?? undefined,
+        splCurtailmentConfirmed: splCurtailmentConfirmed ?? false,
         dailyHolidayPayRate: dailyHolidayPayRate ?? undefined,
         sspDaysPaid,
         sspLimitReached,
@@ -343,6 +392,33 @@ export async function POST(request: Request) {
         },
       },
     });
+
+    // ── Bradford Factor recalculation ─────────────────────────────────
+    // Recompute on every SSP/sickness event so reports always reflect live data.
+    if (isSspLeave) {
+      prisma.leaveRequest
+        .findMany({
+          where: {
+            userId,
+            leaveType: { name: { contains: "SSP" } },
+            status: { in: ["APPROVED", "PENDING"] },
+          },
+          select: { startDate: true, endDate: true },
+        })
+        .then((sspRequests) => {
+          const spells = sspRequests.length;
+          const days = sspRequests.reduce(
+            (sum, r) => sum + countWeekdays(r.startDate, r.endDate),
+            0
+          );
+          const score = calculateBradfordFactor(spells, days);
+          return prisma.user.update({
+            where: { id: userId },
+            data: { bradfordScore: score },
+          });
+        })
+        .catch((err) => console.error("Bradford Factor update error:", err));
+    }
 
     // Send notifications (fire and forget)
     const daysRequested = countWeekdays(startDate, endDate);

@@ -13,17 +13,17 @@
  *
  * The flat weekly rate is read from `SMP_WEEKLY_RATE` / `SMP_FLAT_RATE`
  * env vars (both accepted; `SMP_FLAT_RATE` wins if both are set), with
- * a 2024/25 fallback of £184.03.
+ * a 2026/27 fallback of £194.32.
  *
  * References:
  *   • https://www.gov.uk/maternity-pay-leave/pay
  *   • https://www.gov.uk/employers-maternity-pay-leave
  */
 
-const DEFAULT_SMP_FLAT_RATE = 184.03;
+const DEFAULT_SMP_FLAT_RATE = 194.32;
 
 /**
- * Statutory SMP flat weekly rate for 2024/25 (as of 7 April 2024).
+ * Statutory SMP flat weekly rate for 2026/27 (as of 6 April 2026).
  * Update each April via HMRC guidance.
  */
 export const SMP_FLAT_RATE = Number(

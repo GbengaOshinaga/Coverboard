@@ -11,7 +11,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { COUNTRY_NAMES } from "@/lib/utils";
 import { ProfileSkeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
-import { ArrowLeft, CheckCircle, User, Lock, Bell } from "lucide-react";
+import { ArrowLeft, CheckCircle, User, Lock, Bell, Banknote } from "lucide-react";
 
 type Profile = {
   id: string;
@@ -25,11 +25,18 @@ type Profile = {
   organization: { name: string };
 };
 
+type HolidayPayStats = {
+  averageDailyRate: number | null;
+  weeksOnRecord: number;
+  paidWeeksCount: number;
+};
+
 export default function ProfilePage() {
   const { data: session, update: updateSession } = useSession();
   const { toast } = useToast();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [holidayPay, setHolidayPay] = useState<HolidayPayStats | null>(null);
 
   // Profile form
   const [name, setName] = useState("");
@@ -57,6 +64,9 @@ export default function ProfilePage() {
         setProfile(data);
         setName(data.name);
         setDigestOptOut(data.digestOptOut);
+        // Fetch holiday pay stats for self-service view
+        const hpRes = await fetch(`/api/team-members/${data.id}/earnings-history`);
+        if (hpRes.ok) setHolidayPay(await hpRes.json());
       }
       setLoading(false);
     }
@@ -283,6 +293,45 @@ export default function ProfilePage() {
               />
             </button>
           </label>
+        </CardContent>
+      </Card>
+
+      {/* Holiday pay — read-only self-service */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Banknote size={18} />
+            Holiday pay
+          </CardTitle>
+          <CardDescription>
+            Your holiday pay rate, calculated from your recent earnings history
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {holidayPay === null || holidayPay.weeksOnRecord === 0 ? (
+            <p className="text-sm text-gray-500">
+              Your holiday pay rate has not been configured yet. Please contact your HR team.
+            </p>
+          ) : (
+            <div className="space-y-2 text-sm text-gray-700">
+              <p>
+                Your holiday pay is calculated based on your average earnings over your last{" "}
+                <strong>{holidayPay.paidWeeksCount}</strong> recorded paid week
+                {holidayPay.paidWeeksCount !== 1 ? "s" : ""}.
+              </p>
+              <p>
+                Current daily rate:{" "}
+                <span className="font-semibold text-gray-900">
+                  {holidayPay.averageDailyRate !== null
+                    ? `£${holidayPay.averageDailyRate.toFixed(2)}`
+                    : "—"}
+                </span>
+              </p>
+              <p className="text-xs text-gray-400">
+                This rate will apply to your next approved holiday.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 

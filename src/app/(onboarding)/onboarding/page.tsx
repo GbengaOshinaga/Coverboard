@@ -11,7 +11,7 @@ import {
   getDefaultLeaveTypes,
   getCountryPolicies,
 } from "@/lib/country-policies";
-import { Check, Plus, Trash2, ArrowRight, ArrowLeft, Globe, BookOpen, Users } from "lucide-react";
+import { Check, Plus, Trash2, ArrowRight, ArrowLeft, Globe, BookOpen, Users, Upload } from "lucide-react";
 
 type Invite = { name: string; email: string; countryCode: string };
 
@@ -302,12 +302,21 @@ export default function OnboardingPage() {
           <CardHeader>
             <CardTitle>Invite your team</CardTitle>
             <CardDescription>
-              Add your team members now, or skip and invite them later from the
-              Team page. We&apos;ll create accounts for them with temporary
-              passwords.
+              Add a few people now to get started, or skip and invite everyone
+              later from the Team page. We&apos;ll create accounts for them
+              with temporary passwords.
             </CardDescription>
           </CardHeader>
           <CardContent>
+            <div className="mb-4 flex items-start gap-2.5 rounded-md border border-brand-100 bg-brand-50/60 px-3 py-2.5 text-sm text-brand-800">
+              <Upload className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>
+                Got a lot of people to add? Skip this step and use{" "}
+                <span className="font-medium">Bulk import</span> on the Team
+                page to invite up to 100 team members at once from a CSV.
+              </p>
+            </div>
+
             <div className="space-y-3">
               {invites.map((invite, i) => (
                 <div

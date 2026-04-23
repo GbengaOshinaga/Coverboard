@@ -1,19 +1,45 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { PRICING } from "@/config/pricing";
+
+type PlanKey = "starter" | "growth" | "scale" | "pro";
+
+const PLAN_TIER_NAMES: Record<PlanKey, string> = {
+  starter: "Starter",
+  growth: "Growth",
+  scale: "Scale",
+  pro: "Pro",
+};
 
 export default function SignupPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignupInner />
+    </Suspense>
+  );
+}
+
+function SignupInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const preselected = (searchParams.get("plan") ?? "growth").toLowerCase();
+  const initialPlan: PlanKey = (["starter", "growth", "scale", "pro"] as PlanKey[])
+    .includes(preselected as PlanKey)
+    ? (preselected as PlanKey)
+    : "growth";
+
   const [orgName, setOrgName] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [plan, setPlan] = useState<PlanKey>(initialPlan);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -26,7 +52,7 @@ export default function SignupPage() {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, orgName }),
+        body: JSON.stringify({ name, email, password, orgName, plan }),
       });
 
       const data = await res.json();
@@ -37,7 +63,6 @@ export default function SignupPage() {
         return;
       }
 
-      // Auto sign-in and redirect to onboarding
       const signInResult = await signIn("credentials", {
         email,
         password,
@@ -66,7 +91,7 @@ export default function SignupPage() {
             Start managing your team&apos;s leave
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            Free to try. Set up in under 5 minutes.
+            14-day free trial. No card required.
           </p>
         </div>
 
@@ -84,6 +109,41 @@ export default function SignupPage() {
                   {error}
                 </div>
               )}
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Choose a plan
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(Object.keys(PLAN_TIER_NAMES) as PlanKey[]).map((k) => {
+                    const tier = PRICING.tiers.find(
+                      (t) => t.name === PLAN_TIER_NAMES[k]
+                    );
+                    const selected = plan === k;
+                    return (
+                      <button
+                        type="button"
+                        key={k}
+                        onClick={() => setPlan(k)}
+                        className={`rounded-lg border p-3 text-left transition-colors ${
+                          selected
+                            ? "border-brand-600 bg-brand-50 ring-2 ring-brand-600"
+                            : "border-gray-200 bg-white hover:bg-gray-50"
+                        }`}
+                      >
+                        <div className="text-sm font-semibold text-gray-900">
+                          {PLAN_TIER_NAMES[k]}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          £{tier?.price_monthly}/month
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-2 text-xs text-gray-400">
+                  You can change this later. Nothing charged during the 14-day trial.
+                </p>
+              </div>
               <Input
                 id="orgName"
                 label="Team / company name"
@@ -129,7 +189,7 @@ export default function SignupPage() {
                 </div>
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Creating your team..." : "Get started"}
+                {loading ? "Creating your team..." : "Start 14-day free trial"}
               </Button>
             </form>
             <div className="mt-4 text-center text-sm text-gray-500">

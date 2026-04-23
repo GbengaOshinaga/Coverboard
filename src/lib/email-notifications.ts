@@ -94,6 +94,75 @@ export async function emailRequestStatusChange(data: {
   await sendEmail({ to: data.requesterEmail, subject, html });
 }
 
+// ─── Parental Leave Return Alert (notify managers 4 weeks before return) ──
+
+export async function emailParentalLeaveReturnAlert(data: {
+  employeeName: string;
+  returnDate: Date;
+  leaveTypeName: string;
+  organizationId: string;
+}) {
+  const managers = await prisma.user.findMany({
+    where: {
+      organizationId: data.organizationId,
+      role: { in: ["ADMIN", "MANAGER"] },
+    },
+    select: { email: true },
+  });
+
+  if (managers.length === 0) return;
+
+  const returnStr = data.returnDate.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+  const subject = `Return from ${data.leaveTypeName}: ${data.employeeName} returns on ${returnStr}`;
+  const html = `<p>${data.employeeName} is due to return from ${data.leaveTypeName} on <strong>${returnStr}</strong>.</p>
+<p>Please ensure their role and workspace are ready and that any flexible working requests are processed in advance.</p>
+<p><a href="${BASE_URL}/team">View team calendar</a></p>`;
+
+  await Promise.all(
+    managers.map((m) => sendEmail({ to: m.email, subject, html }))
+  );
+}
+
+/**
+ * Find all approved parental leave requests ending within the next 4 weeks
+ * and send return alerts. Designed to be called from a scheduled job daily.
+ */
+export async function sendUpcomingParentalReturnAlerts(): Promise<number> {
+  const now = new Date();
+  const windowStart = new Date(now);
+  windowStart.setUTCDate(windowStart.getUTCDate() + 27); // 27–28 days out = ~4 weeks
+  const windowEnd = new Date(now);
+  windowEnd.setUTCDate(windowEnd.getUTCDate() + 28);
+
+  const returning = await prisma.leaveRequest.findMany({
+    where: {
+      status: "APPROVED",
+      endDate: { gte: windowStart, lte: windowEnd },
+      leaveType: { name: { in: ["Statutory Maternity Leave", "Statutory Paternity Leave", "Shared Parental Leave (SPL)", "Adoption Leave", "Unpaid Parental Leave"] } },
+    },
+    include: {
+      user: { select: { name: true, organizationId: true } },
+      leaveType: { select: { name: true } },
+    },
+  });
+
+  let sent = 0;
+  for (const req of returning) {
+    await emailParentalLeaveReturnAlert({
+      employeeName: req.user.name,
+      returnDate: new Date(req.endDate.getTime() + 86400_000), // day after leave ends
+      leaveTypeName: req.leaveType.name,
+      organizationId: req.user.organizationId,
+    }).catch((err) => console.error("Parental return alert error:", err));
+    sent++;
+  }
+  return sent;
+}
+
 // ─── SSP 28-week cap reached (notify admins) ─────────────────────────
 
 export async function emailSspCapReached(data: {

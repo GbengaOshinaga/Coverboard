@@ -1,8 +1,7 @@
 export type PricingTier = {
   name: string;
+  tagline: string;
   price_monthly: number;
-  price_annual_monthly: number;
-  employees: string;
   cta: string;
   highlighted: boolean;
   badge?: string;
@@ -11,34 +10,31 @@ export type PricingTier = {
 
 export type PricingConfig = {
   currency: string;
-  billingNote: string;
   tiers: PricingTier[];
 };
 
 export const PRICING: PricingConfig = {
   currency: "£",
-  billingNote: "Save 2 months with annual billing",
   tiers: [
     {
       name: "Starter",
+      tagline: "Core leave management",
       price_monthly: 19,
-      price_annual_monthly: 16,
-      employees: "Up to 15 employees",
       cta: "Start free trial",
       highlighted: false,
       features: [
-        "All core leave types (UK statutory)",
+        "All UK statutory leave types",
         "Employee self-service portal",
         "Team calendar",
+        "Leave requests & approvals",
         "Email notifications",
         "Up to 2 admin users",
       ],
     },
     {
       name: "Growth",
+      tagline: "Compliance & reporting",
       price_monthly: 49,
-      price_annual_monthly: 41,
-      employees: "16–50 employees",
       cta: "Start free trial",
       highlighted: true,
       badge: "Most popular",
@@ -48,39 +44,41 @@ export const PRICING: PricingConfig = {
         "Pro-rata for part-time & zero-hours",
         "Bank holiday region config",
         "Right to work tracking",
+        "SSP & fit note tracking",
         "Unlimited admin users",
       ],
     },
     {
       name: "Scale",
+      tagline: "Advanced HR operations",
       price_monthly: 99,
-      price_annual_monthly: 82,
-      employees: "51–150 employees",
       cta: "Start free trial",
       highlighted: false,
       features: [
         "Everything in Growth",
-        "SSP & parental leave tracker",
+        "Parental leave tracker",
+        "KIT & SPLIT day tracking",
+        "Holiday pay earnings history",
+        "52-week average pay calculation",
         "Custom carry-over rules",
         "Absence analytics dashboard",
-        "Priority support",
         "UK compliance report pack",
+        "Priority support",
       ],
     },
     {
       name: "Pro",
+      tagline: "Enterprise-ready",
       price_monthly: 179,
-      price_annual_monthly: 149,
-      employees: "151–300 employees",
-      cta: "Book a demo",
+      cta: "Start free trial",
       highlighted: false,
       features: [
         "Everything in Scale",
-        "Dedicated onboarding session",
+        // "Dedicated onboarding session",
         "Custom leave policies",
-        // "API access",
-        "SLA-backed support",
+        "GDPR data residency config",
         "Audit trail exports",
+        "Priority email support",
       ],
     },
   ],

@@ -13,6 +13,10 @@ import { useToast } from "@/components/ui/toast";
 import { Plus, MessageSquare, CheckCircle, XCircle, User, ChevronRight, SquareKanban, ExternalLink, Unlink, Pencil, Trash2, AlertTriangle, Banknote } from "lucide-react";
 import { Select } from "@/components/ui/select";
 
+/** Env vars and vendor-console setup are operator docs — only shown in the UI when running `next dev`. */
+const SHOW_DEPLOYMENT_INTEGRATION_DOCS =
+  process.env.NODE_ENV === "development";
+
 type LeaveType = {
   id: string;
   name: string;
@@ -557,9 +561,9 @@ export default function SettingsPage() {
         <Card>
           <CardHeader>
             <div className="flex items-start justify-between gap-3">
-              <div>
+              <div className="min-w-0 space-y-2">
                 <CardTitle className="flex items-center gap-2">
-                  <Banknote className="h-5 w-5 text-brand-500" />
+                  <Banknote className="h-5 w-5 shrink-0 text-brand-500" />
                   Holiday pay earnings history
                 </CardTitle>
                 <CardDescription>
@@ -590,8 +594,13 @@ export default function SettingsPage() {
                         <p className="text-amber-900">
                           Holiday pay for{" "}
                           <strong>{emp.name}</strong> is based on basic
-                          salary only — add earnings history for legally
-                          compliant holiday pay calculation.
+                          salary only.{" "}
+                          <Link
+                            href={`/team/${emp.id}#earnings-history`}
+                            className="font-medium underline hover:no-underline"
+                          >
+                            Add earnings history →
+                          </Link>
                         </p>
                         {(emp.department || emp.countryCode) && (
                           <p className="mt-0.5 text-xs text-amber-700">
@@ -604,17 +613,6 @@ export default function SettingsPage() {
                     </div>
                   ))}
 
-                {earningsCoverage.some((e) => !e.hasAnyHistory) && (
-                  <p className="text-xs text-gray-500">
-                    Earnings rows are written via{" "}
-                    <code className="rounded bg-gray-100 px-1 py-0.5">
-                      POST /api/weekly-earnings
-                    </code>{" "}
-                    with <code>userId</code>, <code>weekStartDate</code>,{" "}
-                    <code>grossEarnings</code>, <code>hoursWorked</code>{" "}
-                    (and <code>isZeroPayWeek</code> for unpaid weeks).
-                  </p>
-                )}
 
                 {earningsCoverage.every((e) => e.hasAnyHistory) && (
                   <p className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
@@ -681,15 +679,19 @@ export default function SettingsPage() {
       {/* Leave types */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+            <div className="min-w-0 flex-1 space-y-1.5">
               <CardTitle>Leave types</CardTitle>
               <CardDescription>
                 Configure the types of leave available in your organization
               </CardDescription>
             </div>
             {isAdmin && (
-              <Button size="sm" onClick={() => setShowAdd(true)}>
+              <Button
+                size="sm"
+                className="shrink-0 sm:mt-0.5"
+                onClick={() => setShowAdd(true)}
+              >
                 <Plus className="mr-1 h-3.5 w-3.5" />
                 Add type
               </Button>
@@ -770,8 +772,8 @@ export default function SettingsPage() {
       {isAdmin && (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+              <div className="min-w-0 flex-1 space-y-1.5">
                 <CardTitle>Country policies</CardTitle>
                 <CardDescription>
                   Override statutory allowances and carry-over per leave type
@@ -779,7 +781,11 @@ export default function SettingsPage() {
                   code.
                 </CardDescription>
               </div>
-              <Button size="sm" onClick={() => setShowAddPolicy(true)}>
+              <Button
+                size="sm"
+                className="shrink-0 sm:mt-0.5"
+                onClick={() => setShowAddPolicy(true)}
+              >
                 <Plus className="mr-1 h-3.5 w-3.5" />
                 Add policy
               </Button>
@@ -931,33 +937,52 @@ export default function SettingsPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              <p className="text-sm text-gray-500">
-                To enable the Slack bot, add these environment variables to your deployment:
-              </p>
-              <div className="rounded-lg bg-gray-50 p-3 font-mono text-xs text-gray-600 space-y-1">
-                <p>SLACK_BOT_TOKEN=xoxb-...</p>
-                <p>SLACK_SIGNING_SECRET=...</p>
-                <p>SLACK_NOTIFICATION_CHANNEL=#time-off</p>
-              </div>
-              <div className="rounded-lg bg-blue-50 p-3">
-                <p className="text-xs text-blue-700">
-                  <strong>Setup guide:</strong> Create a Slack app at{" "}
-                  <a
-                    href="https://api.slack.com/apps"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline"
-                  >
-                    api.slack.com/apps
-                  </a>
-                  . Add bot token scopes: <code className="rounded bg-blue-100 px-1">commands</code>,{" "}
-                  <code className="rounded bg-blue-100 px-1">chat:write</code>,{" "}
-                  <code className="rounded bg-blue-100 px-1">users:read</code>,{" "}
-                  <code className="rounded bg-blue-100 px-1">users:read.email</code>.
-                  Set slash command URLs to <code className="rounded bg-blue-100 px-1">your-domain/api/slack/commands</code>{" "}
-                  and interactivity URL to <code className="rounded bg-blue-100 px-1">your-domain/api/slack/interactions</code>.
-                </p>
-              </div>
+              {SHOW_DEPLOYMENT_INTEGRATION_DOCS ? (
+                <>
+                  <p className="text-sm text-gray-500">
+                    To enable the Slack bot, add these environment variables to your deployment:
+                  </p>
+                  <div className="rounded-lg bg-gray-50 p-3 font-mono text-xs text-gray-600 space-y-1">
+                    <p>SLACK_BOT_TOKEN=xoxb-...</p>
+                    <p>SLACK_SIGNING_SECRET=...</p>
+                    <p>SLACK_NOTIFICATION_CHANNEL=#time-off</p>
+                  </div>
+                  <div className="rounded-lg bg-blue-50 p-3">
+                    <p className="text-xs text-blue-700">
+                      <strong>Setup guide:</strong> Create a Slack app at{" "}
+                      <a
+                        href="https://api.slack.com/apps"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline"
+                      >
+                        api.slack.com/apps
+                      </a>
+                      . Add bot token scopes: <code className="rounded bg-blue-100 px-1">commands</code>,{" "}
+                      <code className="rounded bg-blue-100 px-1">chat:write</code>,{" "}
+                      <code className="rounded bg-blue-100 px-1">users:read</code>,{" "}
+                      <code className="rounded bg-blue-100 px-1">users:read.email</code>.
+                      Set slash command URLs to <code className="rounded bg-blue-100 px-1">your-domain/api/slack/commands</code>{" "}
+                      and interactivity URL to <code className="rounded bg-blue-100 px-1">your-domain/api/slack/interactions</code>.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-4">
+                  <p className="text-sm text-gray-600">
+                    The Slack bot isn&apos;t configured for this deployment. Credentials are set on the server by whoever hosts Coverboard — not from this screen.
+                  </p>
+                  {isAdmin ? (
+                    <p className="mt-2 text-xs text-gray-500">
+                      If your team self-hosts, point a developer or DevOps engineer at the Slack section in the project README.
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-xs text-gray-500">
+                      Ask an organisation admin if you need this enabled.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </CardContent>
@@ -1061,32 +1086,51 @@ export default function SettingsPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              <p className="text-sm text-gray-500">
-                To enable the Jira integration, add these environment variables to your deployment:
-              </p>
-              <div className="rounded-lg bg-gray-50 p-3 font-mono text-xs text-gray-600 space-y-1">
-                <p>JIRA_CLIENT_ID=...</p>
-                <p>JIRA_CLIENT_SECRET=...</p>
-                <p>JIRA_REDIRECT_URI=https://your-domain/api/jira/callback</p>
-              </div>
-              <div className="rounded-lg bg-blue-50 p-3">
-                <p className="text-xs text-blue-700">
-                  <strong>Setup guide:</strong> Create an OAuth 2.0 (3LO) app at{" "}
-                  <a
-                    href="https://developer.atlassian.com/console/myapps/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline"
-                  >
-                    developer.atlassian.com
-                  </a>
-                  . Add scopes: <code className="rounded bg-blue-100 px-1">read:jira-work</code>,{" "}
-                  <code className="rounded bg-blue-100 px-1">write:jira-work</code>,{" "}
-                  <code className="rounded bg-blue-100 px-1">read:jira-user</code>,{" "}
-                  <code className="rounded bg-blue-100 px-1">read:me</code>,{" "}
-                  <code className="rounded bg-blue-100 px-1">offline_access</code>.
-                </p>
-              </div>
+              {SHOW_DEPLOYMENT_INTEGRATION_DOCS ? (
+                <>
+                  <p className="text-sm text-gray-500">
+                    To enable the Jira integration, add these environment variables to your deployment:
+                  </p>
+                  <div className="rounded-lg bg-gray-50 p-3 font-mono text-xs text-gray-600 space-y-1">
+                    <p>JIRA_CLIENT_ID=...</p>
+                    <p>JIRA_CLIENT_SECRET=...</p>
+                    <p>JIRA_REDIRECT_URI=https://your-domain/api/jira/callback</p>
+                  </div>
+                  <div className="rounded-lg bg-blue-50 p-3">
+                    <p className="text-xs text-blue-700">
+                      <strong>Setup guide:</strong> Create an OAuth 2.0 (3LO) app at{" "}
+                      <a
+                        href="https://developer.atlassian.com/console/myapps/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline"
+                      >
+                        developer.atlassian.com
+                      </a>
+                      . Add scopes: <code className="rounded bg-blue-100 px-1">read:jira-work</code>,{" "}
+                      <code className="rounded bg-blue-100 px-1">write:jira-work</code>,{" "}
+                      <code className="rounded bg-blue-100 px-1">read:jira-user</code>,{" "}
+                      <code className="rounded bg-blue-100 px-1">read:me</code>,{" "}
+                      <code className="rounded bg-blue-100 px-1">offline_access</code>.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-4">
+                  <p className="text-sm text-gray-600">
+                    Jira isn&apos;t configured for this deployment. OAuth credentials are set on the server by whoever hosts Coverboard — not from this screen.
+                  </p>
+                  {isAdmin ? (
+                    <p className="mt-2 text-xs text-gray-500">
+                      If your team self-hosts, point a developer or DevOps engineer at the Jira section in the project README.
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-xs text-gray-500">
+                      Ask an organisation admin if you need this enabled.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </CardContent>

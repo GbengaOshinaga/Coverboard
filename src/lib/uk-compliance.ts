@@ -19,14 +19,16 @@ export const BankHolidayRegion = {
 export type BankHolidayRegion =
   (typeof BankHolidayRegion)[keyof typeof BankHolidayRegion];
 
-// Statutory Sick Pay weekly rate for 2024/25 (as of 6 April 2024).
+// Statutory Sick Pay weekly rate for 2026/27 (as of 6 April 2026).
 // Update each April via HMRC guidance (https://www.gov.uk/employers-sick-pay).
-const DEFAULT_SSP_WEEKLY_RATE = 116.75;
-const DEFAULT_SMP_WEEKLY_RATE = 184.03;
-// Lower Earnings Limit for Class 1 NICs (2024/25 tax year). Employees below
+const DEFAULT_SSP_WEEKLY_RATE = 123.25;
+// Statutory Maternity Pay flat weekly rate for 2026/27 (as of 6 April 2026).
+// Update each April via HMRC guidance (https://www.gov.uk/maternity-pay-leave/pay).
+const DEFAULT_SMP_WEEKLY_RATE = 194.32;
+// Lower Earnings Limit for Class 1 NICs (2025/26 tax year). Employees below
 // this weekly average earnings threshold are not entitled to SSP.
 // Update each April via HMRC guidance.
-const DEFAULT_LEL_WEEKLY = 123;
+const DEFAULT_LEL_WEEKLY = 125;
 
 export const UK_SSP_WEEKLY_RATE = Number(
   process.env.SSP_WEEKLY_RATE ?? DEFAULT_SSP_WEEKLY_RATE
@@ -43,6 +45,13 @@ export const UK_LEL_WEEKLY = Number(
 );
 
 /**
+ * Standard full-time working hours per week used as the FTE denominator
+ * for variable-hours pro-rata calculations. Most UK employers use 37.5.
+ * Override per-organisation via `Organization.fullTimeHoursPerWeek`.
+ */
+export const FTE_STANDARD_HOURS_PER_WEEK = 37.5;
+
+/**
  * Maximum cumulative SSP payable per period of incapacity for work (PIW).
  * Statute caps SSP at 28 weeks — at 5 qualifying days per week that is 140
  * days, but the 28-week limit is a calendar limit, not a day limit, so we
@@ -57,22 +66,32 @@ export type UKContractInput = {
   employmentType: EmploymentType;
   daysWorkedPerWeek: number;
   weeklyHours: number[];
+  /** Override the FTE denominator (default: FTE_STANDARD_HOURS_PER_WEEK = 37.5). */
+  fullTimeHoursPerWeek?: number;
 };
 
-export function calculateVariableHoursFte(weeklyHours: number[]): number {
+export function calculateVariableHoursFte(
+  weeklyHours: number[],
+  fullTimeHoursPerWeek: number = FTE_STANDARD_HOURS_PER_WEEK
+): number {
   if (weeklyHours.length === 0) return 1;
   const recent52 = weeklyHours.slice(-52);
   const average = recent52.reduce((sum, h) => sum + h, 0) / recent52.length;
-  const fte = average / 37.5;
+  const fte = average / fullTimeHoursPerWeek;
   return Number(Math.max(0, Math.min(1, fte)).toFixed(3));
 }
 
+/**
+ * Pro-rated annual leave entitlement. Fractional days are rounded UP per the
+ * Working Time Regulations — employers must not round down.
+ */
 export function calculateUkProRatedAnnualLeave(input: UKContractInput): number {
+  const fteHours = input.fullTimeHoursPerWeek ?? FTE_STANDARD_HOURS_PER_WEEK;
   if (input.employmentType === EmploymentType.PART_TIME) {
-    return Number(((input.daysWorkedPerWeek / 5) * 28).toFixed(2));
+    return Math.ceil((input.daysWorkedPerWeek / 5) * 28);
   }
   if (input.employmentType === EmploymentType.VARIABLE_HOURS) {
-    return Number((calculateVariableHoursFte(input.weeklyHours) * 28).toFixed(2));
+    return Math.ceil(calculateVariableHoursFte(input.weeklyHours, fteHours) * 28);
   }
   return 28;
 }
@@ -144,7 +163,7 @@ export type SspEligibilityResult =
  * Gate an SSP calculation on the two statutory eligibility checks:
  *
  *   1. Average weekly earnings must be **at least** the Lower Earnings
- *      Limit (≥ £123/wk for 2024/25). Below the LEL → not eligible.
+ *      Limit (≥ £125/wk for 2025/26). Below the LEL → not eligible.
  *   2. Cumulative SSP paid in this PIW must be under the 28-week cap
  *      (28 × qualifyingDaysPerWeek; 140 days at a 5-day week).
  *
@@ -205,11 +224,165 @@ export function calculateEstimatedSspCost(
   return Number((daily * payableDays).toFixed(2));
 }
 
+// ─── Easter & Bank Holiday Algorithm ─────────────────────────────────────────
+
+/**
+ * Butcher's algorithm (Anonymous Gregorian) — returns Easter Sunday as a UTC
+ * midnight Date. Accurate for the proleptic Gregorian calendar from 1583.
+ */
+export function easterSunday(year: number): Date {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31); // 1-indexed
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+/** Add `days` to a UTC Date without mutating the input. */
+function utcAddDays(d: Date, days: number): Date {
+  const r = new Date(d);
+  r.setUTCDate(r.getUTCDate() + days);
+  return r;
+}
+
+/** First Monday on or after the 1st of the given month (1-indexed). */
+function firstMondayOfMonth(year: number, month: number): Date {
+  const d = new Date(Date.UTC(year, month - 1, 1));
+  const dow = d.getUTCDay(); // 0=Sun, 1=Mon…
+  const daysToMon = dow === 1 ? 0 : (8 - dow) % 7;
+  d.setUTCDate(1 + daysToMon);
+  return d;
+}
+
+/** Last Monday of the given month (1-indexed). */
+function lastMondayOfMonth(year: number, month: number): Date {
+  // Last day of month: month + 1, day 0
+  const last = new Date(Date.UTC(year, month, 0));
+  const dow = last.getUTCDay();
+  const back = dow === 1 ? 0 : (dow + 6) % 7;
+  last.setUTCDate(last.getUTCDate() - back);
+  return last;
+}
+
+/**
+ * Return the bank-holiday substitute date for a fixed calendar date.
+ * Saturday → add 2 (Monday), Sunday → add 1 (Monday).
+ */
+function substituteWeekend(year: number, month: number, day: number): Date {
+  const d = new Date(Date.UTC(year, month - 1, day));
+  const dow = d.getUTCDay();
+  if (dow === 6) d.setUTCDate(d.getUTCDate() + 2);
+  else if (dow === 0) d.setUTCDate(d.getUTCDate() + 1);
+  return d;
+}
+
+/**
+ * Christmas and Boxing Day substitutes for a given year.
+ * Dec 25 Sat → Christmas=Dec 27 Mon, Boxing=Dec 28 Tue
+ * Dec 25 Sun → Christmas=Dec 27 Tue, Boxing=Dec 26 Mon
+ * Dec 26 Sat (Dec 25 Fri) → Christmas=Dec 25, Boxing=Dec 28 Mon
+ * Otherwise standard dates.
+ */
+function christmasSubstitutes(year: number): { christmas: Date; boxing: Date } {
+  const dec25dow = new Date(Date.UTC(year, 11, 25)).getUTCDay();
+  if (dec25dow === 6) {
+    return {
+      christmas: new Date(Date.UTC(year, 11, 27)),
+      boxing: new Date(Date.UTC(year, 11, 28)),
+    };
+  }
+  if (dec25dow === 0) {
+    return {
+      christmas: new Date(Date.UTC(year, 11, 27)),
+      boxing: new Date(Date.UTC(year, 11, 26)),
+    };
+  }
+  if (dec25dow === 5) {
+    // Dec 26 (Boxing Day) falls on Saturday
+    return {
+      christmas: new Date(Date.UTC(year, 11, 25)),
+      boxing: new Date(Date.UTC(year, 11, 28)),
+    };
+  }
+  return {
+    christmas: new Date(Date.UTC(year, 11, 25)),
+    boxing: new Date(Date.UTC(year, 11, 26)),
+  };
+}
+
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
 type BankHolidayEntry = {
   name: string;
   date: string;
 };
 
+function computeEnglandWalesBankHolidays(year: number): BankHolidayEntry[] {
+  const easter = easterSunday(year);
+  const { christmas, boxing } = christmasSubstitutes(year);
+  return [
+    { name: "New Year's Day",        date: isoDate(substituteWeekend(year, 1, 1)) },
+    { name: "Good Friday",           date: isoDate(utcAddDays(easter, -2)) },
+    { name: "Easter Monday",         date: isoDate(utcAddDays(easter, 1)) },
+    { name: "Early May bank holiday",date: isoDate(firstMondayOfMonth(year, 5)) },
+    { name: "Spring bank holiday",   date: isoDate(lastMondayOfMonth(year, 5)) },
+    { name: "Summer bank holiday",   date: isoDate(lastMondayOfMonth(year, 8)) },
+    { name: "Christmas Day",         date: isoDate(christmas) },
+    { name: "Boxing Day",            date: isoDate(boxing) },
+  ];
+}
+
+function computeScotlandBankHolidays(year: number): BankHolidayEntry[] {
+  const easter = easterSunday(year);
+  const { christmas, boxing } = christmasSubstitutes(year);
+  return [
+    { name: "New Year's Day",        date: isoDate(substituteWeekend(year, 1, 1)) },
+    { name: "2nd January",           date: isoDate(substituteWeekend(year, 1, 2)) },
+    { name: "Good Friday",           date: isoDate(utcAddDays(easter, -2)) },
+    { name: "Early May bank holiday",date: isoDate(firstMondayOfMonth(year, 5)) },
+    { name: "Spring bank holiday",   date: isoDate(lastMondayOfMonth(year, 5)) },
+    { name: "Summer bank holiday",   date: isoDate(firstMondayOfMonth(year, 8)) },
+    { name: "St Andrew's Day",       date: isoDate(substituteWeekend(year, 11, 30)) },
+    { name: "Christmas Day",         date: isoDate(christmas) },
+    { name: "Boxing Day",            date: isoDate(boxing) },
+  ];
+}
+
+function computeNorthernIrelandBankHolidays(year: number): BankHolidayEntry[] {
+  const easter = easterSunday(year);
+  const { christmas, boxing } = christmasSubstitutes(year);
+  return [
+    { name: "New Year's Day",        date: isoDate(substituteWeekend(year, 1, 1)) },
+    { name: "St Patrick's Day",      date: isoDate(substituteWeekend(year, 3, 17)) },
+    { name: "Good Friday",           date: isoDate(utcAddDays(easter, -2)) },
+    { name: "Easter Monday",         date: isoDate(utcAddDays(easter, 1)) },
+    { name: "Early May bank holiday",date: isoDate(firstMondayOfMonth(year, 5)) },
+    { name: "Spring bank holiday",   date: isoDate(lastMondayOfMonth(year, 5)) },
+    { name: "Battle of the Boyne",   date: isoDate(substituteWeekend(year, 7, 12)) },
+    { name: "Summer bank holiday",   date: isoDate(lastMondayOfMonth(year, 8)) },
+    { name: "Christmas Day",         date: isoDate(christmas) },
+    { name: "Boxing Day",            date: isoDate(boxing) },
+  ];
+}
+
+/**
+ * Hardcoded table is authoritative for verified years (HMRC publishes
+ * confirmed dates). For other years the algorithm above is used. The table
+ * also captures one-off dates (e.g. Jubilee, Coronation) that the algorithm
+ * cannot predict.
+ */
 const UK_BANK_HOLIDAYS: Record<number, Record<BankHolidayRegion, BankHolidayEntry[]>> = {
   2026: {
     ENGLAND_WALES: [
@@ -285,8 +458,15 @@ const UK_BANK_HOLIDAYS: Record<number, Record<BankHolidayRegion, BankHolidayEntr
 
 export function getUkBankHolidaysForRegion(year: number, region: BankHolidayRegion): { name: string; date: Date; region: BankHolidayRegion }[] {
   const byYear = UK_BANK_HOLIDAYS[year];
-  if (!byYear) return [];
-  return byYear[region].map((h) => ({
+  const entries: BankHolidayEntry[] = byYear
+    ? byYear[region]
+    : region === "ENGLAND_WALES"
+      ? computeEnglandWalesBankHolidays(year)
+      : region === "SCOTLAND"
+        ? computeScotlandBankHolidays(year)
+        : computeNorthernIrelandBankHolidays(year);
+
+  return entries.map((h) => ({
     name: h.name,
     date: new Date(`${h.date}T00:00:00.000Z`),
     region,

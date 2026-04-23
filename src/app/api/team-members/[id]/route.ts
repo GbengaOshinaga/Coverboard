@@ -17,6 +17,53 @@ const updateSchema = z.object({
   countryCode: z.string().min(2).max(2).optional(),
 });
 
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const sessionUser = session.user as Record<string, unknown>;
+  const userRole = sessionUser.role as string;
+  const orgId = sessionUser.organizationId as string;
+
+  if (userRole !== "ADMIN" && userRole !== "MANAGER") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { id } = await params;
+  const member = await prisma.user.findFirst({
+    where: { id, organizationId: orgId },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      memberType: true,
+      employmentType: true,
+      daysWorkedPerWeek: true,
+      fteRatio: true,
+      qualifyingDaysPerWeek: true,
+      averageWeeklyEarnings: true,
+      rightToWorkVerified: true,
+      department: true,
+      countryCode: true,
+      serviceStartDate: true,
+      bradfordScore: true,
+      createdAt: true,
+    },
+  });
+
+  if (!member) {
+    return NextResponse.json({ error: "Member not found" }, { status: 404 });
+  }
+
+  return NextResponse.json(member);
+}
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }

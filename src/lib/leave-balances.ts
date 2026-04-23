@@ -55,10 +55,12 @@ export async function getUserLeaveBalances(
     select: {
       ukBankHolidayInclusive: true,
       ukBankHolidayRegion: true,
+      fullTimeHoursPerWeek: true,
     },
   });
   const ukBankHolidayInclusive = orgUk?.ukBankHolidayInclusive ?? true;
   const ukBankHolidayRegion = orgUk?.ukBankHolidayRegion ?? "ENGLAND_WALES";
+  const fullTimeHoursPerWeek = Number(orgUk?.fullTimeHoursPerWeek ?? 37.5);
 
   const yearStart = new Date(year, 0, 1);
   const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
@@ -123,16 +125,17 @@ export async function getUserLeaveBalances(
     let allowance = baseAllowance;
     let proRatedEntitlement: number | undefined;
 
-    if (user.countryCode === "GB" && lt.name === "Annual Leave") {
+    if (lt.applyProRata) {
       proRatedEntitlement = calculateUkProRatedAnnualLeave({
         employmentType: user.employmentType,
         daysWorkedPerWeek: user.daysWorkedPerWeek,
         weeklyHours: user.weeklyHours.map((h) => h.hoursWorked),
+        fullTimeHoursPerWeek,
       });
       allowance = proRatedEntitlement;
-      if (!ukBankHolidayInclusive) {
-        allowance += ukRegionalBankHolidayCount;
-      }
+    }
+    if (user.countryCode === "GB" && lt.name === "Annual Leave" && !ukBankHolidayInclusive) {
+      allowance += ukRegionalBankHolidayCount;
     }
 
     const carryOver = carryOverBalances.find((c) => c.leaveTypeId === lt.id);
