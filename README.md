@@ -4,20 +4,28 @@ Team leave management for small, distributed teams. See who's out, plan coverage
 
 Built for teams of 5–15 people, especially those spread across the UK, Africa, LATAM, and SEA where public holidays and statutory leave rules vary wildly. Includes full UK statutory compliance — SSP, maternity, paternity, shared parental leave, regional bank holidays, pro-rata entitlements, and Bradford Factor reporting.
 
-## Subscription plans
+## Subscription plans & billing
 
-Each organization has a **`plan`** on the `Organization` model: `STARTER`, `GROWTH`, `SCALE`, or `PRO` (see `SubscriptionPlan` in `prisma/schema.prisma`). Tier logic lives in **`src/lib/plans.ts`** (support tiers, audit trail access, admin limits, etc.). Pricing copy for the landing page is in **`src/config/pricing.ts`**.
+Coverboard bills through **Stripe** — monthly GBP subscriptions on four tiers with a **14-day free trial** on every new signup (no card required). Full implementation details, setup, webhook contract, lock-screen behaviour, and feature-gating reference are in **[`BILLING.md`](BILLING.md)**.
 
-| Tier | Examples of what unlocks |
-|------|---------------------------|
-| **Starter** | Core product; up to 2 admins (unless `maxAdminUsers` is changed) |
-| **Growth** | Unlimited admins; stronger UK reporting and compliance signals (see pricing config) |
-| **Scale** | Priority support targets on **Help**; absence analytics; UK compliance report pack; year-end carry-over tooling |
-| **Pro** | SLA-backed support; dedicated onboarding booking CTA; **audit trail** viewer and CSV export; custom leave policy editing in Settings |
+Organizations have a **`plan`** on the `Organization` model (`SubscriptionPlan` in `prisma/schema.prisma`):
 
-The demo seed organization is set to **Scale** so plan-gated UI can be exercised without manual DB edits. Switch a org to **Pro** in the database (or seed) to try the audit trail at **`/audit`**.
+| Plan | Monthly | What it unlocks |
+|------|---------|------------------|
+| **`TRIAL`** | £0 (14 days) | Full Pro feature set so users experience the product before deciding |
+| **`STARTER`** | £19 | Core leave management, up to 2 admins |
+| **`GROWTH`** | £49 | + Bradford Factor, pro-rata, SSP tracking, unlimited admins |
+| **`SCALE`** | £99 | + Parental tracker, holiday pay, carry-over, compliance reports, priority support |
+| **`PRO`** | £179 | + Audit trail, custom leave policies, GDPR data residency, API access |
+| **`LOCKED`** | — | Trial ended without a card (or subscription canceled). Full-page lock screen; only billing/profile/auth routes are reachable. |
 
-External API keys for third-party access were **not** implemented; product tiers may still mention future API access in marketing copy.
+Plan logic lives in:
+- **`src/lib/plans.ts`** — tier comparisons (`planAtLeast`, `hasAuditTrail`, `hasApiAccess`, etc.)
+- **`src/lib/planFeatures.ts`** — feature-flag map (`hasFeature`, `hasFeatureForEnum`, `minimumPlanFor`)
+- **`src/config/pricing.ts`** — landing page copy
+- **`src/config/stripePrices.ts`** — Stripe price IDs (env-overridable)
+
+The demo seed organization is set to **Scale** so plan-gated UI can be exercised without manual DB edits. Switch an org to **Pro** in the database (or seed) to try the audit trail at **`/audit`**.
 
 ## Features
 
@@ -148,6 +156,20 @@ SMP runs in two phases: **weeks 1–6 at 90% of Average Weekly Earnings**, then 
 ### Audit trail (Pro)
 
 **`/audit`** lists organization activity for **admins** on **Pro** plans. Entries are written through **`src/lib/audit.ts`** (`recordAudit`) from key API routes (leave requests, team members, leave types/policies, org settings, carry-over runs, onboarding completion). **`GET /api/audit-logs`** supports filters and cursor pagination; the page can **export CSV**.
+
+### Billing (Stripe)
+
+Stripe subscriptions with a **14-day free trial** on every signup — no card required to start, prompted when the trial ends, account **locks** (read-only, full-page overlay) if no card is added.
+
+- **Trial banner** — `src/components/layout/trial-banner.tsx` renders in every dashboard page for admins during the trial; colour escalates from blue → amber → red as the deadline approaches.
+- **Add-payment flow** — `/settings/billing/add-payment` uses Stripe Elements + SetupIntent. Card details never touch Coverboard's servers.
+- **Billing page** — `/settings/billing` shows current plan, status, next billing date, last 5 invoices (with Stripe PDF links), and cancel/reactivate (always `cancel_at_period_end`).
+- **Webhook** — `/api/webhooks/stripe` is the single source of truth for subscription state. Handles `trial_will_end`, `subscription.updated/deleted/paused`, and `invoice.payment_succeeded/failed`.
+- **Lock screen** — `src/middleware.ts` redirects `plan=LOCKED` orgs to `/locked` on every route except the billing/profile/auth allow-list. JWT carries `plan` and refreshes hourly.
+- **Feature gating** — `src/lib/planFeatures.ts` — `hasFeature(plan, feature)` for UI and `hasFeatureForEnum(plan, feature)` for API routes (takes the Prisma enum directly). `TRIAL` = Pro bundle, `LOCKED` = empty set.
+- **Seed script** — `npx tsx scripts/createStripeProducts.ts` creates the four products/prices in Stripe (idempotent).
+
+See **[`BILLING.md`](BILLING.md)** for the full runbook, webhook event-to-state-transition table, data model, and testing guidance.
 
 ## Tech Stack
 
@@ -349,6 +371,11 @@ src/
       settings/
         page.tsx                  Org settings, leave types, country policies, Slack/Jira
         profile/page.tsx          Profile, change password, email preferences
+        billing/
+          page.tsx                Current plan, status, invoices, cancel/reactivate
+          add-payment/            Stripe Elements card form + SetupIntent
+          change-plan/            Stubbed (email-driven)
+      locked/page.tsx             Full-page lock overlay for canceled/paused orgs
     api/
       auth/[...nextauth]/route.ts NextAuth handler
       auth/register/route.ts      Registration endpoint
@@ -378,6 +405,13 @@ src/
       reports/analytics/route.ts  Absence analytics
       carry-over/process/route.ts Year-end carry-over (admin)
       audit-logs/route.ts         Audit log listing (admin, Pro)
+      billing/
+        summary/route.ts          Plan, status, invoices
+        setup-intent/route.ts     Create SetupIntent for card entry
+        confirm-payment/route.ts  Attach payment method to customer + subscription
+        cancel/route.ts           Schedule cancel-at-period-end
+        reactivate/route.ts       Undo scheduled cancellation
+      webhooks/stripe/route.ts    Stripe webhook entry (raw body + signature verify)
       onboarding/complete/        Onboarding wizard completion
       overlap/route.ts            Overlap detection for date ranges
       slack/commands/route.ts     Slash command handler
@@ -395,10 +429,14 @@ src/
     onboarding/                   Multi-step onboarding wizard
     team/                         Member card + form
   lib/
-    auth.ts                       NextAuth configuration
+    auth.ts                       NextAuth configuration (stamps plan onto JWT)
     email.ts                      Resend client + sendEmail helper
     email-notifications.ts        High-level email dispatch functions
     email-templates.ts            HTML email templates
+    billing-emails.ts             Trial/payment/cancellation/welcome/pause emails
+    stripe.ts                     Stripe client singleton (fail-soft)
+    trial.ts                      computeTrialState() — days-left + banner tone
+    planFeatures.ts               Feature-flag map + hasFeature / hasFeatureForEnum
     jira.ts                       Jira OAuth token management, issue search, reassign
     leave-balances.ts             Balance calculation engine
     plans.ts                      Subscription plan helpers and feature gates
@@ -414,6 +452,10 @@ src/
 prisma/
   schema.prisma                   Database schema (see below)
   seed.ts                         Demo data seeder
+scripts/
+  createStripeProducts.ts         Seed Stripe products + prices (idempotent)
+src/middleware.ts                 Locked-account gate (redirects to /locked)
+BILLING.md                        Stripe integration, lifecycle, webhook runbook
 UK_COMPLIANCE.md                  UK rules, reporting, carry-over notes
 vercel.json                       Cron job configuration (weekly digest)
 ```
@@ -510,6 +552,17 @@ vercel.json                       Cron job configuration (weekly digest)
 | GET | `/api/slack/status` | Check Slack integration status |
 | POST | `/api/cron/weekly-digest` | Send weekly digest emails (cron-triggered) |
 
+### Billing (Stripe)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/billing/summary` | Current plan, status, trial/period dates, last 5 invoices with PDF links (Admin) |
+| POST | `/api/billing/setup-intent` | Create a Stripe SetupIntent for the add-card form (Admin) |
+| POST | `/api/billing/confirm-payment` | Attach a payment method to the customer + subscription (Admin) |
+| POST | `/api/billing/cancel` | Schedule cancellation at period end (Admin) |
+| POST | `/api/billing/reactivate` | Undo a scheduled cancellation (Admin) |
+| POST | `/api/webhooks/stripe` | Stripe webhook entry point (signature-verified; see `BILLING.md`) |
+
 ## Available Scripts
 
 ```bash
@@ -534,9 +587,11 @@ npm run db:studio    # Open Prisma Studio (database GUI)
 - [x] Onboarding wizard for new organizations
 - [x] Jira project coverage (flag, suggest, one-click reassign)
 - [x] Subscription tiers (`Organization.plan`) with plan-aware Help and limits
+- [x] Stripe billing: 14-day trials, signup, add-payment, webhooks, lock screen (see `BILLING.md`)
 - [x] UK compliance reporting, analytics, CSV exports, year-end carry-over processing
 - [x] UK 52-week holiday pay calculator + payroll export
 - [x] Custom leave types / per-country policies (admin CRUD) and audit trail (Pro)
+- [ ] Self-serve plan change UI (`/settings/billing/change-plan` is stubbed)
 - [ ] Public HTTP API with API keys (not implemented)
 - [ ] Advanced skill-based coverage planning
 - [ ] Multi-organization support (single user across orgs)
