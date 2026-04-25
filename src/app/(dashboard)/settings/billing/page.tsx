@@ -18,6 +18,9 @@ type BillingSummary = {
   cardAdded: boolean;
   cancelAtPeriodEnd: boolean;
   currentPeriodEnd: string | null;
+  deletionScheduledFor: string | null;
+  deletionReason: string | null;
+  trialExpiredGraceEndsAt: string | null;
   invoices: Array<{
     id: string;
     number: string | null;
@@ -81,6 +84,18 @@ export default function BillingPage() {
       refresh();
     } else {
       toast("Could not reactivate", "error");
+    }
+  }
+
+  async function handleCancelDeletion() {
+    setBusy(true);
+    const res = await fetch("/api/account/delete/cancel", { method: "POST" });
+    setBusy(false);
+    if (res.ok) {
+      toast("Deletion canceled — your data is safe", "success");
+      refresh();
+    } else {
+      toast("Could not cancel deletion", "error");
     }
   }
 
@@ -154,6 +169,26 @@ export default function BillingPage() {
             className="font-medium underline underline-offset-2"
           >
             Reactivate
+          </button>
+        </div>
+      )}
+
+      {summary.deletionScheduledFor && (
+        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+          <p className="font-semibold">
+            Your account is scheduled for permanent deletion on{" "}
+            {FMT.format(new Date(summary.deletionScheduledFor))}.
+          </p>
+          <p className="mt-1 text-red-800">
+            After that date, all team data, leave records, and billing history
+            are irrecoverably deleted.
+          </p>
+          <button
+            onClick={handleCancelDeletion}
+            disabled={busy}
+            className="mt-2 font-medium underline underline-offset-2"
+          >
+            Cancel deletion and keep my data
           </button>
         </div>
       )}
@@ -258,11 +293,29 @@ export default function BillingPage() {
         </CardContent>
       </Card>
 
+      <div className="mt-2 border-t border-gray-100 pt-6">
+        <h3 className="text-sm font-semibold text-gray-900">Danger zone</h3>
+        <p className="mt-1 text-xs text-gray-500">
+          Permanently delete your organization and all data. A 30-day grace
+          period applies before deletion runs.
+        </p>
+        <Link
+          href="/account/delete"
+          className="mt-3 inline-flex rounded-md border border-red-200 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+        >
+          Delete account and all data →
+        </Link>
+      </div>
+
       <Dialog open={confirming} onClose={() => setConfirming(false)} title="Cancel subscription">
         <p className="text-sm text-gray-700">
-          Are you sure you want to cancel? Your access will continue until{" "}
+          Your access will continue until{" "}
           <strong>{periodEnd ?? "your current period end"}</strong>, then your
           account will be locked.
+        </p>
+        <p className="mt-3 text-sm text-red-700">
+          <strong>Important:</strong> All your data will be permanently deleted
+          30 days after that date unless you reactivate.
         </p>
         <div className="mt-4 flex justify-end gap-2">
           <button

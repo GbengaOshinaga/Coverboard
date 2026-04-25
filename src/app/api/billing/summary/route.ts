@@ -29,6 +29,9 @@ export async function GET() {
       cardAdded: true,
       cancelAtPeriodEnd: true,
       currentPeriodEnd: true,
+      deletionScheduledFor: true,
+      deletionReason: true,
+      trialExpiredGraceEndsAt: true,
     },
   });
 
@@ -79,6 +82,9 @@ export async function GET() {
     cardAdded: org.cardAdded,
     cancelAtPeriodEnd: org.cancelAtPeriodEnd,
     currentPeriodEnd: org.currentPeriodEnd,
+    deletionScheduledFor: org.deletionScheduledFor,
+    deletionReason: org.deletionReason,
+    trialExpiredGraceEndsAt: org.trialExpiredGraceEndsAt,
     invoices,
   });
 }

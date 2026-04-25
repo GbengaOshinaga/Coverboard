@@ -64,15 +64,80 @@ export async function emailWelcomeActive({ to, planName }: { to: string; planNam
   });
 }
 
-export async function emailAccountPaused({ to }: { to: string }) {
+export async function emailAccountPaused({ to, daysUntilDeletion }: { to: string; daysUntilDeletion: number }) {
   await sendEmail({
     to,
     subject: "Your Coverboard trial has ended",
     html: base(`
       <h2 style="margin:0 0 12px">Your trial has ended</h2>
-      <p>Your account is paused. Add your payment details to reactivate — your
-      data is safe and nothing has been deleted.</p>
+      <p>Your account is paused. You have <strong>${daysUntilDeletion} days</strong>
+      to add payment details before your data is permanently deleted.</p>
       <p><a href="${APP_URL}/settings/billing/add-payment" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Reactivate now</a></p>
+    `),
+  });
+}
+
+export async function emailDeletionScheduled({
+  to,
+  scheduledFor,
+  reason,
+}: {
+  to: string;
+  scheduledFor: Date;
+  reason: string;
+}) {
+  const when = scheduledFor.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+  await sendEmail({
+    to,
+    subject: "Your Coverboard data will be deleted on " + when,
+    html: base(`
+      <h2 style="margin:0 0 12px">Data deletion scheduled</h2>
+      <p>Your Coverboard account and all associated data will be permanently
+      deleted on <strong>${when}</strong> (${reason.replace(/_/g, " ")}).</p>
+      <p>To keep your data, reactivate your subscription before that date.
+      Once deletion runs, recovery is not possible.</p>
+      <p><a href="${APP_URL}/settings/billing/add-payment" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Reactivate and keep my data</a></p>
+    `),
+  });
+}
+
+export async function emailDeletionCanceled({ to }: { to: string }) {
+  await sendEmail({
+    to,
+    subject: "Your Coverboard data deletion was canceled",
+    html: base(`
+      <h2 style="margin:0 0 12px">Deletion canceled</h2>
+      <p>Your scheduled data deletion has been canceled and your account is
+      fully active. Welcome back.</p>
+      <p><a href="${APP_URL}/dashboard" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Open dashboard</a></p>
+    `),
+  });
+}
+
+export async function emailDeletionComplete({
+  to,
+  organizationName,
+}: {
+  to: string;
+  organizationName: string;
+}) {
+  await sendEmail({
+    to,
+    subject: "Your Coverboard data has been deleted",
+    html: base(`
+      <h2 style="margin:0 0 12px">Data deletion complete</h2>
+      <p>The Coverboard account for <strong>${organizationName}</strong> has
+      been permanently deleted. All team data, leave records, and billing
+      information have been removed in line with GDPR requirements.</p>
+      <p>A record of this deletion is retained for regulatory purposes but no
+      user or business data remains.</p>
+      <p>If you&apos;d like to start again, you can create a new account at any
+      time.</p>
+      <p><a href="${APP_URL}/signup" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Create a new account</a></p>
     `),
   });
 }

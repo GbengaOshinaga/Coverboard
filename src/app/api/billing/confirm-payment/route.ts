@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
+import { cancelScheduledDeletion } from "@/lib/deletionScheduler";
+import { emailDeletionCanceled } from "@/lib/billing-emails";
 import { z } from "zod";
 
 const schema = z.object({
@@ -58,10 +60,23 @@ export async function POST(request: Request) {
 
     await prisma.organization.update({
       where: { id: orgId },
-      data: { cardAdded: true },
+      data: { cardAdded: true, trialExpiredGraceEndsAt: null },
     });
 
-    return NextResponse.json({ success: true });
+    const { wasScheduled } = await cancelScheduledDeletion({
+      organizationId: orgId,
+      canceledBy: (sessionUser.email as string) ?? "add-payment",
+    });
+    if (wasScheduled) {
+      const adminEmail = sessionUser.email as string | undefined;
+      if (adminEmail) {
+        await emailDeletionCanceled({ to: adminEmail }).catch((err) =>
+          console.error("Deletion-canceled email failed:", err)
+        );
+      }
+    }
+
+    return NextResponse.json({ success: true, deletionCanceled: wasScheduled });
   } catch (err: unknown) {
     const code = (err as { code?: string; message?: string })?.code;
     const message = (err as { message?: string })?.message ?? "Unknown error";

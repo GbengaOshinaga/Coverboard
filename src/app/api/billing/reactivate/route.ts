@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
+import { cancelScheduledDeletion } from "@/lib/deletionScheduler";
+import { emailDeletionCanceled } from "@/lib/billing-emails";
 
 export async function POST() {
   const session = await getServerSession(authOptions);
@@ -29,7 +31,21 @@ export async function POST() {
       where: { id: orgId },
       data: { cancelAtPeriodEnd: false },
     });
-    return NextResponse.json({ success: true });
+
+    const { wasScheduled } = await cancelScheduledDeletion({
+      organizationId: orgId,
+      canceledBy: (sessionUser.email as string) ?? "billing.reactivate",
+    });
+    if (wasScheduled) {
+      const adminEmail = sessionUser.email as string | undefined;
+      if (adminEmail) {
+        await emailDeletionCanceled({ to: adminEmail }).catch((err) =>
+          console.error("Deletion-canceled email failed:", err)
+        );
+      }
+    }
+
+    return NextResponse.json({ success: true, deletionCanceled: wasScheduled });
   } catch (err) {
     console.error("Reactivate subscription failed:", err);
     return NextResponse.json({ error: "Could not reactivate subscription" }, { status: 500 });

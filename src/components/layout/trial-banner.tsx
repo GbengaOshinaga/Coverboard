@@ -53,7 +53,19 @@ export function TrialBanner({
     <div
       className={`flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2 text-sm ${bg}`}
     >
-      <span>{label}</span>
+      <span>
+        {label}{" "}
+        <span className="opacity-80">
+          Your data is always safe —{" "}
+          <Link
+            href="/settings/billing"
+            className={`underline underline-offset-2 ${linkCls}`}
+          >
+            learn about data deletion
+          </Link>
+          .
+        </span>
+      </span>
       <Link
         href="/settings/billing/add-payment"
         className={`font-medium underline underline-offset-2 ${linkCls}`}

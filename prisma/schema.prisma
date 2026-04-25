@@ -82,6 +82,11 @@ model Organization {
   cardAdded              Boolean @default(false)
   cancelAtPeriodEnd      Boolean @default(false)
   currentPeriodEnd       DateTime?
+  trialExpiredGraceEndsAt DateTime?
+  deletionRequestedAt    DateTime?
+  deletionScheduledFor   DateTime?
+  deletionConfirmedAt    DateTime?
+  deletionReason         String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
@@ -91,6 +96,9 @@ model Organization {
   bankHolidays     BankHoliday[]
   jiraIntegration  JiraIntegration?
   jiraUserMappings JiraUserMapping[]
+
+  @@index([deletionScheduledFor])
+  @@index([trialExpiredGraceEndsAt])
 }
 
 model User {
@@ -337,4 +345,19 @@ model AuditLog {
   @@index([organizationId, createdAt])
   @@index([organizationId, action])
   @@index([organizationId, resource])
+}
+
+model DataDeletionAudit {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  organizationName   String
+  adminEmail         String?
+  event              String
+  reason             String?
+  scheduledFor       DateTime?
+  metadata           Json?
+  createdAt          DateTime @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([event, createdAt])
 }

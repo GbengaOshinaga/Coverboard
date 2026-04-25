@@ -26,7 +26,15 @@ import {
   emailSubscriptionCanceled,
   emailWelcomeActive,
   emailAccountPaused,
+  emailDeletionScheduled,
+  emailDeletionCanceled,
 } from "@/lib/billing-emails";
+import {
+  scheduleDeletion,
+  cancelScheduledDeletion,
+  setTrialGracePeriod,
+  DELETION_GRACE_DAYS,
+} from "@/lib/deletionScheduler";
 
 export const runtime = "nodejs";
 // App Router does not parse the body when we read it as text, so signature
@@ -96,8 +104,20 @@ async function handleSubscriptionDeleted(sub: Stripe.Subscription) {
     },
   });
 
+  const { scheduledFor } = await scheduleDeletion({
+    organizationId: org.id,
+    reason: "subscription_canceled",
+  });
+
   const adminEmail = org.users[0]?.email;
-  if (adminEmail) await emailSubscriptionCanceled({ to: adminEmail });
+  if (adminEmail) {
+    await emailSubscriptionCanceled({ to: adminEmail });
+    await emailDeletionScheduled({
+      to: adminEmail,
+      scheduledFor,
+      reason: "subscription_canceled",
+    });
+  }
 }
 
 async function handleSubscriptionPaused(sub: Stripe.Subscription) {
@@ -112,8 +132,12 @@ async function handleSubscriptionPaused(sub: Stripe.Subscription) {
     },
   });
 
+  await setTrialGracePeriod({ organizationId: org.id });
+
   const adminEmail = org.users[0]?.email;
-  if (adminEmail) await emailAccountPaused({ to: adminEmail });
+  if (adminEmail) {
+    await emailAccountPaused({ to: adminEmail, daysUntilDeletion: DELETION_GRACE_DAYS });
+  }
 }
 
 async function handleTrialWillEnd(sub: Stripe.Subscription) {
@@ -145,13 +169,22 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
       subscriptionStatus: "active",
       cardAdded: true,
       plan: planKey ? PLAN_KEY_TO_ENUM[planKey] : org.plan,
+      trialExpiredGraceEndsAt: null,
     },
   });
 
+  const { wasScheduled } = await cancelScheduledDeletion({
+    organizationId: org.id,
+    canceledBy: "invoice.payment_succeeded",
+  });
+
+  const adminEmail = org.users[0]?.email;
   if (wasTrialing) {
-    const adminEmail = org.users[0]?.email;
     const planName = planKey ? PLAN_DISPLAY_NAME[planKey] : "Coverboard";
     if (adminEmail) await emailWelcomeActive({ to: adminEmail, planName });
+  }
+  if (wasScheduled && adminEmail) {
+    await emailDeletionCanceled({ to: adminEmail });
   }
 }
 

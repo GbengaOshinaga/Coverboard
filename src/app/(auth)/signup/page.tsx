@@ -93,6 +93,10 @@ function SignupInner() {
           <p className="mt-1 text-sm text-gray-500">
             14-day free trial. No card required.
           </p>
+          <p className="mt-1 text-xs text-gray-400">
+            If you don&apos;t subscribe, all data is permanently deleted within
+            30 days.
+          </p>
         </div>
 
         <Card>
