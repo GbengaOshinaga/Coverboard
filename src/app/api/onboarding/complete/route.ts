@@ -16,6 +16,8 @@ import { z } from "zod";
 
 const onboardingSchema = z.object({
   countries: z.array(z.string().length(2)).min(1, "Select at least one country"),
+  industry: z.string().trim().max(80).optional(),
+  regionsEnabled: z.boolean().optional(),
   invites: z.array(
     z.object({
       name: z.string().min(1),
@@ -50,7 +52,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { countries, invites } = parsed.data;
+    const { countries, industry, regionsEnabled, invites } = parsed.data;
     const currentYear = new Date().getFullYear();
 
     // Update the admin user's country to the first selected country
@@ -245,7 +247,11 @@ export async function POST(request: Request) {
     // Mark onboarding as complete
     await prisma.organization.update({
       where: { id: orgId },
-      data: { onboardingCompleted: true },
+      data: {
+        onboardingCompleted: true,
+        ...(industry !== undefined ? { industry: industry || null } : {}),
+        ...(regionsEnabled !== undefined ? { regionsEnabled } : {}),
+      },
     });
 
     recordAudit({
@@ -258,7 +264,11 @@ export async function POST(request: Request) {
         email: session.user.email ?? null,
         role: (session.user as Record<string, unknown>).role as string,
       },
-      metadata: { countries: parsed.data.countries },
+      metadata: {
+        countries: parsed.data.countries,
+        industry: industry ?? null,
+        regionsEnabled: regionsEnabled ?? false,
+      },
       context: requestAuditContext(request),
     });
 

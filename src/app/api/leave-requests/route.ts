@@ -70,6 +70,7 @@ export async function GET(request: Request) {
           email: true,
           countryCode: true,
           memberType: true,
+          regionId: true,
         },
       },
       leaveType: {

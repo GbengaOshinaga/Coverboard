@@ -13,6 +13,8 @@ const updateSchema = z.object({
   ukCarryOverExpiryMonth: z.number().int().min(1).max(12).optional(),
   ukCarryOverExpiryDay: z.number().int().min(1).max(31).optional(),
   dataResidency: z.enum(["UK", "EU", "US"]).optional(),
+  regionsEnabled: z.boolean().optional(),
+  industry: z.string().max(80).nullable().optional(),
 });
 
 export async function GET() {
@@ -34,6 +36,8 @@ export async function GET() {
       dataResidency: true,
       maxAdminUsers: true,
       plan: true,
+      regionsEnabled: true,
+      industry: true,
     },
   });
   return NextResponse.json(settings);
@@ -76,6 +80,8 @@ export async function PATCH(request: Request) {
       dataResidency: true,
       maxAdminUsers: true,
       plan: true,
+      regionsEnabled: true,
+      industry: true,
     },
   });
 

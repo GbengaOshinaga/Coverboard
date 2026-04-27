@@ -6,12 +6,27 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Dialog } from "@/components/ui/dialog";
+import { Select } from "@/components/ui/select";
 import {
   COUNTRY_POLICIES,
   getDefaultLeaveTypes,
   getCountryPolicies,
 } from "@/lib/country-policies";
 import { Check, Plus, Trash2, ArrowRight, ArrowLeft, Globe, BookOpen, Users, Upload } from "lucide-react";
+
+const INDUSTRY_OPTIONS = [
+  { value: "", label: "Select an industry (optional)" },
+  { value: "HEALTHCARE", label: "Healthcare" },
+  { value: "EDUCATION", label: "Education" },
+  { value: "TECHNOLOGY", label: "Technology" },
+  { value: "FINANCE", label: "Finance" },
+  { value: "RETAIL", label: "Retail" },
+  { value: "HOSPITALITY", label: "Hospitality" },
+  { value: "MANUFACTURING", label: "Manufacturing" },
+  { value: "PROFESSIONAL_SERVICES", label: "Professional services" },
+  { value: "OTHER", label: "Other" },
+];
 
 type Invite = { name: string; email: string; countryCode: string };
 
@@ -25,9 +40,21 @@ export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
+  const [industry, setIndustry] = useState("");
+  const [regionsPromptOpen, setRegionsPromptOpen] = useState(false);
+  const [regionsPromptAnswered, setRegionsPromptAnswered] = useState(false);
+  const [enableRegions, setEnableRegions] = useState(false);
   const [invites, setInvites] = useState<Invite[]>([{ name: "", email: "", countryCode: "" }]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  function continueFromCountries() {
+    if (industry === "HEALTHCARE" && !regionsPromptAnswered) {
+      setRegionsPromptOpen(true);
+      return;
+    }
+    setStep(1);
+  }
 
   // Derived data
   const leaveTypes = useMemo(
@@ -78,6 +105,8 @@ export default function OnboardingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           countries: selectedCountries,
+          industry: industry || undefined,
+          regionsEnabled: enableRegions,
           invites: validInvites.length > 0 ? validInvites : undefined,
         }),
       });
@@ -186,9 +215,22 @@ export default function OnboardingPage() {
                 );
               })}
             </div>
+            <div className="mt-6">
+              <Select
+                id="industry"
+                label="Industry (optional)"
+                value={industry}
+                onChange={(e) => setIndustry(e.target.value)}
+                options={INDUSTRY_OPTIONS}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Helps us tailor features to your team. You can change this later.
+              </p>
+            </div>
+
             <div className="mt-6 flex justify-end">
               <Button
-                onClick={() => setStep(1)}
+                onClick={continueFromCountries}
                 disabled={selectedCountries.length === 0}
               >
                 Continue
@@ -198,6 +240,49 @@ export default function OnboardingPage() {
           </CardContent>
         </Card>
       )}
+
+      <Dialog
+        open={regionsPromptOpen}
+        onClose={() => {
+          setRegionsPromptOpen(false);
+          setRegionsPromptAnswered(true);
+          setStep(1);
+        }}
+        title="Enable regional workforce management?"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            It looks like you&apos;re in healthcare. Would you like to enable
+            regional workforce management? This helps you track cover levels
+            when staff take leave.
+          </p>
+          <div className="flex flex-wrap items-center gap-3 pt-2">
+            <Button
+              type="button"
+              onClick={() => {
+                setEnableRegions(true);
+                setRegionsPromptAnswered(true);
+                setRegionsPromptOpen(false);
+                setStep(1);
+              }}
+            >
+              Yes, enable regions
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setEnableRegions(false);
+                setRegionsPromptAnswered(true);
+                setRegionsPromptOpen(false);
+                setStep(1);
+              }}
+            >
+              Not right now
+            </Button>
+          </div>
+        </div>
+      </Dialog>
 
       {/* Step 2: Review leave policies */}
       {step === 1 && (

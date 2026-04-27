@@ -12,7 +12,7 @@ import {
   format,
   isSameDay,
 } from "date-fns";
-import { DayCell, type CalendarEvent, type HolidayEvent } from "./day-cell";
+import { DayCell, type CalendarEvent, type HolidayEvent, type CoverIndicator } from "./day-cell";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 type LeaveData = {
@@ -30,6 +30,14 @@ type HolidayData = {
   countryCode: string;
 };
 
+type DailyCoverInput = {
+  date: string;
+  available: number;
+  required: number;
+  isWeekend: boolean;
+  isBankHoliday: boolean;
+};
+
 const WEEKDAYS_FULL = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const WEEKDAYS_SHORT = ["S", "M", "T", "W", "T", "F", "S"];
 
@@ -37,12 +45,14 @@ export function MonthView({
   currentDate,
   leaves,
   holidays,
+  coverByDate,
   onPrevMonth,
   onNextMonth,
 }: {
   currentDate: Date;
   leaves: LeaveData[];
   holidays: HolidayData[];
+  coverByDate?: Map<string, DailyCoverInput>;
   onPrevMonth: () => void;
   onNextMonth: () => void;
 }) {
@@ -81,6 +91,19 @@ export function MonthView({
         name: h.name,
         countryCode: h.countryCode,
       }));
+  }
+
+  function getCoverForDay(day: Date): CoverIndicator | undefined {
+    if (!coverByDate) return undefined;
+    const key = format(day, "yyyy-MM-dd");
+    const c = coverByDate.get(key);
+    if (!c) return undefined;
+    if (c.isWeekend || c.isBankHoliday) return undefined;
+    return {
+      ok: c.available >= c.required,
+      available: c.available,
+      required: c.required,
+    };
   }
 
   return (
@@ -136,6 +159,7 @@ export function MonthView({
                 isToday={isToday(day)}
                 events={getEventsForDay(day)}
                 holidays={getHolidaysForDay(day)}
+                cover={getCoverForDay(day)}
               />
             ))}
           </div>

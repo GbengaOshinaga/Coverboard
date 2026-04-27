@@ -11,6 +11,7 @@ export const AUDIT_ACTIONS = [
   "leave_request.cancelled",
   "leave_request.kit_days_updated",
   "leave_request.ssp_cap_reached",
+  "leave_request.cover_overridden",
   "team_member.created",
   "team_member.updated",
   "team_member.deleted",

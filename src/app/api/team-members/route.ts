@@ -29,6 +29,10 @@ export async function GET() {
       rightToWorkVerified: true,
       department: true,
       countryCode: true,
+      regionId: true,
+      region: {
+        select: { id: true, name: true, color: true, isActive: true },
+      },
       createdAt: true,
       _count: {
         select: {

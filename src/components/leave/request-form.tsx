@@ -8,6 +8,7 @@ import { Select } from "@/components/ui/select";
 import { OverlapWarning } from "./overlap-warning";
 import { BalanceIndicator } from "./balance-indicator";
 import { CoverageWarning } from "./coverage-warning";
+import { RegionalCoverWarning } from "./regional-cover-warning";
 import { countWeekdays } from "@/lib/utils";
 
 type LeaveType = {
@@ -226,6 +227,15 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
           userId={currentUserId}
           startDate={new Date(startDate).toISOString()}
           endDate={new Date(endDate).toISOString()}
+        />
+      )}
+
+      {/* Regional minimum-cover warning */}
+      {startDate && endDate && (
+        <RegionalCoverWarning
+          startDate={startDate}
+          endDate={endDate}
+          userId={currentUserId}
         />
       )}
 

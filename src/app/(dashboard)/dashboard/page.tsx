@@ -6,6 +6,7 @@ import { getUserLeaveBalances } from "@/lib/leave-balances";
 import { WhoIsOut } from "@/components/dashboard/who-is-out";
 import { UpcomingAbsences } from "@/components/dashboard/upcoming-absences";
 import { LeaveBalances } from "@/components/dashboard/leave-balances";
+import { RegionCoverWidget } from "@/components/dashboard/region-cover-widget";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, CalendarDays, Clock, AlertTriangle } from "lucide-react";
 
@@ -162,6 +163,8 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       )}
+
+      <RegionCoverWidget organizationId={orgId} today={today} />
 
       {/* Main content */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

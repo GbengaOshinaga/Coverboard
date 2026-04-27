@@ -60,35 +60,37 @@ enum SubscriptionPlan {
 }
 
 model Organization {
-  id                  String   @id @default(cuid())
-  name                String
-  slug                String   @unique
-  onboardingCompleted Boolean  @default(false)
-  ukBankHolidayInclusive Boolean @default(true)
-  ukBankHolidayRegion    BankHolidayRegion @default(ENGLAND_WALES)
-  ukCarryOverEnabled     Boolean @default(false)
-  ukCarryOverMax         Int @default(0)
-  ukCarryOverExpiryMonth Int @default(3)
-  ukCarryOverExpiryDay   Int @default(31)
-  dataResidency          DataResidency @default(EU)
-  maxAdminUsers          Int @default(2)
-  plan                   SubscriptionPlan @default(TRIAL)
-  fullTimeHoursPerWeek   Decimal @default(37.5) @db.Decimal(4, 1)
-  stripeCustomerId       String? @unique
-  stripeSubscriptionId   String? @unique
-  stripePriceId          String?
-  subscriptionStatus     String?
-  trialEndsAt            DateTime?
-  cardAdded              Boolean @default(false)
-  cancelAtPeriodEnd      Boolean @default(false)
-  currentPeriodEnd       DateTime?
+  id                      String            @id @default(cuid())
+  name                    String
+  slug                    String            @unique
+  onboardingCompleted     Boolean           @default(false)
+  ukBankHolidayInclusive  Boolean           @default(true)
+  ukBankHolidayRegion     BankHolidayRegion @default(ENGLAND_WALES)
+  ukCarryOverEnabled      Boolean           @default(false)
+  ukCarryOverMax          Int               @default(0)
+  ukCarryOverExpiryMonth  Int               @default(3)
+  ukCarryOverExpiryDay    Int               @default(31)
+  dataResidency           DataResidency     @default(EU)
+  maxAdminUsers           Int               @default(2)
+  plan                    SubscriptionPlan  @default(TRIAL)
+  fullTimeHoursPerWeek    Decimal           @default(37.5) @db.Decimal(4, 1)
+  regionsEnabled          Boolean           @default(false)
+  industry                String?
+  stripeCustomerId        String?           @unique
+  stripeSubscriptionId    String?           @unique
+  stripePriceId           String?
+  subscriptionStatus      String?
+  trialEndsAt             DateTime?
+  cardAdded               Boolean           @default(false)
+  cancelAtPeriodEnd       Boolean           @default(false)
+  currentPeriodEnd        DateTime?
   trialExpiredGraceEndsAt DateTime?
-  deletionRequestedAt    DateTime?
-  deletionScheduledFor   DateTime?
-  deletionConfirmedAt    DateTime?
-  deletionReason         String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  deletionRequestedAt     DateTime?
+  deletionScheduledFor    DateTime?
+  deletionConfirmedAt     DateTime?
+  deletionReason          String?
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
 
   users            User[]
   leaveTypes       LeaveType[]
@@ -96,66 +98,74 @@ model Organization {
   bankHolidays     BankHoliday[]
   jiraIntegration  JiraIntegration?
   jiraUserMappings JiraUserMapping[]
+  regions          Region[]
 
   @@index([deletionScheduledFor])
   @@index([trialExpiredGraceEndsAt])
 }
 
 model User {
-  id             String     @id @default(cuid())
-  email          String     @unique
-  name           String
-  passwordHash   String
-  role           Role       @default(MEMBER)
-  memberType     MemberType @default(EMPLOYEE)
-  employmentType EmploymentType @default(FULL_TIME)
-  daysWorkedPerWeek Float @default(5)
-  fteRatio       Float @default(1)
-  qualifyingDaysPerWeek Int @default(5)
-  averageWeeklyEarnings Decimal? @db.Decimal(8, 2)
-  bradfordScore  Float @default(0)
-  countryCode    String     @default("NG")
-  rightToWorkVerified Boolean?
-  department     String?
-  serviceStartDate DateTime?
-  ukParentalLeaveChildCount Int @default(0)
-  digestOptOut   Boolean    @default(false)
-  organizationId String
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  id                        String         @id @default(cuid())
+  email                     String         @unique
+  name                      String
+  passwordHash              String
+  role                      Role           @default(MEMBER)
+  memberType                MemberType     @default(EMPLOYEE)
+  employmentType            EmploymentType @default(FULL_TIME)
+  daysWorkedPerWeek         Float          @default(5)
+  fteRatio                  Float          @default(1)
+  qualifyingDaysPerWeek     Int            @default(5)
+  averageWeeklyEarnings     Decimal?       @db.Decimal(8, 2)
+  bradfordScore             Float          @default(0)
+  countryCode               String         @default("NG")
+  rightToWorkVerified       Boolean?
+  department                String?
+  serviceStartDate          DateTime?
+  ukParentalLeaveChildCount Int            @default(0)
+  digestOptOut              Boolean        @default(false)
+  organizationId            String
+  regionId                  String?
+  createdAt                 DateTime       @default(now())
+  updatedAt                 DateTime       @updatedAt
 
-  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  leaveRequests       LeaveRequest[]       @relation("UserLeaveRequests")
-
-  @@index([organizationId, countryCode])
-  reviewedLeaves      LeaveRequest[]       @relation("ReviewerLeaveRequests")
+  organization        Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  region              Region?                 @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  leaveRequests       LeaveRequest[]          @relation("UserLeaveRequests")
+  reviewedLeaves      LeaveRequest[]          @relation("ReviewerLeaveRequests")
   passwordResetTokens PasswordResetToken[]
   jiraUserMapping     JiraUserMapping?
-  jiraConnections     JiraIntegration[]    @relation("JiraConnectedBy")
+  jiraConnections     JiraIntegration[]       @relation("JiraConnectedBy")
   weeklyHours         UserWeeklyHours[]
   carryOverBalances   LeaveCarryOverBalance[]
   weeklyEarnings      WeeklyEarning[]
+  regionHistory       UserRegionHistory[]     @relation("UserRegionHistorySubject")
+  regionChangesMade   UserRegionHistory[]     @relation("UserRegionHistoryActor")
+  coverOverrides      LeaveRequest[]          @relation("CoverOverrideBy")
+
+  @@index([organizationId, countryCode])
+  @@index([regionId])
+  @@index([organizationId, regionId])
 }
 
 model LeaveType {
-  id             String   @id @default(cuid())
-  name           String
-  color          String
-  isPaid         Boolean  @default(true)
-  category       LeaveCategory @default(PAID)
-  defaultDays    Int
-  requiresEvidence Boolean @default(false)
-  minNoticeDays  Int @default(0)
-  durationLogic  String?
-  countryCode    String?
-  applyProRata   Boolean @default(false)
-  organizationId String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id               String        @id @default(cuid())
+  name             String
+  color            String
+  isPaid           Boolean       @default(true)
+  category         LeaveCategory @default(PAID)
+  defaultDays      Int
+  requiresEvidence Boolean       @default(false)
+  minNoticeDays    Int           @default(0)
+  durationLogic    String?
+  countryCode      String?
+  applyProRata     Boolean       @default(false)
+  organizationId   String
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
-  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  leaveRequests LeaveRequest[]
-  leavePolicies LeavePolicy[]
+  organization      Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leaveRequests     LeaveRequest[]
+  leavePolicies     LeavePolicy[]
   carryOverBalances LeaveCarryOverBalance[]
 
   @@unique([name, organizationId])
@@ -176,58 +186,63 @@ model LeavePolicy {
 }
 
 model LeaveRequest {
-  id           String      @id @default(cuid())
-  startDate    DateTime
-  endDate      DateTime
-  status       LeaveStatus @default(PENDING)
-  note         String?
-  userId       String
-  leaveTypeId  String
-  reviewedById String?
-  reviewedAt   DateTime?
-  evidenceProvided Boolean @default(false)
-  kitDaysUsed Int @default(0)
-  splitDaysUsed Int @default(0)
-  sicknessNote String?
-  childBirthDate DateTime? @db.Date
-  splCurtailmentConfirmed Boolean @default(false)
-  dailyHolidayPayRate Decimal? @db.Decimal(10, 2)
-  sspDaysPaid Int @default(0)
-  sspLimitReached Boolean @default(false)
-  smpAverageWeeklyEarnings Decimal? @db.Decimal(8, 2)
-  smpPhase1EndDate DateTime? @db.Date
-  smpPhase2EndDate DateTime? @db.Date
-  smpPhase1WeeklyRate Decimal? @db.Decimal(8, 2)
-  smpPhase2WeeklyRate Decimal? @db.Decimal(8, 2)
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id                       String      @id @default(cuid())
+  startDate                DateTime
+  endDate                  DateTime
+  status                   LeaveStatus @default(PENDING)
+  note                     String?
+  userId                   String
+  leaveTypeId              String
+  reviewedById             String?
+  reviewedAt               DateTime?
+  evidenceProvided         Boolean     @default(false)
+  kitDaysUsed              Int         @default(0)
+  splitDaysUsed            Int         @default(0)
+  sicknessNote             String?
+  childBirthDate           DateTime?   @db.Date
+  splCurtailmentConfirmed  Boolean     @default(false)
+  dailyHolidayPayRate      Decimal?    @db.Decimal(10, 2)
+  sspDaysPaid              Int         @default(0)
+  sspLimitReached          Boolean     @default(false)
+  smpAverageWeeklyEarnings Decimal?    @db.Decimal(8, 2)
+  smpPhase1EndDate         DateTime?   @db.Date
+  smpPhase2EndDate         DateTime?   @db.Date
+  smpPhase1WeeklyRate      Decimal?    @db.Decimal(8, 2)
+  smpPhase2WeeklyRate      Decimal?    @db.Decimal(8, 2)
+  coverOverride            Boolean     @default(false)
+  coverOverrideById        String?
+  coverOverrideAt          DateTime?
+  createdAt                DateTime    @default(now())
+  updatedAt                DateTime    @updatedAt
 
-  user       User      @relation("UserLeaveRequests", fields: [userId], references: [id], onDelete: Cascade)
-  leaveType  LeaveType @relation(fields: [leaveTypeId], references: [id])
-  reviewedBy User?     @relation("ReviewerLeaveRequests", fields: [reviewedById], references: [id])
+  user            User      @relation("UserLeaveRequests", fields: [userId], references: [id], onDelete: Cascade)
+  leaveType       LeaveType @relation(fields: [leaveTypeId], references: [id])
+  reviewedBy      User?     @relation("ReviewerLeaveRequests", fields: [reviewedById], references: [id])
+  coverOverrideBy User?     @relation("CoverOverrideBy", fields: [coverOverrideById], references: [id])
 
   @@index([userId, status])
   @@index([userId, leaveTypeId])
+  @@index([status, startDate, endDate])
 }
 
 model JiraIntegration {
-  id              String   @id @default(cuid())
-  cloudId         String
-  siteUrl         String
-  accessToken     String
-  refreshToken    String
-  tokenExpiresAt  DateTime
-  organizationId  String   @unique
+  id                String   @id @default(cuid())
+  cloudId           String
+  siteUrl           String
+  accessToken       String
+  refreshToken      String
+  tokenExpiresAt    DateTime
+  organizationId    String   @unique
   connectedByUserId String
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   connectedBy  User         @relation("JiraConnectedBy", fields: [connectedByUserId], references: [id])
 }
 
 model JiraUserMapping {
-  id             String @id @default(cuid())
+  id             String   @id @default(cuid())
   jiraAccountId  String
   jiraEmail      String
   userId         String   @unique
@@ -242,12 +257,12 @@ model JiraUserMapping {
 }
 
 model PasswordResetToken {
-  id        String   @id @default(cuid())
-  token     String   @unique
+  id        String    @id @default(cuid())
+  token     String    @unique
   expiresAt DateTime
   usedAt    DateTime?
   userId    String
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -267,14 +282,14 @@ model PublicHoliday {
 }
 
 model BankHoliday {
-  id             String   @id @default(cuid())
+  id             String            @id @default(cuid())
   name           String
   date           DateTime
   region         BankHolidayRegion
-  countryCode    String   @default("GB")
+  countryCode    String            @default("GB")
   organizationId String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
@@ -283,12 +298,12 @@ model BankHoliday {
 }
 
 model UserWeeklyHours {
-  id           String   @id @default(cuid())
-  userId       String
+  id            String   @id @default(cuid())
+  userId        String
   weekStartDate DateTime
-  hoursWorked  Float
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  hoursWorked   Float
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -296,15 +311,15 @@ model UserWeeklyHours {
 }
 
 model LeaveCarryOverBalance {
-  id           String   @id @default(cuid())
-  userId       String
-  leaveTypeId  String
-  leaveYear    Int
-  daysCarried  Float
+  id            String   @id @default(cuid())
+  userId        String
+  leaveTypeId   String
+  leaveYear     Int
+  daysCarried   Float
   daysRemaining Float
-  expiresAt    DateTime
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  expiresAt     DateTime
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
@@ -314,13 +329,13 @@ model LeaveCarryOverBalance {
 }
 
 model WeeklyEarning {
-  id             String   @id @default(cuid())
-  userId         String
-  weekStartDate  DateTime @db.Date
-  grossEarnings  Decimal  @db.Decimal(10, 2)
-  hoursWorked    Decimal  @db.Decimal(6, 2)
-  isZeroPayWeek  Boolean  @default(false)
-  createdAt      DateTime @default(now())
+  id            String   @id @default(cuid())
+  userId        String
+  weekStartDate DateTime @db.Date
+  grossEarnings Decimal  @db.Decimal(10, 2)
+  hoursWorked   Decimal  @db.Decimal(6, 2)
+  isZeroPayWeek Boolean  @default(false)
+  createdAt     DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -347,16 +362,51 @@ model AuditLog {
   @@index([organizationId, resource])
 }
 
+model Region {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  minCover       Int      @default(1)
+  color          String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members      User[]
+  history      UserRegionHistory[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, isActive])
+}
+
+model UserRegionHistory {
+  id          String   @id @default(cuid())
+  userId      String
+  regionId    String?
+  changedById String?
+  notes       String?
+  changedAt   DateTime @default(now())
+
+  user      User    @relation("UserRegionHistorySubject", fields: [userId], references: [id], onDelete: Cascade)
+  region    Region? @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  changedBy User?   @relation("UserRegionHistoryActor", fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([userId, changedAt])
+  @@index([regionId, changedAt])
+}
+
 model DataDeletionAudit {
-  id                 String   @id @default(cuid())
-  organizationId     String
-  organizationName   String
-  adminEmail         String?
-  event              String
-  reason             String?
-  scheduledFor       DateTime?
-  metadata           Json?
-  createdAt          DateTime @default(now())
+  id               String    @id @default(cuid())
+  organizationId   String
+  organizationName String
+  adminEmail       String?
+  event            String
+  reason           String?
+  scheduledFor     DateTime?
+  metadata         Json?
+  createdAt        DateTime  @default(now())
 
   @@index([organizationId, createdAt])
   @@index([event, createdAt])

@@ -5,6 +5,10 @@ import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { RequestCard } from "@/components/leave/request-card";
+import {
+  ApproveCoverModal,
+  type CoverConflict,
+} from "@/components/leave/approve-cover-modal";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { Plus } from "lucide-react";
@@ -25,11 +29,13 @@ type LeaveRequest = {
   status: string;
   note: string | null;
   createdAt: string;
+  coverOverride?: boolean;
   user: {
     id: string;
     name: string;
     email: string;
     memberType: string;
+    regionId?: string | null;
   };
   leaveType: {
     id: string;
@@ -45,6 +51,20 @@ export default function RequestsPage() {
   const [filter, setFilter] = useState<string>("ALL");
   const [loading, setLoading] = useState(true);
   const [userBalances, setUserBalances] = useState<Record<string, LeaveBalance[]>>({});
+  const [regionsEnabled, setRegionsEnabled] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/organization/settings")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled && data) setRegionsEnabled(Boolean(data.regionsEnabled));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const user = session?.user as Record<string, unknown> | undefined;
   const userId = user?.id as string | undefined;
@@ -101,20 +121,86 @@ export default function RequestsPage() {
     });
   }, [requests, isReviewer, userId, userBalances]);
 
-  async function handleAction(id: string, status: string) {
+  const [overrideTarget, setOverrideTarget] = useState<{
+    id: string;
+    requesterName: string;
+    regionName: string | null;
+    conflicts: CoverConflict[];
+  } | null>(null);
+  const [overrideBusy, setOverrideBusy] = useState(false);
+
+  async function patchStatus(
+    id: string,
+    body: Record<string, unknown>,
+    successLabel: string,
+    successKind: "success" | "error" | "info"
+  ) {
     const res = await fetch(`/api/leave-requests/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify(body),
     });
 
     if (res.ok) {
-      const label = status === "APPROVED" ? "approved" : status === "REJECTED" ? "rejected" : "cancelled";
-      toast(`Request ${label}`, status === "APPROVED" ? "success" : status === "REJECTED" ? "error" : "info");
+      toast(`Request ${successLabel}`, successKind);
       fetchRequests();
-    } else {
-      toast("Failed to update request", "error");
+      return true;
     }
+    const data = await res.json().catch(() => null);
+    toast(data?.error ?? "Failed to update request", "error");
+    return false;
+  }
+
+  async function handleAction(id: string, status: string) {
+    if (status !== "APPROVED") {
+      const label =
+        status === "REJECTED" ? "rejected" : "cancelled";
+      const kind = status === "REJECTED" ? "error" : "info";
+      await patchStatus(id, { status }, label, kind);
+      return;
+    }
+
+    const target = requests.find((r) => r.id === id);
+    if (!target) return;
+
+    try {
+      const res = await fetch(`/api/leave-requests/${id}/check-cover`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        const result = (await res.json()) as {
+          hasConflict: boolean;
+          conflicts: CoverConflict[];
+          regionName: string | null;
+        };
+        if (result.hasConflict) {
+          setOverrideTarget({
+            id,
+            requesterName: target.user.name,
+            regionName: result.regionName,
+            conflicts: result.conflicts,
+          });
+          return;
+        }
+      }
+    } catch {
+      // fall through and try to approve anyway
+    }
+
+    await patchStatus(id, { status: "APPROVED" }, "approved", "success");
+  }
+
+  async function confirmOverride() {
+    if (!overrideTarget) return;
+    setOverrideBusy(true);
+    const ok = await patchStatus(
+      overrideTarget.id,
+      { status: "APPROVED", coverOverride: true },
+      "approved (cover overridden)",
+      "success"
+    );
+    setOverrideBusy(false);
+    if (ok) setOverrideTarget(null);
   }
 
   const filters = ["ALL", "PENDING", "APPROVED", "REJECTED", "CANCELLED"];
@@ -181,6 +267,7 @@ export default function RequestsPage() {
                 request={request}
                 canReview={isReviewer && request.user.id !== userId}
                 canCancel={request.user.id === userId}
+                regionsEnabled={regionsEnabled}
                 onAction={handleAction}
                 balance={balanceForType}
               />
@@ -188,6 +275,16 @@ export default function RequestsPage() {
           })}
         </div>
       )}
+
+      <ApproveCoverModal
+        open={!!overrideTarget}
+        onClose={() => setOverrideTarget(null)}
+        onConfirm={confirmOverride}
+        conflicts={overrideTarget?.conflicts ?? []}
+        regionName={overrideTarget?.regionName ?? null}
+        requesterName={overrideTarget?.requesterName ?? ""}
+        loading={overrideBusy}
+      />
     </div>
   );
 }

@@ -21,6 +21,7 @@ const updateSchema = z.object({
   splitDaysUsed: z.number().int().min(0).max(20).optional(),
   evidenceProvided: z.boolean().optional(),
   splCurtailmentConfirmed: z.boolean().optional(),
+  coverOverride: z.boolean().optional(),
 });
 
 export async function PATCH(
@@ -50,7 +51,14 @@ export async function PATCH(
       );
     }
 
-    const { status, kitDaysUsed, splitDaysUsed, evidenceProvided, splCurtailmentConfirmed } = parsed.data;
+    const { status, kitDaysUsed, splitDaysUsed, evidenceProvided, splCurtailmentConfirmed, coverOverride } = parsed.data;
+
+    if (coverOverride !== undefined && userRole !== "ADMIN" && userRole !== "MANAGER") {
+      return NextResponse.json(
+        { error: "Only admins and managers can override cover" },
+        { status: 403 }
+      );
+    }
 
     const leaveRequest = await prisma.leaveRequest.findUnique({
       where: { id },
@@ -101,6 +109,12 @@ export async function PATCH(
     if (splitDaysUsed !== undefined) updateData.splitDaysUsed = splitDaysUsed;
     if (evidenceProvided !== undefined) updateData.evidenceProvided = evidenceProvided;
     if (splCurtailmentConfirmed !== undefined) updateData.splCurtailmentConfirmed = splCurtailmentConfirmed;
+
+    if (status === "APPROVED" && coverOverride === true) {
+      updateData.coverOverride = true;
+      updateData.coverOverrideById = userId;
+      updateData.coverOverrideAt = new Date();
+    }
 
     // Back-fill SMP phase data for maternity requests created before the
     // SMP phase-tracking feature landed. Runs on any approval/rejection/
@@ -218,6 +232,25 @@ export async function PATCH(
         recordAudit({
           organizationId: orgId,
           action,
+          resource: "leave_request",
+          resourceId: id,
+          actor,
+          metadata: {
+            requesterEmail: updated.user.email,
+            leaveType: updated.leaveType.name,
+            startDate: updated.startDate,
+            endDate: updated.endDate,
+            ...(status === "APPROVED" && coverOverride === true
+              ? { coverOverride: true }
+              : {}),
+          },
+          context: ctx,
+        });
+      }
+      if (status === "APPROVED" && coverOverride === true) {
+        recordAudit({
+          organizationId: orgId,
+          action: "leave_request.cover_overridden",
           resource: "leave_request",
           resourceId: id,
           actor,

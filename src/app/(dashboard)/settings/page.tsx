@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
-import { Plus, MessageSquare, CheckCircle, XCircle, User, ChevronRight, SquareKanban, ExternalLink, Unlink, Pencil, Trash2, AlertTriangle, Banknote } from "lucide-react";
+import { Plus, MessageSquare, CheckCircle, XCircle, User, ChevronRight, SquareKanban, ExternalLink, Unlink, Pencil, Trash2, AlertTriangle, Banknote, MapPin } from "lucide-react";
 import { Select } from "@/components/ui/select";
 
 /** Env vars and vendor-console setup are operator docs — only shown in the UI when running `next dev`. */
@@ -50,6 +50,8 @@ type OrgSettings = {
   ukCarryOverExpiryDay: number;
   dataResidency: "UK" | "EU" | "US";
   maxAdminUsers: number;
+  regionsEnabled: boolean;
+  industry: string | null;
 };
 
 type LeavePolicy = {
@@ -104,6 +106,8 @@ export default function SettingsPage() {
   const [editSaving, setEditSaving] = useState(false);
 
   const [earningsCoverage, setEarningsCoverage] = useState<EarningsCoverage[] | null>(null);
+
+  const [confirmRegionsEnable, setConfirmRegionsEnable] = useState(false);
 
   const [policies, setPolicies] = useState<LeavePolicy[]>([]);
   const [showAddPolicy, setShowAddPolicy] = useState(false);
@@ -397,6 +401,28 @@ export default function SettingsPage() {
         </Card>
       </Link>
 
+      {/* Regions link */}
+      {(userRole === "ADMIN" || userRole === "MANAGER") && orgSettings?.regionsEnabled && (
+        <Link href="/settings/regions">
+          <Card className="hover:border-brand-200 hover:shadow-sm transition-all cursor-pointer">
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+                    <MapPin size={18} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">Regions</p>
+                    <p className="text-xs text-gray-500">Group team members by region and set minimum cover levels</p>
+                  </div>
+                </div>
+                <ChevronRight size={18} className="text-gray-400" />
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+      )}
+
       {/* Organization info */}
       <Card>
         <CardHeader>
@@ -418,6 +444,46 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {orgSettings && isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Optional features</CardTitle>
+            <CardDescription>
+              Toggle add-on capabilities for your organization.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-start justify-between gap-4 rounded-md border border-gray-100 p-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-brand-500" />
+                  <p className="text-sm font-medium text-gray-900">
+                    Regional workforce management
+                  </p>
+                </div>
+                <p className="mt-1 text-xs text-gray-500">
+                  Group employees by region, set minimum cover levels, and surface cover warnings on the calendar and leave reviews.
+                </p>
+              </div>
+              <label className="inline-flex shrink-0 items-center">
+                <input
+                  type="checkbox"
+                  checked={orgSettings.regionsEnabled}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setConfirmRegionsEnable(true);
+                    } else {
+                      saveOrgSettings({ regionsEnabled: false });
+                    }
+                  }}
+                  className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                />
+              </label>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {orgSettings && (
         <Card>
@@ -1327,6 +1393,37 @@ export default function SettingsPage() {
             </Button>
           </div>
         </form>
+      </Dialog>
+
+      <Dialog
+        open={confirmRegionsEnable}
+        onClose={() => setConfirmRegionsEnable(false)}
+        title="Enable regional workforce management?"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            This will add region management to your employee profiles and team
+            calendar. You can turn it off at any time.
+          </p>
+          <div className="flex items-center gap-3 pt-2">
+            <Button
+              type="button"
+              onClick={async () => {
+                await saveOrgSettings({ regionsEnabled: true });
+                setConfirmRegionsEnable(false);
+              }}
+            >
+              Enable regions
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmRegionsEnable(false)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
       </Dialog>
 
       {isAdmin && (

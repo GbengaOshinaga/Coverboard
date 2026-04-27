@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CoverageWarning } from "./coverage-warning";
+import { RegionalCoverPanel } from "./regional-cover-panel";
 import { formatDateRange, countWeekdays } from "@/lib/utils";
-import { Check, X } from "lucide-react";
+import { Check, X, ChevronDown, ChevronRight } from "lucide-react";
 
 type LeaveBalance = {
   leaveTypeId: string;
@@ -23,11 +25,13 @@ type LeaveRequest = {
   status: string;
   note: string | null;
   createdAt: string;
+  coverOverride?: boolean;
   user: {
     id: string;
     name: string;
     email: string;
     memberType: string;
+    regionId?: string | null;
   };
   leaveType: {
     id: string;
@@ -48,12 +52,14 @@ export function RequestCard({
   request,
   canReview,
   canCancel,
+  regionsEnabled = false,
   onAction,
   balance,
 }: {
   request: LeaveRequest;
   canReview: boolean;
   canCancel: boolean;
+  regionsEnabled?: boolean;
   onAction?: (id: string, status: string) => void;
   balance?: LeaveBalance | null;
 }) {
@@ -61,6 +67,8 @@ export function RequestCard({
     new Date(request.startDate),
     new Date(request.endDate)
   );
+
+  const [showCover, setShowCover] = useState(false);
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-3 sm:p-4">
@@ -211,6 +219,38 @@ export function RequestCard({
             endDate={request.endDate}
             canReassign
           />
+        </div>
+      )}
+
+      {regionsEnabled && request.user.regionId && (
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={() => setShowCover((v) => !v)}
+            className="inline-flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-gray-900"
+          >
+            {showCover ? (
+              <ChevronDown className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5" />
+            )}
+            Regional cover
+            {request.coverOverride && (
+              <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                Override
+              </span>
+            )}
+          </button>
+          {showCover && (
+            <div className="mt-2">
+              <RegionalCoverPanel
+                leaveRequestId={request.id}
+                startDate={request.startDate}
+                endDate={request.endDate}
+                coverOverride={request.coverOverride}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>

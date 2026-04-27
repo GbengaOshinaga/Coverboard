@@ -17,6 +17,7 @@ type Member = {
   rightToWorkVerified: boolean | null;
   department?: string | null;
   countryCode: string;
+  region?: { id: string; name: string; color: string | null; isActive: boolean } | null;
   _count?: { leaveRequests: number };
 };
 
@@ -28,10 +29,14 @@ const roleVariant: Record<string, "default" | "warning" | "outline"> = {
 
 export function MemberCard({
   member,
+  regionsEnabled = false,
   onEdit,
+  onAssignRegion,
 }: {
   member: Member;
+  regionsEnabled?: boolean;
   onEdit?: (member: Member) => void;
+  onAssignRegion?: (member: Member) => void;
 }) {
   const isOut = member._count?.leaveRequests && member._count.leaveRequests > 0;
 
@@ -57,6 +62,18 @@ export function MemberCard({
           )}
         </div>
         <p className="text-xs text-gray-500 mt-0.5">{member.email}</p>
+        {regionsEnabled &&
+          (member.region ? (
+            <p className="mt-1 inline-flex items-center gap-1 text-xs text-gray-600">
+              <span
+                className="h-2 w-2 rounded-full"
+                style={{ backgroundColor: member.region.color ?? "#9CA3AF" }}
+              />
+              {member.region.name}
+            </p>
+          ) : (
+            <p className="mt-1 text-xs italic text-gray-400">No region</p>
+          ))}
         <p className="text-xs text-gray-400 mt-0.5">
           {COUNTRY_NAMES[member.countryCode] ?? member.countryCode}
         </p>
@@ -83,6 +100,14 @@ export function MemberCard({
             className="rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
           >
             Edit
+          </button>
+        )}
+        {onAssignRegion && (
+          <button
+            onClick={() => onAssignRegion(member)}
+            className="rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
+          >
+            Region
           </button>
         )}
       </div>
