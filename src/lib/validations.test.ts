@@ -22,6 +22,7 @@ test("teamMemberSchema applies defaults for employmentType and numeric fields", 
     role: "MEMBER",
     memberType: "EMPLOYEE",
     countryCode: "GB",
+    workCountry: "GB",
   });
   assert.equal(result.success, true);
   if (!result.success) return;

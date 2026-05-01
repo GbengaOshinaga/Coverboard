@@ -42,7 +42,6 @@ const SCALE_FEATURES = [
 
 const PRO_FEATURES = [
   ...SCALE_FEATURES,
-  "onboarding_call",
   "custom_leave_policies",
   "gdpr_data_residency",
   "api_access",

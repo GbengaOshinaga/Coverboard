@@ -33,6 +33,7 @@ type Member = {
   rightToWorkVerified: boolean | null;
   department?: string | null;
   countryCode: string;
+  workCountry: string | null;
   regionId?: string | null;
   region?: { id: string; name: string; color: string | null; isActive: boolean } | null;
   _count?: { leaveRequests: number };
@@ -146,6 +147,7 @@ export default function TeamPage() {
     rightToWorkVerified: boolean | null;
     department?: string;
     countryCode: string;
+    workCountry: string;
   }) {
     const res = await fetch("/api/team-members", {
       method: "POST",
@@ -157,9 +159,27 @@ export default function TeamPage() {
       const err = await res.json();
       throw new Error(err.error || "Failed to add member");
     }
+    const created = (await res.json()) as {
+      ukStatutorySetupSuggested?: boolean;
+    };
 
     toast("Team member added", "success");
     setShowForm(false);
+    if (created.ukStatutorySetupSuggested && userRole === "ADMIN") {
+      const enable = window.confirm(
+        "You've added a UK-based employee. Would you like to enable UK statutory leave types? This includes SSP, maternity, paternity, and all other statutory entitlements."
+      );
+      if (enable) {
+        const seedRes = await fetch("/api/organization/uk-statutory", {
+          method: "POST",
+        });
+        if (seedRes.ok) {
+          toast("UK statutory leave types enabled", "success");
+        } else {
+          toast("Could not enable UK statutory leave types", "error");
+        }
+      }
+    }
     fetchMembers();
   }
 
@@ -174,6 +194,7 @@ export default function TeamPage() {
     rightToWorkVerified: boolean | null;
     department?: string;
     countryCode: string;
+    workCountry: string;
   }) {
     if (!data.id) return;
 
@@ -190,6 +211,7 @@ export default function TeamPage() {
         rightToWorkVerified: data.rightToWorkVerified,
         department: data.department ?? null,
         countryCode: data.countryCode,
+        workCountry: data.workCountry,
       }),
     });
 
@@ -332,7 +354,11 @@ export default function TeamPage() {
       >
         {editMember && (
           <MemberForm
-            initialData={{ ...editMember, department: editMember.department ?? undefined }}
+            initialData={{
+              ...editMember,
+              department: editMember.department ?? undefined,
+              workCountry: editMember.workCountry ?? editMember.countryCode,
+            }}
             onSubmit={handleEditMember}
             onCancel={() => setEditMember(undefined)}
           />

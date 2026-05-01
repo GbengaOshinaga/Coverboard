@@ -28,6 +28,7 @@ export async function GET() {
       role: true,
       memberType: true,
       countryCode: true,
+      workCountry: true,
       digestOptOut: true,
       createdAt: true,
       organization: { select: { name: true } },

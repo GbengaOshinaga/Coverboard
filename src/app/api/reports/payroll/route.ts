@@ -9,6 +9,20 @@ import {
   isMaternityLeaveType,
 } from "@/lib/smpCalculator";
 
+export function buildPayrollHolidayRateFields(params: {
+  isUkBased: boolean;
+  dailyRate: number | null;
+  estimatedPay: number | null;
+  rateSource: "captured_at_booking" | "recalculated" | "not_applicable";
+}) {
+  if (!params.isUkBased) return {};
+  return {
+    dailyHolidayPayRate: params.dailyRate,
+    estimatedPay: params.estimatedPay,
+    rateSource: params.rateSource,
+  };
+}
+
 /**
  * Payroll export for a given date range.
  *
@@ -62,6 +76,7 @@ export async function GET(request: Request) {
           email: true,
           department: true,
           countryCode: true,
+          workCountry: true,
           employmentType: true,
         },
       },
@@ -92,18 +107,21 @@ export async function GET(request: Request) {
       );
 
       const isAnnual = isAnnualLeaveType(r.leaveType.name);
+      const isUkBased = r.user.workCountry === "GB";
       // Prisma Decimal → number, preserving null when absent.
       let dailyRate: number | null =
         r.dailyHolidayPayRate === null
           ? null
           : Number(r.dailyHolidayPayRate);
 
-      if (dailyRate === null && isAnnual) {
+      if (dailyRate === null && isAnnual && isUkBased) {
         dailyRate = await liveRate(r.userId);
       }
 
       const estimatedPay =
-        dailyRate !== null ? Number((dailyRate * daysTaken).toFixed(2)) : null;
+        isUkBased && dailyRate !== null
+          ? Number((dailyRate * daysTaken).toFixed(2))
+          : null;
 
       // Maternity rows get SMP phase data so payroll can apply the
       // correct weekly rate for each payslip in the export period.
@@ -138,14 +156,17 @@ export async function GET(request: Request) {
         startDate: r.startDate,
         endDate: r.endDate,
         daysTaken,
-        dailyHolidayPayRate: dailyRate,
-        estimatedPay,
-        rateSource:
-          r.dailyHolidayPayRate !== null
-            ? "captured_at_booking"
-            : isAnnual && dailyRate !== null
-              ? "recalculated"
-              : "not_applicable",
+        ...buildPayrollHolidayRateFields({
+          isUkBased,
+          dailyRate,
+          estimatedPay,
+          rateSource:
+            r.dailyHolidayPayRate !== null
+              ? "captured_at_booking"
+              : isAnnual && dailyRate !== null
+                ? "recalculated"
+                : "not_applicable",
+        }),
         smp: smp
           ? {
               phase: smp.phase,

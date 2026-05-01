@@ -6,6 +6,9 @@ import { prisma } from "@/lib/prisma";
 import { teamMemberSchema } from "@/lib/validations";
 import { sendTeamInviteEmail } from "@/lib/email-notifications";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
+import { hasUKEmployees } from "@/lib/uk-workforce";
+import { hasUkStatutoryLeaveTypes } from "@/lib/uk-statutory";
+import { hasFeatureForEnum } from "@/lib/planFeatures";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -29,6 +32,8 @@ export async function GET() {
       rightToWorkVerified: true,
       department: true,
       countryCode: true,
+      workCountry: true,
+      isActive: true,
       regionId: true,
       region: {
         select: { id: true, name: true, color: true, isActive: true },
@@ -85,8 +90,10 @@ export async function POST(request: Request) {
       rightToWorkVerified,
       department,
       countryCode,
+      workCountry,
     } = parsed.data;
     const orgId = (session.user as Record<string, unknown>).organizationId as string;
+    const hadUkEmployees = await hasUKEmployees(orgId);
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
@@ -107,8 +114,7 @@ export async function POST(request: Request) {
         }),
       ]);
 
-      const unlimitedAdminsPlan =
-        org?.plan === "GROWTH" || org?.plan === "SCALE" || org?.plan === "PRO";
+      const unlimitedAdminsPlan = hasFeatureForEnum(org?.plan, "unlimited_admins");
       if (
         org &&
         !unlimitedAdminsPlan &&
@@ -141,6 +147,7 @@ export async function POST(request: Request) {
         rightToWorkVerified: rightToWorkVerified ?? null,
         department: department ?? null,
         countryCode,
+        workCountry,
         organizationId: orgId,
       },
       select: {
@@ -155,6 +162,8 @@ export async function POST(request: Request) {
         rightToWorkVerified: true,
         department: true,
         countryCode: true,
+        workCountry: true,
+        isActive: true,
         createdAt: true,
       },
     });
@@ -185,12 +194,18 @@ export async function POST(request: Request) {
         email: member.email,
         role: member.role,
         countryCode: member.countryCode,
+        workCountry: member.workCountry,
       },
       context: requestAuditContext(request),
     });
 
+    const shouldSuggestUkSetup =
+      workCountry === "GB" &&
+      !hadUkEmployees &&
+      !(await hasUkStatutoryLeaveTypes(orgId));
+
     return NextResponse.json(
-      { ...member, tempPassword },
+      { ...member, tempPassword, ukStatutorySetupSuggested: shouldSuggestUkSetup },
       { status: 201 }
     );
   } catch (error) {

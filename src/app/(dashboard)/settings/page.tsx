@@ -52,6 +52,8 @@ type OrgSettings = {
   maxAdminUsers: number;
   regionsEnabled: boolean;
   industry: string | null;
+  hasUkEmployees: boolean;
+  missingWorkLocationCount: number;
 };
 
 type LeavePolicy = {
@@ -167,6 +169,10 @@ export default function SettingsPage() {
 
   useEffect(() => {
     async function fetchUkReport() {
+      if (!orgSettings?.hasUkEmployees) {
+        setUkReport(null);
+        return;
+      }
       try {
         const res = await fetch("/api/reports/uk-compliance");
         if (res.ok) {
@@ -177,10 +183,14 @@ export default function SettingsPage() {
       }
     }
     fetchUkReport();
-  }, []);
+  }, [orgSettings?.hasUkEmployees]);
 
   useEffect(() => {
     async function fetchCoverage() {
+      if (!orgSettings?.hasUkEmployees) {
+        setEarningsCoverage(null);
+        return;
+      }
       try {
         const res = await fetch("/api/weekly-earnings/coverage");
         if (res.ok) {
@@ -191,8 +201,12 @@ export default function SettingsPage() {
         // ignore
       }
     }
-    if (userRole === "ADMIN" || userRole === "MANAGER") fetchCoverage();
-  }, [userRole]);
+    if (userRole === "ADMIN" || userRole === "MANAGER") {
+      fetchCoverage();
+    } else {
+      setEarningsCoverage(null);
+    }
+  }, [userRole, orgSettings?.hasUkEmployees]);
 
   async function saveOrgSettings(next: Partial<OrgSettings>) {
     if (!orgSettings) return;
@@ -485,7 +499,18 @@ export default function SettingsPage() {
         </Card>
       )}
 
-      {orgSettings && (
+      {orgSettings && orgSettings.missingWorkLocationCount > 0 && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          We&apos;ve added work location to employee profiles. Please update your
+          team&apos;s work locations to ensure the right compliance features are
+          shown for your account.{" "}
+          <Link href="/team" className="font-medium underline hover:no-underline">
+            Update now &rarr;
+          </Link>
+        </div>
+      )}
+
+      {orgSettings && orgSettings.hasUkEmployees && (
         <Card>
           <CardHeader>
             <CardTitle>UK compliance settings</CardTitle>
@@ -589,13 +614,17 @@ export default function SettingsPage() {
               id="dataResidency"
               label="Data residency"
               value={orgSettings.dataResidency}
-              onChange={(e) => saveOrgSettings({ dataResidency: e.target.value as OrgSettings["dataResidency"] })}
+              disabled
               options={[
                 { value: "UK", label: "UK" },
                 { value: "EU", label: "EU" },
                 { value: "US", label: "US" },
               ]}
             />
+            <p className="text-xs text-gray-500">
+              Data residency is set for your workspace and cannot be changed
+              from this page.
+            </p>
             {orgSettings.dataResidency === "UK" && (
               <div className="rounded bg-green-50 p-2 text-xs font-medium text-green-700">
                 Data stored in UK servers.
@@ -605,7 +634,7 @@ export default function SettingsPage() {
         </Card>
       )}
 
-      {ukReport && (
+      {orgSettings?.hasUkEmployees && ukReport && (
         <Card>
           <CardHeader>
             <CardTitle>UK Compliance</CardTitle>
@@ -623,7 +652,7 @@ export default function SettingsPage() {
         </Card>
       )}
 
-      {earningsCoverage && (
+      {orgSettings?.hasUkEmployees && earningsCoverage && (
         <Card>
           <CardHeader>
             <div className="flex items-start justify-between gap-3">

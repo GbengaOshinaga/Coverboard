@@ -20,6 +20,7 @@ type Profile = {
   role: string;
   memberType: string;
   countryCode: string;
+  workCountry: string | null;
   digestOptOut: boolean;
   createdAt: string;
   organization: { name: string };
@@ -65,8 +66,12 @@ export default function ProfilePage() {
         setName(data.name);
         setDigestOptOut(data.digestOptOut);
         // Fetch holiday pay stats for self-service view
-        const hpRes = await fetch(`/api/team-members/${data.id}/earnings-history`);
-        if (hpRes.ok) setHolidayPay(await hpRes.json());
+        if (data.workCountry === "GB") {
+          const hpRes = await fetch(`/api/team-members/${data.id}/earnings-history`);
+          if (hpRes.ok) setHolidayPay(await hpRes.json());
+        } else {
+          setHolidayPay(null);
+        }
       }
       setLoading(false);
     }
@@ -296,44 +301,46 @@ export default function ProfilePage() {
         </CardContent>
       </Card>
 
-      {/* Holiday pay — read-only self-service */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Banknote size={18} />
-            Holiday pay
-          </CardTitle>
-          <CardDescription>
-            Your holiday pay rate, calculated from your recent earnings history
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {holidayPay === null || holidayPay.weeksOnRecord === 0 ? (
-            <p className="text-sm text-gray-500">
-              Your holiday pay rate has not been configured yet. Please contact your HR team.
-            </p>
-          ) : (
-            <div className="space-y-2 text-sm text-gray-700">
-              <p>
-                Your holiday pay is calculated based on your average earnings over your last{" "}
-                <strong>{holidayPay.paidWeeksCount}</strong> recorded paid week
-                {holidayPay.paidWeeksCount !== 1 ? "s" : ""}.
+      {/* Holiday pay — read-only self-service (UK-only) */}
+      {profile?.workCountry === "GB" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Banknote size={18} />
+              Holiday pay
+            </CardTitle>
+            <CardDescription>
+              Your holiday pay rate, calculated from your recent earnings history
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {holidayPay === null || holidayPay.weeksOnRecord === 0 ? (
+              <p className="text-sm text-gray-500">
+                Holiday pay rate is calculated automatically after earnings history is recorded.
               </p>
-              <p>
-                Current daily rate:{" "}
-                <span className="font-semibold text-gray-900">
-                  {holidayPay.averageDailyRate !== null
-                    ? `£${holidayPay.averageDailyRate.toFixed(2)}`
-                    : "—"}
-                </span>
-              </p>
-              <p className="text-xs text-gray-400">
-                This rate will apply to your next approved holiday.
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            ) : (
+              <div className="space-y-2 text-sm text-gray-700">
+                <p>
+                  Your holiday pay is calculated based on your average earnings over your last{" "}
+                  <strong>{holidayPay.paidWeeksCount}</strong> recorded paid week
+                  {holidayPay.paidWeeksCount !== 1 ? "s" : ""}.
+                </p>
+                <p>
+                  Current daily rate:{" "}
+                  <span className="font-semibold text-gray-900">
+                    {holidayPay.averageDailyRate !== null
+                      ? `£${holidayPay.averageDailyRate.toFixed(2)}`
+                      : "—"}
+                  </span>
+                </p>
+                <p className="text-xs text-gray-400">
+                  This rate will apply to your next approved holiday.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Change password */}
       <Card>

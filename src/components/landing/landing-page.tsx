@@ -182,14 +182,14 @@ const scaleHighlights = [
   "Parental leave tracker, KIT & SPLIT day tracking",
   "Holiday pay earnings history & 52-week average calculation",
   "Custom carry-over rules & absence analytics dashboard",
-  "UK compliance report pack & priority support",
+  "UK compliance report pack & priority response",
 ];
 
 const proHighlights = [
   "Custom leave policies tailored to your organisation",
   "GDPR data residency configuration",
   "Audit trail exports for governance and investigations",
-  "Priority email support — everything in Scale included",
+  "Priority email response — everything in Scale included",
 ];
 
 function ScaleAndProSection() {

@@ -29,6 +29,11 @@ export const teamMemberSchema = z.object({
   rightToWorkVerified: z.boolean().nullable().optional(),
   department: z.string().max(100).optional(),
   countryCode: z.string().min(2, "Country is required").max(2),
+  workCountry: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .length(2, "Work location (country) is required"),
 });
 
 export type TeamMemberInput = z.infer<typeof teamMemberSchema>;

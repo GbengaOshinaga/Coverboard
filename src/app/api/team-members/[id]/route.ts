@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
+import { hasFeatureForEnum } from "@/lib/planFeatures";
 import { z } from "zod";
 
 const updateSchema = z.object({
@@ -15,6 +16,7 @@ const updateSchema = z.object({
   rightToWorkVerified: z.boolean().nullable().optional(),
   department: z.string().max(100).nullable().optional(),
   countryCode: z.string().min(2).max(2).optional(),
+  workCountry: z.string().trim().toUpperCase().length(2).nullable().optional(),
 });
 
 export async function GET(
@@ -51,6 +53,8 @@ export async function GET(
       rightToWorkVerified: true,
       department: true,
       countryCode: true,
+      workCountry: true,
+      isActive: true,
       serviceStartDate: true,
       bradfordScore: true,
       createdAt: true,
@@ -109,10 +113,7 @@ export async function PATCH(
           }),
         ]);
 
-        const unlimitedAdminsPlan =
-          org?.plan === "GROWTH" ||
-          org?.plan === "SCALE" ||
-          org?.plan === "PRO";
+        const unlimitedAdminsPlan = hasFeatureForEnum(org?.plan, "unlimited_admins");
         if (
           org &&
           !unlimitedAdminsPlan &&
@@ -149,6 +150,7 @@ export async function PATCH(
         rightToWorkVerified: true,
         department: true,
         countryCode: true,
+        workCountry: true,
         organizationId: true,
       },
     });

@@ -75,7 +75,7 @@
   - ✅ Slack integration
   - ✅ Overlap & coverage warnings
   - ✅ Jira project coverage
-  - ✅ Priority support
+  - ✅ Priority response
   - ✅ "Start 14-day trial" CTA → /signup
 
 ### CTA Section

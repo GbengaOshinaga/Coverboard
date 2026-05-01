@@ -7,8 +7,8 @@ export type SubscriptionPlan = (typeof SUBSCRIPTION_PLANS)[number];
 
 /**
  * The full Prisma enum including TRIAL/LOCKED lifecycle states.
- * TRIAL gets full feature access (handled in planFeatures.ts).
- * LOCKED gets nothing — tier helpers here return false for both.
+ * TRIAL gets full feature access (handled here + in planFeatures.ts).
+ * LOCKED gets nothing.
  */
 export type AnyPlan = SubscriptionPlan | "TRIAL" | "LOCKED";
 
@@ -21,6 +21,13 @@ const PLAN_RANK: Record<SubscriptionPlan, number> = {
 
 function isPaidTier(plan: AnyPlan | null | undefined): plan is SubscriptionPlan {
   return plan === "STARTER" || plan === "GROWTH" || plan === "SCALE" || plan === "PRO";
+}
+
+function normalizeForFeatureGate(
+  plan: AnyPlan | null | undefined
+): SubscriptionPlan | "LOCKED" | null | undefined {
+  if (plan === "TRIAL") return "PRO";
+  return plan;
 }
 
 /** Returns true if `plan` is at or above `minimum` in the tier order. */
@@ -49,37 +56,30 @@ export const PLAN_DEFAULT_MAX_ADMINS: Record<SubscriptionPlan, number> = {
   PRO: 0,
 };
 
-/** Whether the plan unlocks priority support response targets. */
+/** Whether the plan unlocks priority response targets. */
 export function hasPrioritySupport(
   plan: AnyPlan | null | undefined
 ): boolean {
-  return planAtLeast(plan, "SCALE");
+  return planAtLeast(normalizeForFeatureGate(plan), "SCALE");
 }
 
-/** Whether the plan unlocks the SLA-backed support tier (1-hour target). */
+/** Whether the plan unlocks the SLA-backed response tier (1-hour target). */
 export function hasSlaSupport(
   plan: AnyPlan | null | undefined
 ): boolean {
-  return planAtLeast(plan, "PRO");
-}
-
-/** Whether the plan includes a dedicated onboarding session. */
-export function hasDedicatedOnboarding(
-  plan: AnyPlan | null | undefined
-): boolean {
-  return planAtLeast(plan, "PRO");
+  return planAtLeast(normalizeForFeatureGate(plan), "PRO");
 }
 
 /** Whether the plan unlocks external API access. */
 export function hasApiAccess(
   plan: AnyPlan | null | undefined
 ): boolean {
-  return planAtLeast(plan, "PRO");
+  return planAtLeast(normalizeForFeatureGate(plan), "PRO");
 }
 
 /** Whether the plan unlocks the audit trail viewer & export. */
 export function hasAuditTrail(
   plan: AnyPlan | null | undefined
 ): boolean {
-  return planAtLeast(plan, "PRO");
+  return planAtLeast(normalizeForFeatureGate(plan), "PRO");
 }

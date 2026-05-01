@@ -17,6 +17,7 @@ type Member = {
   rightToWorkVerified: boolean | null;
   department?: string | null;
   countryCode: string;
+  workCountry: string | null;
   region?: { id: string; name: string; color: string | null; isActive: boolean } | null;
   _count?: { leaveRequests: number };
 };
@@ -75,12 +76,17 @@ export function MemberCard({
             <p className="mt-1 text-xs italic text-gray-400">No region</p>
           ))}
         <p className="text-xs text-gray-400 mt-0.5">
-          {COUNTRY_NAMES[member.countryCode] ?? member.countryCode}
+          Work location:{" "}
+          {member.workCountry
+            ? COUNTRY_NAMES[member.workCountry] ?? member.workCountry
+            : "Not set"}
         </p>
         <p className="text-xs text-gray-400 mt-0.5">
           {member.employmentType.replace("_", " ")} • FTE {member.fteRatio}
         </p>
-        {(member.countryCode === "GB" && (member.rightToWorkVerified === false || member.rightToWorkVerified === null)) && (
+        {(member.workCountry === "GB" &&
+          (member.rightToWorkVerified === false ||
+            member.rightToWorkVerified === null)) && (
           <p className="mt-1 inline-flex rounded bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
             Right to work verification required
           </p>

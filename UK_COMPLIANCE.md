@@ -4,7 +4,7 @@ This document describes the UK compliance extension added to Coverboard.
 
 ## Scope
 
-The UK support is implemented as additive behavior under `countryCode = "GB"` and organization-level UK settings.
+The UK functionality is implemented as additive behavior under `countryCode = "GB"` and organization-level UK settings.
 Existing country logic (LATAM/Africa/SEA) remains unchanged.
 
 ## Data Model Changes
@@ -12,7 +12,7 @@ Existing country logic (LATAM/Africa/SEA) remains unchanged.
 Updated `prisma/schema.prisma` with new UK-related fields and models:
 
 - `Organization`
-  - `plan` (`SubscriptionPlan`: `STARTER` | `GROWTH` | `SCALE` | `PRO`; gates support tiers, audit trail, etc.)
+  - `plan` (`SubscriptionPlan`: `STARTER` | `GROWTH` | `SCALE` | `PRO`; gates response tiers, audit trail, etc.)
   - `ukBankHolidayInclusive` (default `true`)
   - `ukBankHolidayRegion` (`ENGLAND_WALES` default)
   - `ukCarryOverEnabled` (default `false`)
@@ -100,7 +100,7 @@ Added optional env keys in `.env.example`. **Update each April via HMRC guidance
 - `SMP_WEEKLY_RATE` (default `194.32` — 2026/27)
 - `SMP_FLAT_RATE` (alias of `SMP_WEEKLY_RATE` consumed by the SMP phase calculator; either env key is honoured)
 - `LEL_WEEKLY` (default `123` — Lower Earnings Limit for 2024/25; SSP is not payable below this average weekly earnings)
-- `NEXT_PUBLIC_SUPPORT_EMAIL`, `NEXT_PUBLIC_PRIORITY_SUPPORT_EMAIL`, `NEXT_PUBLIC_SLA_SUPPORT_EMAIL`, `NEXT_PUBLIC_ONBOARDING_BOOKING_URL` — Help page contact targets (see `.env.example`)
+- `NEXT_PUBLIC_SUPPORT_EMAIL`, `NEXT_PUBLIC_PRIORITY_SUPPORT_EMAIL`, `NEXT_PUBLIC_SLA_SUPPORT_EMAIL` — Help page contact targets (see `.env.example`)
 
 ## Onboarding + Seeding Behavior
 
@@ -304,4 +304,4 @@ Added script:
 - Existing country configs are preserved.
 - UK logic is additive and country-scoped.
 - Backend runtime checks now enforce leave-type evidence/notice where configured.
-- **Product-wide docs** (subscription `plan`, Help & Support env vars, audit trail, landing pricing): see **`README.md`** and **`.env.example`**.
+- **Product-wide docs** (subscription `plan`, Help & Contact env vars, audit trail, landing pricing): see **`README.md`** and **`.env.example`**.

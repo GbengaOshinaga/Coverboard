@@ -22,6 +22,7 @@ const TEMPLATE_HEADERS = [
   "fteRatio",
   "department",
   "countryCode",
+  "workCountry",
   "rightToWorkVerified",
 ];
 
@@ -36,6 +37,7 @@ const TEMPLATE_ROWS: string[][] = [
     "1",
     "Engineering",
     "GB",
+    "GB",
     "yes",
   ],
   [
@@ -47,6 +49,7 @@ const TEMPLATE_ROWS: string[][] = [
     "3",
     "0.6",
     "Sales",
+    "GB",
     "GB",
     "",
   ],
@@ -115,6 +118,7 @@ type Row = {
   fteRatio: number;
   department?: string;
   countryCode: string;
+  workCountry: string;
   rightToWorkVerified: boolean | null;
 };
 
@@ -141,6 +145,8 @@ function normalizeRows(csv: string): Row[] {
       fteRatio: Number.isFinite(fte) ? fte : 1,
       department: get("department") || undefined,
       countryCode: (get("countryCode") || "GB").toUpperCase(),
+      workCountry:
+        (get("workCountry") || get("countryCode") || "GB").toUpperCase(),
       rightToWorkVerified: parseBool(get("rightToWorkVerified")),
     };
   });
@@ -279,6 +285,21 @@ export function BulkImportDialog({
         setImporting(false);
         return;
       }
+      if (data.ukStatutorySetupSuggested) {
+        const enable = window.confirm(
+          "You've added a UK-based employee. Would you like to enable UK statutory leave types? This includes SSP, maternity, paternity, and all other statutory entitlements."
+        );
+        if (enable) {
+          const seedRes = await fetch("/api/organization/uk-statutory", {
+            method: "POST",
+          });
+          if (seedRes.ok) {
+            toast("UK statutory leave types enabled", "success");
+          } else {
+            toast("Could not enable UK statutory leave types", "error");
+          }
+        }
+      }
       toast(
         `Imported ${data.imported} team member${data.imported === 1 ? "" : "s"}`,
         "success"
@@ -352,7 +373,8 @@ export function BulkImportDialog({
                 First row must be a header. Required columns:{" "}
                 <code className="text-[11px]">name</code>,{" "}
                 <code className="text-[11px]">email</code>,{" "}
-                <code className="text-[11px]">countryCode</code>. Other columns
+                <code className="text-[11px]">countryCode</code>, and{" "}
+                <code className="text-[11px]">workCountry</code>. Other columns
                 are optional and fall back to sensible defaults.
               </p>
             </div>

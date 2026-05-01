@@ -16,34 +16,28 @@ import {
   Clock,
   CheckCircle2,
   ExternalLink,
-  CalendarCheck,
   BadgeCheck,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import {
   hasPrioritySupport,
   hasSlaSupport,
-  hasDedicatedOnboarding,
   PLAN_LABELS,
-  type SubscriptionPlan,
+  type AnyPlan,
 } from "@/lib/plans";
 
-const SUPPORT_EMAIL =
-  process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "support@coverboard.app";
+const CONTACT_EMAIL =
+  process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "hello@coverboard.app";
 const PRIORITY_EMAIL =
   process.env.NEXT_PUBLIC_PRIORITY_SUPPORT_EMAIL ?? "priority@coverboard.app";
 const SLA_EMAIL =
   process.env.NEXT_PUBLIC_SLA_SUPPORT_EMAIL ?? "pro@coverboard.app";
-const ONBOARDING_BOOKING_URL =
-  process.env.NEXT_PUBLIC_ONBOARDING_BOOKING_URL ??
-  "https://cal.com/coverboard/onboarding";
 
 type OrgSettings = {
-  plan?: SubscriptionPlan;
+  plan?: AnyPlan;
 };
 
 export default function HelpPage() {
-  const [plan, setPlan] = useState<SubscriptionPlan | undefined>();
+  const [plan, setPlan] = useState<AnyPlan | undefined>();
 
   useEffect(() => {
     async function fetchPlan() {
@@ -62,14 +56,19 @@ export default function HelpPage() {
 
   const priority = hasPrioritySupport(plan);
   const sla = hasSlaSupport(plan);
-  const dedicatedOnboarding = hasDedicatedOnboarding(plan);
-  const planLabel = plan ? PLAN_LABELS[plan] : "—";
+  const planLabel = plan
+    ? plan === "TRIAL"
+      ? "Trial"
+      : plan === "LOCKED"
+        ? "Locked"
+        : PLAN_LABELS[plan]
+    : "—";
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
         <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">
-          Help &amp; support
+          Help &amp; contact
         </h1>
         <p className="text-sm text-gray-500">
           Resources, documentation, and how to reach us
@@ -85,10 +84,10 @@ export default function HelpPage() {
               <p className="text-sm font-medium text-gray-900">Your plan</p>
               <p className="text-xs text-gray-500">
                 {sla
-                  ? "SLA-backed support is included"
+                  ? "1-hour response target is included"
                   : priority
-                    ? "Priority support is included"
-                    : "Standard support is included"}
+                    ? "Priority response is included"
+                    : "Standard response is included"}
               </p>
             </div>
           </div>
@@ -96,46 +95,17 @@ export default function HelpPage() {
         </CardContent>
       </Card>
 
-      {/* Dedicated onboarding session (Pro) */}
-      {dedicatedOnboarding && (
-        <Card className="border-emerald-200 bg-emerald-50/40">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CalendarCheck className="h-5 w-5 text-emerald-600" />
-              Dedicated onboarding session
-            </CardTitle>
-            <CardDescription>
-              Book a 60-minute session with a Coverboard specialist to tailor
-              policies, integrations, and rollout to your organization.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-gray-700">
-              Your Pro plan includes one complimentary onboarding session plus
-              follow-ups during your first 90 days.
-            </p>
-            <a
-              href={ONBOARDING_BOOKING_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Button size="sm">Book your session</Button>
-            </a>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Support panel — SLA (Pro) > Priority (Scale) > Standard */}
+      {/* Contact panel — SLA (Pro) > Priority (Scale) > Standard */}
       {sla ? (
         <Card className="border-brand-300 bg-brand-50/40">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BadgeCheck className="h-5 w-5 text-brand-700" />
-              SLA-backed support
+              SLA-backed response
             </CardTitle>
             <CardDescription>
-              Dedicated account contact with contractual response times and
-              24×7 critical-incident coverage.
+              Direct contact channel with agreed response targets and 24×7
+              critical-incident coverage.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -172,8 +142,9 @@ export default function HelpPage() {
               </div>
             </div>
             <p className="text-xs text-gray-500">
-              Your SLA includes 99.9% uptime, credit-back for breaches, and a
-              named account contact.
+              We target 99.9% uptime. This is an availability objective, not a
+              guarantee. Formal SLA terms and remedies apply only where agreed
+              in writing.
             </p>
           </CardContent>
         </Card>
@@ -182,11 +153,11 @@ export default function HelpPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Zap className="h-5 w-5 text-brand-600" />
-              Priority support
+              Priority response
             </CardTitle>
             <CardDescription>
-              Faster response times, dedicated routing, and direct access to
-              senior support engineers.
+              Faster response times and a dedicated route for urgent product
+              questions.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -224,7 +195,7 @@ export default function HelpPage() {
             </div>
             <p className="text-xs text-gray-500">
               Include your organization name and a description of the issue —
-              we&rsquo;ll route it straight to a senior engineer.
+              it will be prioritized for review.
             </p>
           </CardContent>
         </Card>
@@ -233,19 +204,19 @@ export default function HelpPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Mail className="h-5 w-5 text-gray-500" />
-              Standard support
+              Standard contact
             </CardTitle>
             <CardDescription>
-              We typically reply within 1 business day. Upgrade to Scale for
-              priority support, or Pro for a 1-hour SLA.
+              Replies typically arrive within 1 business day. Upgrade to Scale
+              for priority response, or Pro for a 1-hour SLA.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <a
-              href={`mailto:${SUPPORT_EMAIL}`}
+              href={`mailto:${CONTACT_EMAIL}`}
               className="text-sm font-medium text-brand-600 hover:text-brand-700"
             >
-              {SUPPORT_EMAIL}
+              {CONTACT_EMAIL}
             </a>
           </CardContent>
         </Card>

@@ -118,6 +118,8 @@ model User {
   averageWeeklyEarnings     Decimal?       @db.Decimal(8, 2)
   bradfordScore             Float          @default(0)
   countryCode               String         @default("NG")
+  workCountry               String?
+  isActive                  Boolean        @default(true)
   rightToWorkVerified       Boolean?
   department                String?
   serviceStartDate          DateTime?
@@ -143,6 +145,7 @@ model User {
   coverOverrides      LeaveRequest[]          @relation("CoverOverrideBy")
 
   @@index([organizationId, countryCode])
+  @@index([organizationId, workCountry, isActive])
   @@index([regionId])
   @@index([organizationId, regionId])
 }

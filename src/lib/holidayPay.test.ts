@@ -2,10 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   calculateHolidayPayRate,
+  calculateHolidayPayRateForEmployee,
   calculateWeeklyHolidayPayRate,
   isAnnualLeaveType,
   type WeeklyEarning,
 } from "@/lib/holidayPay";
+import { prisma } from "@/lib/prisma";
 
 /** Build a week entry with sensible defaults. */
 function week(
@@ -135,4 +137,19 @@ test("isAnnualLeaveType matches common variants", () => {
   assert.equal(isAnnualLeaveType("Statutory Sick Pay (SSP)"), false);
   assert.equal(isAnnualLeaveType("Parental Leave"), false);
   assert.equal(isAnnualLeaveType(null), false);
+});
+
+test("calculateHolidayPayRateForEmployee returns null for non-GB employee", async () => {
+  const original = prisma.user.findUnique as unknown;
+  (prisma.user as unknown as { findUnique: unknown }).findUnique = async () => ({
+    workCountry: "NG",
+  });
+  try {
+    const result = await calculateHolidayPayRateForEmployee("u1", [
+      week("2026-01-05", 500),
+    ]);
+    assert.equal(result, null);
+  } finally {
+    (prisma.user as unknown as { findUnique: unknown }).findUnique = original;
+  }
 });

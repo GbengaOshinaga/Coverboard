@@ -60,6 +60,7 @@ type Member = {
   fteRatio: number;
   department: string | null;
   countryCode: string;
+  workCountry: string | null;
   bradfordScore: number;
   serviceStartDate: string | null;
 };
@@ -689,7 +690,10 @@ export default function EmployeeProfilePage({
                 </Badge>
                 <Badge variant="outline">{member.memberType}</Badge>
                 <Badge variant="outline">
-                  {COUNTRY_NAMES[member.countryCode] ?? member.countryCode}
+                  Work location:{" "}
+                  {member.workCountry
+                    ? COUNTRY_NAMES[member.workCountry] ?? member.workCountry
+                    : "Not set"}
                 </Badge>
                 {member.department && (
                   <Badge variant="outline">{member.department}</Badge>
@@ -709,7 +713,8 @@ export default function EmployeeProfilePage({
         </CardContent>
       </Card>
 
-      {/* Holiday pay earnings history */}
+      {/* Holiday pay earnings history (UK-only) */}
+      {member.workCountry === "GB" && (
       <Card id="earnings-history">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -824,6 +829,7 @@ export default function EmployeeProfilePage({
           )}
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }

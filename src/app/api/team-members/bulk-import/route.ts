@@ -7,6 +7,9 @@ import { prisma } from "@/lib/prisma";
 import { teamMemberSchema } from "@/lib/validations";
 import { sendTeamInviteEmail } from "@/lib/email-notifications";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
+import { hasUKEmployees } from "@/lib/uk-workforce";
+import { hasUkStatutoryLeaveTypes } from "@/lib/uk-statutory";
+import { hasFeatureForEnum } from "@/lib/planFeatures";
 
 // Cap the batch size to keep single-request latency bounded and avoid abuse.
 // Larger imports should be split client-side.
@@ -49,6 +52,7 @@ export async function POST(request: Request) {
   }
 
   const { rows, dryRun } = parsed.data;
+  const hadUkEmployees = await hasUKEmployees(orgId);
 
   type ValidRow = {
     index: number;
@@ -121,8 +125,7 @@ export async function POST(request: Request) {
         where: { organizationId: orgId, role: "ADMIN" },
       }),
     ]);
-    const unlimitedAdminsPlan =
-      org?.plan === "GROWTH" || org?.plan === "SCALE" || org?.plan === "PRO";
+    const unlimitedAdminsPlan = hasFeatureForEnum(org?.plan, "unlimited_admins");
     if (
       org &&
       !unlimitedAdminsPlan &&
@@ -191,6 +194,7 @@ export async function POST(request: Request) {
           rightToWorkVerified: data.rightToWorkVerified ?? null,
           department: data.department ?? null,
           countryCode: data.countryCode,
+          workCountry: data.workCountry,
           organizationId: orgId,
         },
         select: {
@@ -257,8 +261,18 @@ export async function POST(request: Request) {
     });
   }
 
+  const addedUkEmployee = toCreate.some((row) => row.data.workCountry === "GB");
+  const shouldSuggestUkSetup =
+    addedUkEmployee &&
+    !hadUkEmployees &&
+    !(await hasUkStatutoryLeaveTypes(orgId));
+
   return NextResponse.json(
-    { imported: created.length, members: created },
+    {
+      imported: created.length,
+      members: created,
+      ukStatutorySetupSuggested: shouldSuggestUkSetup,
+    },
     { status: 201 }
   );
 }

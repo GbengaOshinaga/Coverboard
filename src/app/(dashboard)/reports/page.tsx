@@ -60,6 +60,10 @@ type VariableHoursUser = {
 };
 
 type UKReport = {
+  workforce?: {
+    uk: number;
+    total: number;
+  };
   holidayUsage: Array<{
     userId: string;
     name: string;
@@ -114,9 +118,9 @@ type PayrollRow = {
   startDate: string;
   endDate: string;
   daysTaken: number;
-  dailyHolidayPayRate: number | null;
-  estimatedPay: number | null;
-  rateSource:
+  dailyHolidayPayRate?: number | null;
+  estimatedPay?: number | null;
+  rateSource?:
     | "captured_at_booking"
     | "recalculated"
     | "not_applicable";
@@ -131,6 +135,26 @@ type PayrollReport = {
     totalDays: number;
     totalEstimatedPay: number;
   };
+};
+
+type PayrollCsvBaseRow = {
+  name: string;
+  email: string;
+  department: string;
+  countryCode: string;
+  employmentType: string;
+  leaveType: string;
+  leaveCategory: string;
+  isPaid: string;
+  startDate: string;
+  endDate: string;
+  daysTaken: number;
+};
+
+type PayrollCsvFullRow = PayrollCsvBaseRow & {
+  dailyHolidayPayRate: string;
+  estimatedPay: string;
+  rateSource: string;
 };
 
 type Analytics = {
@@ -161,6 +185,7 @@ type RolloverPreviewRow = {
 export default function ReportsPage() {
   const { data: session } = useSession();
   const [report, setReport] = useState<UKReport | null>(null);
+  const [hasUkWorkforce, setHasUkWorkforce] = useState(true);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<ActiveTab>("analytics");
@@ -206,7 +231,14 @@ export default function ReportsPage() {
         `/api/reports/uk-compliance?bradfordThreshold=${threshold}`
       );
       if (res.ok) {
+        setHasUkWorkforce(true);
         setReport(await res.json());
+      } else if (res.status === 403) {
+        const payload = await res.json().catch(() => null);
+        if (payload?.error === "NO_UK_EMPLOYEES") {
+          setHasUkWorkforce(false);
+          setReport(null);
+        }
       }
     } catch {
       // ignore
@@ -217,6 +249,17 @@ export default function ReportsPage() {
   useEffect(() => {
     if (isReviewer) fetchReport();
   }, [fetchReport, isReviewer]);
+
+  useEffect(() => {
+    if (
+      !hasUkWorkforce &&
+      ["bradford", "right-to-work", "holiday-usage", "ssp", "parental", "year-end"].includes(
+        activeTab
+      )
+    ) {
+      setActiveTab("analytics");
+    }
+  }, [hasUkWorkforce, activeTab]);
 
   useEffect(() => {
     async function fetchAnalytics() {
@@ -256,46 +299,81 @@ export default function ReportsPage() {
 
   function exportPayrollCsv() {
     if (!payrollReport) return;
-    downloadCsv(
-      `payroll-export-${payrollFrom}-to-${payrollTo}`,
-      toCsv(
-        payrollReport.rows.map((r) => ({
-          name: r.name,
-          email: r.email,
-          department: r.department ?? "",
-          countryCode: r.countryCode,
-          employmentType: r.employmentType,
-          leaveType: r.leaveType,
-          leaveCategory: r.leaveCategory,
-          isPaid: r.isPaid ? "Yes" : "No",
-          startDate: r.startDate.slice(0, 10),
-          endDate: r.endDate.slice(0, 10),
-          daysTaken: r.daysTaken,
+    const includeHolidayRateColumns = payrollReport.rows.some(
+      (r) => r.dailyHolidayPayRate !== undefined
+    );
+    const payrollCsvBaseColumns: { key: keyof PayrollCsvBaseRow; label: string }[] =
+      [
+        { key: "name", label: "Employee" },
+        { key: "email", label: "Email" },
+        { key: "department", label: "Department" },
+        { key: "countryCode", label: "Country" },
+        { key: "employmentType", label: "Employment type" },
+        { key: "leaveType", label: "Leave type" },
+        { key: "leaveCategory", label: "Category" },
+        { key: "isPaid", label: "Paid" },
+        { key: "startDate", label: "Start" },
+        { key: "endDate", label: "End" },
+        { key: "daysTaken", label: "Days taken" },
+      ];
+    const payrollCsvHolidayColumns: {
+      key: keyof Pick<
+        PayrollCsvFullRow,
+        "dailyHolidayPayRate" | "estimatedPay" | "rateSource"
+      >;
+      label: string;
+    }[] = [
+      { key: "dailyHolidayPayRate", label: "Daily holiday pay rate (\u00a3)" },
+      { key: "estimatedPay", label: "Estimated pay (\u00a3)" },
+      { key: "rateSource", label: "Rate source" },
+    ];
+
+    const toBaseRow = (r: PayrollRow): PayrollCsvBaseRow => ({
+      name: r.name,
+      email: r.email,
+      department: r.department ?? "",
+      countryCode: r.countryCode,
+      employmentType: r.employmentType,
+      leaveType: r.leaveType,
+      leaveCategory: r.leaveCategory,
+      isPaid: r.isPaid ? "Yes" : "No",
+      startDate: r.startDate.slice(0, 10),
+      endDate: r.endDate.slice(0, 10),
+      daysTaken: r.daysTaken,
+    });
+
+    if (includeHolidayRateColumns) {
+      const rows: PayrollCsvFullRow[] = payrollReport.rows.map((r) => {
+        const base = toBaseRow(r);
+        if (r.dailyHolidayPayRate === undefined) {
+          return {
+            ...base,
+            dailyHolidayPayRate: "",
+            estimatedPay: "",
+            rateSource: "",
+          };
+        }
+        return {
+          ...base,
           dailyHolidayPayRate:
-            r.dailyHolidayPayRate === null
+            r.dailyHolidayPayRate == null
               ? ""
               : r.dailyHolidayPayRate.toFixed(2),
-          estimatedPay:
-            r.estimatedPay === null ? "" : r.estimatedPay.toFixed(2),
-          rateSource: r.rateSource,
-        })),
-        [
-          { key: "name", label: "Employee" },
-          { key: "email", label: "Email" },
-          { key: "department", label: "Department" },
-          { key: "countryCode", label: "Country" },
-          { key: "employmentType", label: "Employment type" },
-          { key: "leaveType", label: "Leave type" },
-          { key: "leaveCategory", label: "Category" },
-          { key: "isPaid", label: "Paid" },
-          { key: "startDate", label: "Start" },
-          { key: "endDate", label: "End" },
-          { key: "daysTaken", label: "Days taken" },
-          { key: "dailyHolidayPayRate", label: "Daily holiday pay rate (\u00a3)" },
-          { key: "estimatedPay", label: "Estimated pay (\u00a3)" },
-          { key: "rateSource", label: "Rate source" },
-        ]
-      )
+          estimatedPay: r.estimatedPay == null ? "" : r.estimatedPay.toFixed(2),
+          rateSource: r.rateSource ?? "",
+        };
+      });
+      downloadCsv(
+        `payroll-export-${payrollFrom}-to-${payrollTo}`,
+        toCsv(rows, [...payrollCsvBaseColumns, ...payrollCsvHolidayColumns])
+      );
+      return;
+    }
+
+    const rows: PayrollCsvBaseRow[] = payrollReport.rows.map(toBaseRow);
+    downloadCsv(
+      `payroll-export-${payrollFrom}-to-${payrollTo}`,
+      toCsv(rows, payrollCsvBaseColumns)
     );
   }
 
@@ -474,18 +552,30 @@ export default function ReportsPage() {
     );
   }
 
-  const allTabs: { id: ActiveTab; label: string; adminOnly?: boolean }[] = [
+  const allTabs: {
+    id: ActiveTab;
+    label: string;
+    adminOnly?: boolean;
+    requiresUk?: boolean;
+  }[] = [
     { id: "analytics", label: "Analytics" },
-    { id: "bradford", label: "Bradford Factor" },
-    { id: "right-to-work", label: "Right to work" },
+    { id: "bradford", label: "Bradford Factor", requiresUk: true },
+    { id: "right-to-work", label: "Right to work", requiresUk: true },
     { id: "weekly-hours", label: "Weekly hours" },
-    { id: "holiday-usage", label: "Holiday usage" },
-    { id: "ssp", label: "SSP liability" },
-    { id: "parental", label: "Parental leave" },
+    { id: "holiday-usage", label: "Holiday usage", requiresUk: true },
+    { id: "ssp", label: "SSP liability", requiresUk: true },
+    { id: "parental", label: "Parental leave", requiresUk: true },
     { id: "payroll", label: "Payroll export" },
-    { id: "year-end", label: "Year-end rollover", adminOnly: true },
+    { id: "year-end", label: "Year-end rollover", adminOnly: true, requiresUk: true },
   ];
-  const tabs = allTabs.filter((t) => !t.adminOnly || isAdmin);
+  const tabs = allTabs.filter(
+    (t) => (!t.adminOnly || isAdmin) && (!t.requiresUk || hasUkWorkforce)
+  );
+
+  const ukOnlyNote =
+    report?.workforce && report.workforce.total > 0
+      ? `Showing results for UK-based employees only (${report.workforce.uk} of ${report.workforce.total} employees)`
+      : null;
 
   const bradfordRows = report?.absenceTrigger.rows ?? [];
   const sortedBradford = [...bradfordRows].sort((a, b) => b.score - a.score);
@@ -504,17 +594,22 @@ export default function ReportsPage() {
             Reports
           </h1>
           <p className="text-sm text-gray-500">
-            UK compliance reporting and workforce analytics
+            Workforce analytics
+            {hasUkWorkforce
+              ? " and UK compliance reporting"
+              : " (UK compliance reports appear automatically when you add UK-based employees)"}
           </p>
         </div>
-        <Button size="sm" variant="outline" onClick={exportFullPack}>
-          <Download className="mr-1.5 h-3.5 w-3.5" />
-          Export compliance pack
-        </Button>
+        {hasUkWorkforce && (
+          <Button size="sm" variant="outline" onClick={exportFullPack}>
+            <Download className="mr-1.5 h-3.5 w-3.5" />
+            Export compliance pack
+          </Button>
+        )}
       </div>
 
       {/* Summary cards */}
-      {report && (
+      {hasUkWorkforce && report && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card
             className="cursor-pointer hover:border-brand-200"
@@ -621,6 +716,9 @@ export default function ReportsPage() {
                       short-term absences. The formula uses sickness spells (S)
                       and total sick days (D) over the last 12 months.
                     </CardDescription>
+                    {ukOnlyNote && (
+                      <p className="mt-2 text-xs text-gray-500">{ukOnlyNote}</p>
+                    )}
                   </div>
                   <div className="flex items-end gap-2">
                     <Input
@@ -710,6 +808,9 @@ export default function ReportsPage() {
                       Compliance status for all UK employees. Unverified
                       employees are flagged.
                     </CardDescription>
+                    {ukOnlyNote && (
+                      <p className="mt-2 text-xs text-gray-500">{ukOnlyNote}</p>
+                    )}
                   </div>
                   <Button
                     size="sm"
@@ -887,6 +988,9 @@ export default function ReportsPage() {
                     <CardDescription>
                       Annual leave days taken per UK employee this year.
                     </CardDescription>
+                    {ukOnlyNote && (
+                      <p className="mt-2 text-xs text-gray-500">{ukOnlyNote}</p>
+                    )}
                   </div>
                   <Button
                     size="sm"
@@ -952,6 +1056,9 @@ export default function ReportsPage() {
                       Employees currently on Statutory Sick Pay with estimated
                       costs.
                     </CardDescription>
+                    {ukOnlyNote && (
+                      <p className="mt-2 text-xs text-gray-500">{ukOnlyNote}</p>
+                    )}
                   </div>
                   <Button
                     size="sm"
@@ -1021,6 +1128,9 @@ export default function ReportsPage() {
                       Active statutory parental leave with KIT (Keeping In
                       Touch) day usage. Click a KIT cell to edit.
                     </CardDescription>
+                    {ukOnlyNote && (
+                      <p className="mt-2 text-xs text-gray-500">{ukOnlyNote}</p>
+                    )}
                   </div>
                   <Button
                     size="sm"
@@ -1516,12 +1626,12 @@ export default function ReportsPage() {
                               {row.daysTaken}
                             </td>
                             <td className="py-2 pr-4 text-right text-gray-700">
-                              {row.dailyHolidayPayRate === null
+                              {row.dailyHolidayPayRate == null
                                 ? "—"
                                 : `£${row.dailyHolidayPayRate.toFixed(2)}`}
                             </td>
                             <td className="py-2 pr-4 text-right font-medium text-gray-900">
-                              {row.estimatedPay === null
+                              {row.estimatedPay == null
                                 ? "—"
                                 : `£${row.estimatedPay.toFixed(2)}`}
                             </td>
@@ -1530,7 +1640,7 @@ export default function ReportsPage() {
                                 variant="outline"
                                 className="font-mono text-[10px]"
                               >
-                                {row.rateSource}
+                                {row.rateSource ?? "not_applicable"}
                               </Badge>
                             </td>
                           </tr>

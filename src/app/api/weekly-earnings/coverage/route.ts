@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { buildEarningsCoverageRows } from "@/lib/earnings-coverage";
 
 /**
  * Earnings-history coverage for each employee in the organization.
@@ -31,12 +32,13 @@ export async function GET() {
   const orgId = sessionUser.organizationId as string;
 
   const users = await prisma.user.findMany({
-    where: { organizationId: orgId },
+    where: { organizationId: orgId, workCountry: "GB" },
     select: {
       id: true,
       name: true,
       email: true,
       countryCode: true,
+      workCountry: true,
       department: true,
       employmentType: true,
       weeklyEarnings: {
@@ -50,23 +52,7 @@ export async function GET() {
     orderBy: { name: "asc" },
   });
 
-  const rows = users.map((u) => {
-    const totalWeeks = u.weeklyEarnings.length;
-    const paidWeeks = u.weeklyEarnings.filter((w) => !w.isZeroPayWeek).length;
-    return {
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      countryCode: u.countryCode,
-      department: u.department,
-      employmentType: u.employmentType,
-      totalWeeks,
-      paidWeeks,
-      lastWeekStartDate:
-        u.weeklyEarnings[0]?.weekStartDate?.toISOString() ?? null,
-      hasAnyHistory: totalWeeks > 0,
-    };
-  });
+  const rows = buildEarningsCoverageRows(users);
 
   return NextResponse.json({ employees: rows });
 }

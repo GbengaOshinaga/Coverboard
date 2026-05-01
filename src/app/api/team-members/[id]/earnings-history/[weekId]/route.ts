@@ -3,6 +3,10 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { calculateHolidayPayRate } from "@/lib/holidayPay";
+import {
+  holidayPayNotApplicablePayload,
+  isUkHolidayPayApplicable,
+} from "@/lib/uk-holiday-pay";
 import { z } from "zod";
 
 async function getEarningsStats(userId: string) {
@@ -28,6 +32,10 @@ const updateSchema = z.object({
   isZeroPayWeek: z.boolean().optional(),
 });
 
+function notApplicableResponse() {
+  return NextResponse.json(holidayPayNotApplicablePayload(), { status: 403 });
+}
+
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string; weekId: string }> }
@@ -48,9 +56,10 @@ export async function PUT(
   // Verify employee belongs to org
   const employee = await prisma.user.findFirst({
     where: { id: memberId, organizationId: orgId },
-    select: { id: true },
+    select: { id: true, workCountry: true },
   });
   if (!employee) return NextResponse.json({ error: "Employee not found" }, { status: 404 });
+  if (!isUkHolidayPayApplicable(employee.workCountry)) return notApplicableResponse();
 
   // Verify entry belongs to this employee
   const entry = await prisma.weeklyEarning.findFirst({
@@ -99,9 +108,10 @@ export async function DELETE(
 
   const employee = await prisma.user.findFirst({
     where: { id: memberId, organizationId: orgId },
-    select: { id: true },
+    select: { id: true, workCountry: true },
   });
   if (!employee) return NextResponse.json({ error: "Employee not found" }, { status: 404 });
+  if (!isUkHolidayPayApplicable(employee.workCountry)) return notApplicableResponse();
 
   const entry = await prisma.weeklyEarning.findFirst({
     where: { id: weekId, userId: memberId },

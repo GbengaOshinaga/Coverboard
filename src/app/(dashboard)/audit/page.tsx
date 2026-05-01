@@ -17,7 +17,7 @@ import { useToast } from "@/components/ui/toast";
 import { Download, ShieldCheck, Lock } from "lucide-react";
 import { toCsv, downloadCsv } from "@/lib/csv-export";
 import { AUDIT_ACTIONS } from "@/lib/audit";
-import { hasAuditTrail, type SubscriptionPlan } from "@/lib/plans";
+import { hasAuditTrail, type AnyPlan } from "@/lib/plans";
 
 type AuditLog = {
   id: string;
@@ -55,7 +55,7 @@ export default function AuditPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [plan, setPlan] = useState<SubscriptionPlan | undefined>();
+  const [plan, setPlan] = useState<AnyPlan | undefined>();
   const [denied, setDenied] = useState(false);
 
   const [filterAction, setFilterAction] = useState("");
@@ -214,6 +214,7 @@ export default function AuditPage() {
       </div>
     );
   }
+
 
   const planBlocked = !hasAuditTrail(plan) || denied;
 

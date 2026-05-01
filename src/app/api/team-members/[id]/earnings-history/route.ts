@@ -3,6 +3,10 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { calculateHolidayPayRate } from "@/lib/holidayPay";
+import {
+  holidayPayNotApplicablePayload,
+  isUkHolidayPayApplicable,
+} from "@/lib/uk-holiday-pay";
 import { z } from "zod";
 
 async function getEarningsStats(userId: string) {
@@ -25,8 +29,12 @@ async function getEarningsStats(userId: string) {
 async function resolveEmployee(memberId: string, orgId: string) {
   return prisma.user.findFirst({
     where: { id: memberId, organizationId: orgId },
-    select: { id: true },
+    select: { id: true, workCountry: true },
   });
+}
+
+function notApplicableResponse() {
+  return NextResponse.json(holidayPayNotApplicablePayload(), { status: 403 });
 }
 
 export async function GET(
@@ -49,7 +57,9 @@ export async function GET(
   }
 
   const employee = await resolveEmployee(memberId, orgId);
-  if (!employee) return NextResponse.json({ error: "Employee not found" }, { status: 404 });
+  if (!employee)
+    return NextResponse.json({ error: "Employee not found" }, { status: 404 });
+  if (!isUkHolidayPayApplicable(employee.workCountry)) return notApplicableResponse();
 
   const stats = await getEarningsStats(memberId);
   return NextResponse.json(stats);
@@ -85,7 +95,9 @@ export async function POST(
 
   const { id: memberId } = await params;
   const employee = await resolveEmployee(memberId, orgId);
-  if (!employee) return NextResponse.json({ error: "Employee not found" }, { status: 404 });
+  if (!employee)
+    return NextResponse.json({ error: "Employee not found" }, { status: 404 });
+  if (!isUkHolidayPayApplicable(employee.workCountry)) return notApplicableResponse();
 
   const body = await request.json();
   const parsed = createSchema.safeParse(body);

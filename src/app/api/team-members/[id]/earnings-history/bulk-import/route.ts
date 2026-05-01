@@ -3,6 +3,10 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { calculateHolidayPayRate } from "@/lib/holidayPay";
+import {
+  holidayPayNotApplicablePayload,
+  isUkHolidayPayApplicable,
+} from "@/lib/uk-holiday-pay";
 import { z } from "zod";
 
 const rowSchema = z.object({
@@ -35,9 +39,12 @@ export async function POST(
 
   const employee = await prisma.user.findFirst({
     where: { id: memberId, organizationId: orgId },
-    select: { id: true },
+    select: { id: true, workCountry: true },
   });
   if (!employee) return NextResponse.json({ error: "Employee not found" }, { status: 404 });
+  if (!isUkHolidayPayApplicable(employee.workCountry)) {
+    return NextResponse.json(holidayPayNotApplicablePayload(), { status: 403 });
+  }
 
   const body = await request.json();
   const parsed = bulkSchema.safeParse(body);

@@ -4,13 +4,10 @@ import bcrypt from "bcryptjs";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
-  getDefaultLeaveTypes,
   getCountryPolicies,
   getHolidaysForYear,
 } from "@/lib/country-policies";
 import { sendTeamInviteEmail } from "@/lib/email-notifications";
-import { getUkBankHolidaysForRegion } from "@/lib/uk-compliance";
-import { BankHolidayRegion } from "@prisma/client";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { z } from "zod";
 
@@ -55,14 +52,19 @@ export async function POST(request: Request) {
     const { countries, industry, regionsEnabled, invites } = parsed.data;
     const currentYear = new Date().getFullYear();
 
-    // Update the admin user's country to the first selected country
+    // Update the admin user's default and work country to the first selected country
     await prisma.user.update({
       where: { id: userId },
-      data: { countryCode: countries[0] },
+      data: { countryCode: countries[0], workCountry: countries[0] },
     });
 
-    // Create leave types based on selected countries
-    const defaultLeaveTypes = getDefaultLeaveTypes(countries);
+    // New organizations start with neutral leave types; UK statutory types are
+    // enabled only when a UK-based employee is added.
+    const defaultLeaveTypes = [
+      { name: "Annual Leave", color: "#3b82f6", isPaid: true, defaultDays: 20 },
+      { name: "Sick Leave", color: "#ef4444", isPaid: true, defaultDays: 10 },
+      { name: "Unpaid Leave", color: "#6b7280", isPaid: false, defaultDays: 0 },
+    ];
 
     const createdLeaveTypes = await Promise.all(
       defaultLeaveTypes.map((lt) =>
@@ -83,13 +85,12 @@ export async function POST(request: Request) {
       )
     );
 
-    // Create country-specific leave policies
-    const countryPolicies = getCountryPolicies(countries);
+    // Create non-UK country-specific leave policies for selected countries.
+    // UK statutory policies are gated by UK workforce presence.
+    const countryPolicies = getCountryPolicies(countries.filter((c) => c !== "GB"));
 
     for (const cp of countryPolicies) {
-      const leaveType = createdLeaveTypes.find(
-        (lt) => lt.name === cp.leaveType
-      );
+      const leaveType = createdLeaveTypes.find((lt) => lt.name === cp.leaveType);
       if (!leaveType) continue;
 
       await prisma.leavePolicy.upsert({
@@ -111,20 +112,6 @@ export async function POST(request: Request) {
         },
       });
 
-      await prisma.leaveType.update({
-        where: { id: leaveType.id },
-        data: {
-          ...(cp.countryCode === "GB"
-            ? {
-                category: cp.category,
-                requiresEvidence: cp.requiresEvidence,
-                minNoticeDays: cp.minNoticeDays,
-                durationLogic: cp.durationLogic,
-                countryCode: cp.countryCode,
-              }
-            : {}),
-        },
-      });
     }
 
     // Create public holidays for the current year
@@ -171,39 +158,6 @@ export async function POST(request: Request) {
       });
     }
 
-    // Create UK regional bank holidays when GB is selected
-    if (countries.includes("GB")) {
-      const ukRegions: BankHolidayRegion[] = [
-        "ENGLAND_WALES",
-        "SCOTLAND",
-        "NORTHERN_IRELAND",
-      ];
-      for (const y of [currentYear, currentYear + 1]) {
-        for (const region of ukRegions) {
-          const ukBankHolidays = getUkBankHolidaysForRegion(y, region);
-          for (const holiday of ukBankHolidays) {
-            await prisma.bankHoliday.upsert({
-              where: {
-                date_region_organizationId: {
-                  date: holiday.date,
-                  region,
-                  organizationId: orgId,
-                },
-              },
-              create: {
-                name: holiday.name,
-                date: holiday.date,
-                region,
-                countryCode: "GB",
-                organizationId: orgId,
-              },
-              update: {},
-            });
-          }
-        }
-      }
-    }
-
     // Create invited team members and send invite emails
     if (invites && invites.length > 0) {
       const inviterUser = await prisma.user.findUnique({
@@ -230,6 +184,7 @@ export async function POST(request: Request) {
             role: "MEMBER",
             memberType: "EMPLOYEE",
             countryCode: invite.countryCode,
+            workCountry: invite.countryCode,
             organizationId: orgId,
           },
         });

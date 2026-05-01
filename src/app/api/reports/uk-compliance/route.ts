@@ -14,6 +14,11 @@ import {
   getCurrentSMPPhase,
   isMaternityLeaveType,
 } from "@/lib/smpCalculator";
+import {
+  getUKWorkforceCounts,
+  hasUKEmployees,
+  ukComplianceUnavailablePayload,
+} from "@/lib/uk-workforce";
 import { countWeekdays } from "@/lib/utils";
 
 function absenceSpells(requests: { startDate: Date; endDate: Date }[]): number {
@@ -45,12 +50,21 @@ export async function GET(request: Request) {
   }
 
   const orgId = sessionUser.organizationId as string;
+  const ukEmployees = await hasUKEmployees(orgId);
+  if (!ukEmployees) {
+    return NextResponse.json(ukComplianceUnavailablePayload(), { status: 403 });
+  }
+
   const { searchParams } = new URL(request.url);
   const department = searchParams.get("department");
   const employmentType = searchParams.get("contractType");
   const threshold = Number(searchParams.get("bradfordThreshold") ?? 200);
 
-  const userWhere: Record<string, unknown> = { organizationId: orgId, countryCode: "GB" };
+  const userWhere: Record<string, unknown> = {
+    organizationId: orgId,
+    workCountry: "GB",
+    isActive: true,
+  };
   if (department) userWhere.department = department;
   if (employmentType) userWhere.employmentType = employmentType;
 
@@ -215,7 +229,7 @@ export async function GET(request: Request) {
   );
 
   const rightToWorkData = await prisma.user.findMany({
-    where: { organizationId: orgId, countryCode: "GB" },
+    where: { organizationId: orgId, workCountry: "GB", isActive: true },
     select: {
       id: true,
       name: true,
@@ -226,7 +240,10 @@ export async function GET(request: Request) {
     orderBy: { name: "asc" },
   });
 
+  const workforce = await getUKWorkforceCounts(orgId);
+
   return NextResponse.json({
+    workforce,
     holidayUsage,
     absenceTrigger: {
       threshold,

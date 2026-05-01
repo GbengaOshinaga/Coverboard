@@ -28,6 +28,10 @@ export type WeeklyEarning = {
   is_zero_pay_week: boolean;
 };
 
+function isUkWorkCountry(workCountry: string | null | undefined): boolean {
+  return workCountry === "GB";
+}
+
 /**
  * Working days per week used to convert a weekly average into a daily rate.
  *
@@ -68,6 +72,26 @@ export function calculateHolidayPayRate(
 }
 
 /**
+ * UK-only holiday pay wrapper:
+ * - returns `null` when holiday pay earnings history does not apply
+ *   (non-UK work location)
+ * - otherwise returns the computed daily rate.
+ */
+export async function calculateHolidayPayRateForEmployee(
+  employeeId: string,
+  weeklyEarnings: WeeklyEarning[]
+): Promise<number | null> {
+  const employee = await prisma.user.findUnique({
+    where: { id: employeeId },
+    select: { workCountry: true },
+  });
+  if (!employee || !isUkWorkCountry(employee.workCountry)) {
+    return null;
+  }
+  return calculateHolidayPayRate(weeklyEarnings);
+}
+
+/**
  * Same logic as {@link calculateHolidayPayRate} but returns the weekly
  * average rather than the per-day figure. Useful when converting for a
  * custom working-pattern.
@@ -94,6 +118,12 @@ export function calculateWeeklyHolidayPayRate(
 export async function getDailyHolidayPayRateForUser(
   userId: string
 ): Promise<number | null> {
+  const employee = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { workCountry: true },
+  });
+  if (!employee || !isUkWorkCountry(employee.workCountry)) return null;
+
   const rows = await prisma.weeklyEarning.findMany({
     where: { userId },
     orderBy: { weekStartDate: "asc" },

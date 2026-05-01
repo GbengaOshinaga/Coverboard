@@ -63,7 +63,7 @@ export const PRICING: PricingConfig = {
         "Custom carry-over rules",
         "Absence analytics dashboard",
         "UK compliance report pack",
-        "Priority support",
+        "Priority response",
       ],
     },
     {
@@ -74,11 +74,10 @@ export const PRICING: PricingConfig = {
       highlighted: false,
       features: [
         "Everything in Scale",
-        // "Dedicated onboarding session",
         "Custom leave policies",
         "GDPR data residency config",
         "Audit trail exports",
-        "Priority email support",
+        "Priority email response",
       ],
     },
   ],

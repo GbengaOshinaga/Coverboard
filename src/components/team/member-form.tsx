@@ -18,6 +18,7 @@ type MemberData = {
   rightToWorkVerified: boolean | null;
   department?: string;
   countryCode: string;
+  workCountry: string;
 };
 
 const roleOptions = [
@@ -62,6 +63,9 @@ export function MemberForm({
   const [countryCode, setCountryCode] = useState(
     initialData?.countryCode ?? "NG"
   );
+  const [workCountry, setWorkCountry] = useState(
+    initialData?.workCountry ?? initialData?.countryCode ?? "NG"
+  );
   const [employmentType, setEmploymentType] = useState(
     initialData?.employmentType ?? "FULL_TIME"
   );
@@ -101,6 +105,7 @@ export function MemberForm({
             : rightToWorkVerified === "yes",
         department: department.trim() || undefined,
         countryCode,
+        workCountry,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -158,6 +163,14 @@ export function MemberForm({
         options={countryOptions}
         value={countryCode}
         onChange={(e) => setCountryCode(e.target.value)}
+      />
+
+      <Select
+        id="memberWorkCountry"
+        label="Work location (country)"
+        options={countryOptions}
+        value={workCountry}
+        onChange={(e) => setWorkCountry(e.target.value)}
       />
 
       <div className="grid grid-cols-2 gap-4">

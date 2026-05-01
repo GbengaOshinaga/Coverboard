@@ -18,13 +18,19 @@ test("planAtLeast rejects non-paid lifecycle plans", () => {
   assert.equal(planAtLeast("LOCKED", "STARTER"), false);
 });
 
-test("support and audit gates unlock at expected tiers", () => {
+test("response and audit gates unlock at expected tiers", () => {
   assert.equal(hasPrioritySupport("SCALE"), true);
   assert.equal(hasPrioritySupport("GROWTH"), false);
   assert.equal(hasSlaSupport("PRO"), true);
   assert.equal(hasSlaSupport("SCALE"), false);
   assert.equal(hasAuditTrail("PRO"), true);
   assert.equal(hasAuditTrail("GROWTH"), false);
+});
+
+test("TRIAL inherits Pro gate access", () => {
+  assert.equal(hasPrioritySupport("TRIAL"), true);
+  assert.equal(hasSlaSupport("TRIAL"), true);
+  assert.equal(hasAuditTrail("TRIAL"), true);
 });
 
 test("starter admin cap remains limited while higher tiers are unlimited", () => {

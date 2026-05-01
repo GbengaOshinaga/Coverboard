@@ -1,6 +1,6 @@
 # Coverboard
 
-Team leave management for small, distributed teams. See who's out, plan coverage, and manage leave in one place — with built-in support for country-specific policies, email notifications, a Slack bot, and Jira project coverage.
+Team leave management for small, distributed teams. See who's out, plan coverage, and manage leave in one place — with built-in country-specific policies, email notifications, a Slack bot, and Jira project coverage.
 
 Built for teams of 5–15 people, especially those spread across the UK, Africa, LATAM, and SEA where public holidays and statutory leave rules vary wildly. Includes full UK statutory compliance — SSP, maternity, paternity, shared parental leave, regional bank holidays, pro-rata entitlements, and Bradford Factor reporting.
 
@@ -15,7 +15,7 @@ Organizations have a **`plan`** on the `Organization` model (`SubscriptionPlan` 
 | **`TRIAL`** | £0 (14 days) | Full Pro feature set so users experience the product before deciding |
 | **`STARTER`** | £19 | Core leave management, up to 2 admins |
 | **`GROWTH`** | £49 | + Bradford Factor, pro-rata, SSP tracking, unlimited admins |
-| **`SCALE`** | £99 | + Parental tracker, holiday pay, carry-over, compliance reports, priority support |
+| **`SCALE`** | £99 | + Parental tracker, holiday pay, carry-over, compliance reports, priority response |
 | **`PRO`** | £179 | + Audit trail, custom leave policies, GDPR data residency, API access |
 | **`LOCKED`** | — | Trial ended without a card (or subscription canceled). Full-page lock screen; only billing/profile/auth routes are reachable. |
 
@@ -51,7 +51,7 @@ Define leave types (Annual, Sick, Parental, Compassionate) with per-country allo
 
 **Admins** can create, edit inline, and delete **country policies** (allowance and carry-over cap per leave type and country) from **Settings**, and **edit or delete leave types** when no leave requests reference them. APIs: `GET`/`POST` `/api/leave-policies`, `PATCH`/`DELETE` `/api/leave-policies/[id]`, `PATCH`/`DELETE` `/api/leave-types/[id]`.
 
-### Mixed Team Support
+### Mixed Team Management
 
 Handles employees, contractors, and freelancers in the same team. Member type is visible on all cards and request views so managers can account for different leave arrangements.
 
@@ -149,7 +149,7 @@ SMP runs in two phases: **weeks 1–6 at 90% of Average Weekly Earnings**, then 
 - **Env override**: `SMP_WEEKLY_RATE` or `SMP_FLAT_RATE` (same value, update each April).
 - **Tests**: `src/lib/smpCalculator.test.ts` — AWE math, both phase-2 branches (low earner and high earner), phase date/rate edge cases.
 
-### Help & Support
+### Help & Contact
 
 **`/help`** shows plan-appropriate contact options: standard email for Starter/Growth, priority targets for Scale, SLA-backed messaging for Pro. Optional public env vars (`NEXT_PUBLIC_SUPPORT_EMAIL`, etc.) override defaults — see **`.env.example`**.
 
@@ -216,7 +216,7 @@ NEXTAUTH_URL="http://localhost:3000"
 NEXTAUTH_SECRET="generate-a-random-secret-here"
 ```
 
-See **`.env.example`** for all optional variables (Resend, Slack, Jira, cron secret, UK statutory overrides, Help/Support and demo booking URLs).
+See **`.env.example`** for all optional variables (Resend, Slack, Jira, cron secret, UK statutory overrides, Help/Contact and demo booking URLs).
 
 ### 3. Set up the database
 
@@ -367,7 +367,7 @@ src/
       team/page.tsx               Team members management
       reports/page.tsx            Analytics, UK compliance, year-end rollover, CSV exports
       audit/page.tsx              Audit log viewer + export (Pro)
-      help/page.tsx               Plan-tiered support & resources
+      help/page.tsx               Plan-tiered contact options & resources
       settings/
         page.tsx                  Org settings, leave types, country policies, Slack/Jira
         profile/page.tsx          Profile, change password, email preferences
