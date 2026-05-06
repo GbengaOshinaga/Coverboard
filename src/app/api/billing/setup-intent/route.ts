@@ -25,19 +25,33 @@ export async function POST() {
   const orgId = sessionUser.organizationId as string;
   const org = await prisma.organization.findUnique({
     where: { id: orgId },
-    select: { stripeCustomerId: true },
+    select: { id: true, name: true, stripeCustomerId: true },
   });
 
-  if (!org?.stripeCustomerId) {
-    return NextResponse.json(
-      { error: "No Stripe customer associated with this organization" },
-      { status: 400 }
-    );
+  if (!org) {
+    return NextResponse.json({ error: "Organization not found" }, { status: 404 });
   }
 
   try {
+    let stripeCustomerId = org.stripeCustomerId;
+    if (!stripeCustomerId) {
+      const customer = await stripe.customers.create({
+        email: (sessionUser.email as string | undefined) ?? undefined,
+        name: org.name,
+        metadata: {
+          organization_id: org.id,
+          admin_user_id: (sessionUser.id as string | undefined) ?? "",
+        },
+      });
+      stripeCustomerId = customer.id;
+      await prisma.organization.update({
+        where: { id: org.id },
+        data: { stripeCustomerId },
+      });
+    }
+
     const setupIntent = await stripe.setupIntents.create({
-      customer: org.stripeCustomerId,
+      customer: stripeCustomerId,
       payment_method_types: ["card"],
       usage: "off_session",
     });
