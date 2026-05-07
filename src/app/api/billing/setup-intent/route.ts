@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
+import { ensureStripeCustomer } from "@/lib/billing-customer";
 
 export async function POST() {
   const session = await getServerSession(authOptions);
@@ -33,22 +34,12 @@ export async function POST() {
   }
 
   try {
-    let stripeCustomerId = org.stripeCustomerId;
-    if (!stripeCustomerId) {
-      const customer = await stripe.customers.create({
-        email: (sessionUser.email as string | undefined) ?? undefined,
-        name: org.name,
-        metadata: {
-          organization_id: org.id,
-          admin_user_id: (sessionUser.id as string | undefined) ?? "",
-        },
-      });
-      stripeCustomerId = customer.id;
-      await prisma.organization.update({
-        where: { id: org.id },
-        data: { stripeCustomerId },
-      });
-    }
+    const stripeCustomerId = await ensureStripeCustomer({
+      stripeClient: stripe,
+      organizationId: org.id,
+      organizationName: org.name,
+      stripeCustomerId: org.stripeCustomerId,
+    });
 
     const setupIntent = await stripe.setupIntents.create({
       customer: stripeCustomerId,

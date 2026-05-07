@@ -3,31 +3,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
-  planKeyFromPriceId,
   PLAN_DISPLAY_NAME,
   PLAN_MONTHLY_PRICE_GBP,
-  type StripePlanKey,
 } from "@/config/stripePrices";
+import { planKeyForBilling } from "@/lib/billing-plan";
 import { AddPaymentForm } from "./add-payment-form";
-
-function planKeyForBilling(org: {
-  plan: string;
-  stripePriceId: string | null;
-}): StripePlanKey {
-  if (org.stripePriceId) {
-    const key = planKeyFromPriceId(org.stripePriceId);
-    if (key) return key;
-  }
-
-  const key = org.plan.toLowerCase();
-  if (key === "starter" || key === "growth" || key === "scale" || key === "pro") {
-    return key;
-  }
-
-  // Signup defaults to Growth. If Stripe provisioning failed before persisting
-  // a price id, this keeps add-payment recovery aligned with that path.
-  return "growth";
-}
 
 export default async function AddPaymentPage() {
   const session = await getServerSession(authOptions);

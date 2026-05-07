@@ -9,7 +9,7 @@ Coverboard never deletes your data the moment you close your account or run out 
 
 There are four scenarios where your organisation enters the deletion pipeline:
 
-1. **You asked us to delete it.** An admin clicked **Delete account and all data** under **Settings → Danger zone** (also reachable from **Settings → Billing**).
+1. **You asked us to delete it.** An admin clicked **Delete account and all data** under **Settings → Danger zone**.
 2. **Your trial ended without a card.** Stripe paused your subscription and we started the trial-expired grace clock.
 3. **Your subscription was cancelled.** Either you scheduled a cancel-at-period-end and it ran its course, or Stripe sent us a `customer.subscription.deleted` webhook.
 4. **Payments kept failing.** After Stripe retries are exhausted, the org enters the same grace flow.

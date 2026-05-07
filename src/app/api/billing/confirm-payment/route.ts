@@ -5,35 +5,14 @@ import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
 import { cancelScheduledDeletion } from "@/lib/deletionScheduler";
 import { emailDeletionCanceled } from "@/lib/billing-emails";
-import {
-  STRIPE_PRICE_IDS,
-  planKeyFromPriceId,
-  type StripePlanKey,
-} from "@/config/stripePrices";
+import { planKeyForBilling } from "@/lib/billing-plan";
+import { ensureStripeCustomer } from "@/lib/billing-customer";
+import { STRIPE_PRICE_IDS } from "@/config/stripePrices";
 import { z } from "zod";
 
 const schema = z.object({
   paymentMethodId: z.string().min(1),
 });
-
-function planKeyForBilling(org: {
-  plan: string;
-  stripePriceId: string | null;
-}): StripePlanKey {
-  if (org.stripePriceId) {
-    const key = planKeyFromPriceId(org.stripePriceId);
-    if (key) return key;
-  }
-
-  const key = org.plan.toLowerCase();
-  if (key === "starter" || key === "growth" || key === "scale" || key === "pro") {
-    return key;
-  }
-
-  // If Stripe provisioning failed during signup, the selected checkout plan may
-  // not have been persisted. Match the signup default so recovery can proceed.
-  return "growth";
-}
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
@@ -75,22 +54,12 @@ export async function POST(request: Request) {
   }
 
   try {
-    let stripeCustomerId = org.stripeCustomerId;
-    if (!stripeCustomerId) {
-      const customer = await stripe.customers.create({
-        email: (sessionUser.email as string | undefined) ?? undefined,
-        name: org.name,
-        metadata: {
-          organization_id: org.id,
-          admin_user_id: (sessionUser.id as string | undefined) ?? "",
-        },
-      });
-      stripeCustomerId = customer.id;
-      await prisma.organization.update({
-        where: { id: orgId },
-        data: { stripeCustomerId },
-      });
-    }
+    const stripeCustomerId = await ensureStripeCustomer({
+      stripeClient: stripe,
+      organizationId: org.id,
+      organizationName: org.name,
+      stripeCustomerId: org.stripeCustomerId,
+    });
 
     await stripe.paymentMethods.attach(parsed.data.paymentMethodId, {
       customer: stripeCustomerId,

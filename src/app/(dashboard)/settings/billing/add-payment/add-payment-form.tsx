@@ -16,7 +16,7 @@ import { ArrowLeft, CheckCircle, Lock } from "lucide-react";
 type Props = {
   publishableKey: string;
   planName: string;
-  planPriceGbp: number | null;
+  planPriceGbp: number;
   trialEndFormatted: string;
   alreadyAdded: boolean;
 };
