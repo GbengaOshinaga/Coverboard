@@ -293,20 +293,6 @@ export default function BillingPage() {
         </CardContent>
       </Card>
 
-      <div className="mt-2 border-t border-gray-100 pt-6">
-        <h3 className="text-sm font-semibold text-gray-900">Danger zone</h3>
-        <p className="mt-1 text-xs text-gray-500">
-          Permanently delete your organization and all data. A 30-day grace
-          period applies before deletion runs.
-        </p>
-        <Link
-          href="/account/delete"
-          className="mt-3 inline-flex rounded-md border border-red-200 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
-        >
-          Delete account and all data →
-        </Link>
-      </div>
-
       <Dialog open={confirming} onClose={() => setConfirming(false)} title="Cancel subscription">
         <p className="text-sm text-gray-700">
           Your access will continue until{" "}
