@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { EmploymentType } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -85,7 +86,7 @@ export default async function DashboardPage() {
       where: {
         organizationId: orgId,
         workCountry: "GB",
-        employmentType: "ZERO_HOURS",
+        employmentType: EmploymentType.ZERO_HOURS,
         OR: [{ rightToWorkVerified: false }, { rightToWorkVerified: null }],
       },
     }),
