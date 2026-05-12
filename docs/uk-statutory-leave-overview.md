@@ -32,7 +32,7 @@ When an employee is too ill to work, you must pay SSP — provided they qualify.
 > This feature is only available for employees with a UK work location set on their profile.
 
 **Qualifying conditions:**
-- They must earn at least £123 per week (the Lower Earnings Limit) — set on the employee profile as **Average weekly earnings**
+- They must earn at least £125 per week (the Lower Earnings Limit for 2026/27) — set on the employee profile as **Average weekly earnings**
 - They must have been sick for at least 4 consecutive days (including non-working days)
 
 **How it works:**
@@ -138,4 +138,4 @@ Coverboard supports both. Statutory leave types are added automatically when you
 | Parental Bereavement | 2 weeks | Yes (SPBP) | Child death under 18 |
 | Unpaid Parental Leave | 18 weeks per child | No | After 1 year service |
 
-> Statutory pay rates change every April. Coverboard reads the current rates from the `SSP_WEEKLY_RATE`, `SMP_WEEKLY_RATE` (or `SMP_FLAT_RATE`) and `LEL_WEEKLY` environment variables. If you don't set these, the values shown above (the 2026/27 defaults) are used.
+> Statutory pay rates change every April. Coverboard reads the current rates from the `SSP_WEEKLY_RATE`, `SMP_WEEKLY_RATE` (or `SMP_FLAT_RATE`) and `LEL_WEEKLY` environment variables. If you don't set these, the values shown above (the 2026/27 defaults) are used. See **[april-statutory-rate-update.md](april-statutory-rate-update.md)** for the step-by-step procedure payroll should follow each April.

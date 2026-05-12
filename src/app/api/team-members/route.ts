@@ -141,7 +141,7 @@ export async function POST(request: Request) {
         passwordHash,
         role: role as "ADMIN" | "MANAGER" | "MEMBER",
         memberType: memberType as "EMPLOYEE" | "CONTRACTOR" | "FREELANCER",
-        employmentType: employmentType as "FULL_TIME" | "PART_TIME" | "VARIABLE_HOURS",
+        employmentType,
         daysWorkedPerWeek,
         fteRatio,
         rightToWorkVerified: rightToWorkVerified ?? null,

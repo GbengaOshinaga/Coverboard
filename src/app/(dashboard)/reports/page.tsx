@@ -28,6 +28,10 @@ import {
   CalendarClock,
 } from "lucide-react";
 import { toCsv, downloadCsv } from "@/lib/csv-export";
+import {
+  formatEmploymentType,
+  isHoursAveragedEmploymentType,
+} from "@/lib/employment-types";
 
 type BradfordRow = {
   userId: string;
@@ -43,6 +47,7 @@ type RightToWorkRow = {
   name: string;
   email: string;
   department: string | null;
+  employmentType: string;
   rightToWorkVerified: boolean | null;
 };
 
@@ -479,7 +484,8 @@ export default function ReportsPage() {
           const all = await res.json();
           setVariableUsers(
             all.filter(
-              (u: VariableHoursUser) => u.employmentType === "VARIABLE_HOURS"
+              (u: VariableHoursUser) =>
+                isHoursAveragedEmploymentType(u.employmentType)
             )
           );
         }
@@ -807,6 +813,13 @@ export default function ReportsPage() {
                     <CardDescription>
                       Compliance status for all UK employees. Unverified
                       employees are flagged.
+                      {rtwRows.some(
+                        (r) =>
+                          r.employmentType === "ZERO_HOURS" &&
+                          r.rightToWorkVerified !== true
+                      )
+                        ? " Right to work verification is especially important for zero-hours and bank staff."
+                        : ""}
                     </CardDescription>
                     {ukOnlyNote && (
                       <p className="mt-2 text-xs text-gray-500">{ukOnlyNote}</p>
@@ -877,11 +890,11 @@ export default function ReportsPage() {
               <CardHeader>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                   <div>
-                    <CardTitle>Variable hours tracking</CardTitle>
+                    <CardTitle>Variable and zero-hours tracking</CardTitle>
                     <CardDescription>
-                      Record weekly hours for variable-hours employees. The last
-                      52 weeks are used to calculate their FTE ratio and
-                      pro-rated annual leave entitlement.
+                      Record weekly hours for variable-hours and zero-hours
+                      employees. The last 52 weeks are used to calculate their
+                      FTE ratio and pro-rated annual leave entitlement.
                     </CardDescription>
                   </div>
                   {selectedUser && (
@@ -902,16 +915,17 @@ export default function ReportsPage() {
                     { value: "", label: "Choose an employee..." },
                     ...variableUsers.map((u) => ({
                       value: u.id,
-                      label: `${u.name} (${u.email})`,
+                      label: `${u.name} (${formatEmploymentType(
+                        u.employmentType
+                      )})`,
                     })),
                   ]}
                 />
 
                 {variableUsers.length === 0 && (
                   <p className="text-sm text-gray-400">
-                    No variable-hours employees found. Set an employee&apos;s
-                    employment type to &quot;Variable hours&quot; on the Team
-                    page first.
+                    No variable-hours or zero-hours employees found. Set an
+                    employee&apos;s employment type on the Team page first.
                   </p>
                 )}
 

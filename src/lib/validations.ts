@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  EMPLOYMENT_TYPES,
+  normalizeEmploymentType,
+} from "@/lib/employment-types";
 
 export const leaveRequestSchema = z
   .object({
@@ -18,23 +22,31 @@ export const leaveRequestSchema = z
 
 export type LeaveRequestInput = z.infer<typeof leaveRequestSchema>;
 
-export const teamMemberSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters"),
-  email: z.string().email("Invalid email address"),
-  role: z.enum(["ADMIN", "MANAGER", "MEMBER"]),
-  memberType: z.enum(["EMPLOYEE", "CONTRACTOR", "FREELANCER"]),
-  employmentType: z.enum(["FULL_TIME", "PART_TIME", "VARIABLE_HOURS"]).default("FULL_TIME"),
-  daysWorkedPerWeek: z.number().min(0).max(7).default(5),
-  fteRatio: z.number().min(0).max(1).default(1),
-  rightToWorkVerified: z.boolean().nullable().optional(),
-  department: z.string().max(100).optional(),
-  countryCode: z.string().min(2, "Country is required").max(2),
-  workCountry: z
-    .string()
-    .trim()
-    .toUpperCase()
-    .length(2, "Work location (country) is required"),
-});
+export const teamMemberSchema = z
+  .object({
+    name: z.string().min(2, "Name must be at least 2 characters"),
+    email: z.string().email("Invalid email address"),
+    role: z.enum(["ADMIN", "MANAGER", "MEMBER"]),
+    memberType: z.enum(["EMPLOYEE", "CONTRACTOR", "FREELANCER"]),
+    employmentType: z
+      .preprocess(normalizeEmploymentType, z.enum(EMPLOYMENT_TYPES))
+      .default("FULL_TIME"),
+    daysWorkedPerWeek: z.number().min(0).max(7).default(5),
+    fteRatio: z.number().min(0).max(1).default(1),
+    rightToWorkVerified: z.boolean().nullable().optional(),
+    department: z.string().max(100).optional(),
+    countryCode: z.string().min(2, "Country is required").max(2),
+    workCountry: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .length(2, "Work location (country) is required"),
+  })
+  .transform((data) =>
+    data.employmentType === "ZERO_HOURS"
+      ? { ...data, daysWorkedPerWeek: 0 }
+      : data
+  );
 
 export type TeamMemberInput = z.infer<typeof teamMemberSchema>;
 

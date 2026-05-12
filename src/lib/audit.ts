@@ -1,8 +1,14 @@
 import { prisma } from "@/lib/prisma";
+import { hasAuditTrail, type AnyPlan } from "@/lib/plans";
 
 /**
  * Canonical audit actions. Extend this list rather than passing strings ad-hoc
  * so the viewer/filter UI can remain consistent.
+ *
+ * `.viewed` actions are emitted by `recordReadAudit` (Pro-only) and represent
+ * sensitive reads — opening an individual employee profile, loading a leave
+ * request that carries a sickness note, opening the audit log itself, or
+ * pulling a compliance report.
  */
 export const AUDIT_ACTIONS = [
   "leave_request.created",
@@ -12,11 +18,13 @@ export const AUDIT_ACTIONS = [
   "leave_request.kit_days_updated",
   "leave_request.ssp_cap_reached",
   "leave_request.cover_overridden",
+  "leave_request.sickness_viewed",
   "team_member.created",
   "team_member.updated",
   "team_member.deleted",
   "team_member.role_changed",
   "team_member.bulk_imported",
+  "team_member.viewed",
   "leave_type.created",
   "leave_type.updated",
   "leave_type.deleted",
@@ -27,6 +35,9 @@ export const AUDIT_ACTIONS = [
   "carry_over.rollover_run",
   "onboarding.completed",
   "data_retention.anonymised",
+  "data_export.sar",
+  "audit_log.viewed",
+  "compliance_report.viewed",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -42,7 +53,9 @@ export type AuditResource =
   | "organization"
   | "carry_over"
   | "onboarding"
-  | "data_retention";
+  | "data_retention"
+  | "audit_log"
+  | "compliance_report";
 
 export type AuditActor = {
   id?: string | null;
@@ -89,6 +102,51 @@ export async function recordAudit(params: {
   } catch (error) {
     console.error("Audit log failed:", error);
   }
+}
+
+/**
+ * Record a read-side audit entry. Only writes when the org's plan grants the
+ * audit trail feature (currently Pro). For plans that can't view the audit
+ * log there's no benefit to storing entries they can't see — and storing them
+ * anyway raises its own data-minimisation concern under GDPR.
+ */
+export async function recordReadAudit(params: {
+  plan: AnyPlan | null | undefined;
+  organizationId: string;
+  action: AuditAction;
+  resource: AuditResource;
+  resourceId?: string | null;
+  actor?: AuditActor;
+  metadata?: Record<string, unknown>;
+  context?: AuditContext;
+}): Promise<void> {
+  if (!hasAuditTrail(params.plan)) return;
+  const { plan: _plan, ...rest } = params;
+  void _plan;
+  return recordAudit(rest);
+}
+
+/**
+ * Builds metadata for `leave_request.sickness_viewed` when a list-style read
+ * has returned leave requests carrying a sickness note. Returns null when no
+ * audit entry should be written — either the viewer is the leave subject
+ * themselves (viewing your own sickness is not a sensitive read) or no
+ * sickness-bearing requests were exposed.
+ */
+export function selectSicknessAuditMeta<
+  T extends { id: string; userId: string; sicknessNote?: string | null }
+>(
+  requests: T[],
+  viewerUserId: string,
+  viewerRole: string
+): { leaveRequestIds: string[]; count: number } | null {
+  if (viewerRole !== "ADMIN" && viewerRole !== "MANAGER") return null;
+  const exposed = requests
+    .filter((r) => r.sicknessNote != null && r.sicknessNote !== "")
+    .filter((r) => r.userId !== viewerUserId)
+    .map((r) => r.id);
+  if (exposed.length === 0) return null;
+  return { leaveRequestIds: exposed, count: exposed.length };
 }
 
 /** Extract request IP + user-agent for audit context. */

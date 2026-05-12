@@ -1,4 +1,4 @@
-<!-- Last updated: 2026-05-06 — auto-updated from codebase review -->
+<!-- Last updated: 2026-05-12 — auto-updated from codebase review -->
 # GDPR & your leave data
 
 Leave management involves some of the most sensitive personal data your business holds. This page explains what data Coverboard stores, how it is protected, and what your obligations are as the employer.
@@ -38,7 +38,9 @@ Every write action on leave requests, team members, leave types and policies, or
 
 The audit log lives at **/audit** and is available to admins on the **Pro** plan, with CSV export and filters by action, resource and date.
 
-> The audit log captures **writes**, not reads. There is no per-view log of who opened a particular leave request.
+On the **Pro** plan the audit log also records **sensitive reads** so you can evidence who-saw-what during a SAR or tribunal: opening an individual employee profile (`team_member.viewed`), loading a leave request that exposed a sickness note (`leave_request.sickness_viewed`), viewing the audit log itself (`audit_log.viewed`), pulling a compliance report (`compliance_report.viewed`), and downloading a SAR export (`data_export.sar`). Read entries are emitted only on Pro — lower tiers store writes only.
+
+> Read-audit deliberately ignores routine list and calendar views to keep the trail focused on records an admin opened directly, not every cached dashboard refresh.
 
 ---
 
@@ -50,7 +52,7 @@ Coverboard provides the technical controls, but you are the data controller — 
 
 **Do not share medical details unnecessarily.** A line manager does not need to know why someone is off sick in order to manage their team's workload. Coverboard does not enforce this for you — it is a process matter inside your team.
 
-**Respect employee rights.** Employees have the right to access their own data, request corrections, and in some circumstances request deletion. If an employee makes a Subject Access Request (SAR), you have one month to respond. Their own request and balance data is visible to them in-app; for a full export, contact support.
+**Respect employee rights.** Employees have the right to access their own data, request corrections, and in some circumstances request deletion. If an employee makes a Subject Access Request (SAR), you have one month to respond. Their own request and balance data is visible to them in-app, and admins can download a complete machine-readable export of every record Coverboard holds about a specific employee from **Team → [employee] → Export data (SAR)**. The export is a single JSON file covering the employee profile, every leave request, weekly hours and earnings, carry-over balances, region history and audit-log activity. Each export is itself recorded in the audit log so you can evidence when and by whom a SAR was fulfilled.
 
 **Store data only as long as necessary.** Coverboard provides a retention endpoint that anonymises records older than your configured cutoff (default **6 years** after the leave end date — the standard UK recommendation). You can override the period (1–20 years) and run a `dryRun=true` preview before committing. Personal notes and sickness notes are wiped; statutory fields (dates, leave type, SSP/SMP figures) are preserved so historical pay records remain reportable.
 
@@ -58,9 +60,9 @@ Coverboard provides the technical controls, but you are the data controller — 
 
 ## Data storage and security
 
-Your data residency is configurable under **Settings → UK Compliance → Data residency** (UK, EU or US — defaults to EU). When set to UK, a "Data stored in UK servers." trust label appears on the settings page. Coverboard uses role-based access controls (admin / manager / member), encrypted data storage, and an append-only audit log of write actions. If you are asked during a CQC inspection or an employment tribunal whether your HR data is handled securely, you can point to these controls directly.
+Your data residency is shown under **Settings → UK Compliance → Data residency** (UK, EU or US — defaults to **UK**). When set to UK, a "Data stored in UK servers." trust label appears on the settings page. Coverboard uses role-based access controls (admin / manager / member), encrypted data storage, and an append-only audit log of write actions. If you are asked during a CQC inspection or an employment tribunal whether your HR data is handled securely, you can point to these controls directly.
 
-> Custom data residency configuration is a **Pro** plan feature.
+> Today the field is read-only — Coverboard is hosted in the UK and the value reflects that. Customer-driven residency switching will return when multi-region hosting is available; until then, changes require a manual review by support.
 
 ---
 

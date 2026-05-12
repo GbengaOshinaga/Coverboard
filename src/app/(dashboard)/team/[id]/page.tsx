@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 import { COUNTRY_NAMES } from "@/lib/utils";
+import { formatEmploymentType } from "@/lib/employment-types";
 import {
   parseEarningsCsv,
   findIntraFileDuplicates,
@@ -617,6 +618,7 @@ export default function EmployeeProfilePage({
   const { data: session } = useSession();
   const userRole = (session?.user as Record<string, unknown> | undefined)?.role as string | undefined;
   const canManage = userRole === "ADMIN" || userRole === "MANAGER";
+  const isAdmin = userRole === "ADMIN";
 
   const [member, setMember] = useState<Member | null>(null);
   const [stats, setStats] = useState<EarningsStats | null>(null);
@@ -700,7 +702,7 @@ export default function EmployeeProfilePage({
                 )}
               </div>
               <p className="mt-1 text-sm text-gray-500">
-                {member.employmentType.replace(/_/g, " ")} · FTE {member.fteRatio} ·{" "}
+                {formatEmploymentType(member.employmentType)} · FTE {member.fteRatio} ·{" "}
                 {member.daysWorkedPerWeek} days/week
               </p>
               {member.bradfordScore > 0 && (
@@ -709,6 +711,17 @@ export default function EmployeeProfilePage({
                 </p>
               )}
             </div>
+            {isAdmin && (
+              <a
+                href={`/api/team-members/${memberId}/export`}
+                download
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                title="Subject Access Request (GDPR): download all data held about this employee"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Export data (SAR)
+              </a>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -764,7 +777,9 @@ export default function EmployeeProfilePage({
               <AlertTriangle className="mx-auto mb-2 h-6 w-6 text-amber-500" />
               <p className="text-sm font-medium text-amber-900">No earnings history yet</p>
               <p className="mt-1 text-xs text-amber-700">
-                Add weekly earnings below to enable legally compliant holiday pay calculations.
+                {member.employmentType === "ZERO_HOURS"
+                  ? "Zero-hours holiday pay must use the 52-week earnings average. Add weekly earnings before calculating holiday pay."
+                  : "Add weekly earnings below to enable legally compliant holiday pay calculations."}
               </p>
             </div>
           ) : (

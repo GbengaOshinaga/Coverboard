@@ -12,7 +12,13 @@ import {
   calculateSspEntitlement,
   UK_SSP_WEEKLY_RATE,
 } from "@/lib/uk-compliance";
-import { recordAudit, requestAuditContext } from "@/lib/audit";
+import {
+  recordAudit,
+  recordReadAudit,
+  requestAuditContext,
+  selectSicknessAuditMeta,
+} from "@/lib/audit";
+import type { AnyPlan } from "@/lib/plans";
 import {
   getDailyHolidayPayRateForUser,
 } from "@/lib/holidayPay";
@@ -82,6 +88,29 @@ export async function GET(request: Request) {
     },
     orderBy: { startDate: "asc" },
   });
+
+  // Pro-only read-side audit when sensitive sickness notes were exposed to a
+  // non-subject admin/manager viewer.
+  const sicknessMeta = selectSicknessAuditMeta(
+    requests,
+    currentUserId,
+    userRole
+  );
+  if (sicknessMeta) {
+    void recordReadAudit({
+      plan: sessionUser.plan as AnyPlan | undefined,
+      organizationId: orgId,
+      action: "leave_request.sickness_viewed",
+      resource: "leave_request",
+      actor: {
+        id: currentUserId,
+        email: (session.user.email as string | null) ?? null,
+        role: userRole,
+      },
+      metadata: sicknessMeta,
+      context: requestAuditContext(request),
+    });
+  }
 
   return NextResponse.json(requests);
 }

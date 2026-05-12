@@ -26,7 +26,15 @@ export default async function DashboardPage() {
   nextWeek.setDate(nextWeek.getDate() + 14);
 
   // Parallel queries
-  const [outToday, upcoming, teamCount, pendingCount, myBalances, rightToWorkRiskCount] = await Promise.all([
+  const [
+    outToday,
+    upcoming,
+    teamCount,
+    pendingCount,
+    myBalances,
+    rightToWorkRiskCount,
+    zeroHoursRightToWorkRiskCount,
+  ] = await Promise.all([
     // Who's out today
     prisma.leaveRequest.findMany({
       where: {
@@ -69,7 +77,15 @@ export default async function DashboardPage() {
     prisma.user.count({
       where: {
         organizationId: orgId,
-        countryCode: "GB",
+        workCountry: "GB",
+        OR: [{ rightToWorkVerified: false }, { rightToWorkVerified: null }],
+      },
+    }),
+    prisma.user.count({
+      where: {
+        organizationId: orgId,
+        workCountry: "GB",
+        employmentType: "ZERO_HOURS",
         OR: [{ rightToWorkVerified: false }, { rightToWorkVerified: null }],
       },
     }),
@@ -158,8 +174,17 @@ export default async function DashboardPage() {
 
       {rightToWorkRiskCount > 0 && (
         <Card className="border-amber-200 bg-amber-50">
-          <CardContent className="py-3 text-sm text-amber-800">
-            UK compliance warning: {rightToWorkRiskCount} team member(s) have missing right-to-work verification.
+          <CardContent className="space-y-1 py-3 text-sm text-amber-800">
+            <p>
+              UK compliance warning: {rightToWorkRiskCount} team member(s) have
+              missing right-to-work verification.
+            </p>
+            {zeroHoursRightToWorkRiskCount > 0 && (
+              <p className="font-medium">
+                Right to work verification is especially important for
+                zero-hours and bank staff.
+              </p>
+            )}
           </CardContent>
         </Card>
       )}

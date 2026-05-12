@@ -61,6 +61,27 @@ test("pro-rata for variable hours at 35-hour FTE, 28 hours/week", () => {
   assert.equal(entitlement, 23);
 });
 
+test("pro-rata for zero-hours uses average hours, not days worked", () => {
+  const weeklyHours = Array(52).fill(14);
+  const entitlement = calculateUkProRatedAnnualLeave({
+    employmentType: EmploymentType.ZERO_HOURS,
+    daysWorkedPerWeek: 5,
+    weeklyHours,
+    fullTimeHoursPerWeek: 35,
+  });
+  assert.equal(entitlement, 12);
+});
+
+test("pro-rata for zero-hours returns null without hours history", () => {
+  const entitlement = calculateUkProRatedAnnualLeave({
+    employmentType: EmploymentType.ZERO_HOURS,
+    daysWorkedPerWeek: 5,
+    weeklyHours: [],
+    fullTimeHoursPerWeek: 35,
+  });
+  assert.equal(entitlement, null);
+});
+
 test("pro-rata for full-time employee is always 28 regardless of applyProRata", () => {
   const entitlement = calculateUkProRatedAnnualLeave({
     employmentType: EmploymentType.FULL_TIME,

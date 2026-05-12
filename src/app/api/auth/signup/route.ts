@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { stripe } from "@/lib/stripe";
 import { STRIPE_PRICE_IDS, type StripePlanKey } from "@/config/stripePrices";
+import { ensureStripeCustomer } from "@/lib/billing-customer";
 
 const signupSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -86,33 +87,41 @@ export async function POST(request: Request) {
 
     if (stripe) {
       try {
-        const customer = await stripe.customers.create({
+        // Persist the customer id immediately. If a later step throws, recovery
+        // flows (setup-intent, confirm-payment) reuse this id rather than
+        // creating a duplicate customer in Stripe.
+        stripeCustomerId = await ensureStripeCustomer({
+          stripeClient: stripe,
+          organizationId: result.org.id,
+          organizationName: orgName,
+          stripeCustomerId: null,
           email,
-          name: orgName,
-          metadata: {
-            organization_id: result.org.id,
-            admin_user_id: result.user.id,
-          },
+          provisioningPath: "signup",
+          metadata: { admin_user_id: result.user.id },
         });
-        stripeCustomerId = customer.id;
 
-        const subscription = await stripe.subscriptions.create({
-          customer: customer.id,
-          items: [{ price: STRIPE_PRICE_IDS[selectedPlan] }],
-          trial_period_days: trialDays,
-          payment_settings: {
-            save_default_payment_method: "on_subscription",
-          },
-          trial_settings: {
-            end_behavior: {
-              missing_payment_method: "pause",
+        const subscription = await stripe.subscriptions.create(
+          {
+            customer: stripeCustomerId,
+            items: [{ price: STRIPE_PRICE_IDS[selectedPlan] }],
+            trial_period_days: trialDays,
+            payment_settings: {
+              save_default_payment_method: "on_subscription",
+            },
+            trial_settings: {
+              end_behavior: {
+                missing_payment_method: "pause",
+              },
+            },
+            metadata: {
+              organization_id: result.org.id,
+              plan_key: selectedPlan,
             },
           },
-          metadata: {
-            organization_id: result.org.id,
-            plan_key: selectedPlan,
-          },
-        });
+          {
+            idempotencyKey: `coverboard:organization:${result.org.id}:trial-subscription`,
+          }
+        );
         stripeSubscriptionId = subscription.id;
         if (subscription.trial_end) {
           trialEndsAt = new Date(subscription.trial_end * 1000);
@@ -121,7 +130,6 @@ export async function POST(request: Request) {
         await prisma.organization.update({
           where: { id: result.org.id },
           data: {
-            stripeCustomerId,
             stripeSubscriptionId,
             stripePriceId: STRIPE_PRICE_IDS[selectedPlan],
             trialEndsAt,
@@ -131,6 +139,8 @@ export async function POST(request: Request) {
         });
       } catch (stripeError) {
         console.error("Stripe provisioning failed at signup:", stripeError);
+        // ensureStripeCustomer already persisted stripeCustomerId if it
+        // succeeded, so partial failure no longer orphans a Stripe customer.
         await prisma.organization.update({
           where: { id: result.org.id },
           data: { trialEndsAt, subscriptionStatus: "trialing" },

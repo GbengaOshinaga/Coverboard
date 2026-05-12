@@ -126,13 +126,16 @@ export async function getUserLeaveBalances(
     let proRatedEntitlement: number | undefined;
 
     if (lt.applyProRata) {
-      proRatedEntitlement = calculateUkProRatedAnnualLeave({
+      const calculatedEntitlement = calculateUkProRatedAnnualLeave({
         employmentType: user.employmentType,
         daysWorkedPerWeek: user.daysWorkedPerWeek,
         weeklyHours: user.weeklyHours.map((h) => h.hoursWorked),
         fullTimeHoursPerWeek,
       });
-      allowance = proRatedEntitlement;
+      if (calculatedEntitlement !== null) {
+        proRatedEntitlement = calculatedEntitlement;
+        allowance = proRatedEntitlement;
+      }
     }
     if (user.countryCode === "GB" && lt.name === "Annual Leave" && !ukBankHolidayInclusive) {
       allowance += ukRegionalBankHolidayCount;
