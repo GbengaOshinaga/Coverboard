@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { sendEmail } from "@/lib/email";
+import { sendEmail, resend, getFromAddress } from "@/lib/email";
 import {
   teamInviteEmail,
   leaveRequestSubmittedEmail,
@@ -28,6 +28,29 @@ export async function sendTeamInviteEmail(data: {
   });
 
   await sendEmail({ to: data.email, subject, html });
+}
+
+/** Same template as {@link sendTeamInviteEmail}; throws if email is not configured or Resend fails. */
+export async function sendTeamInviteEmailStrict(data: {
+  inviteeName: string;
+  inviterName: string;
+  orgName: string;
+  email: string;
+  tempPassword: string;
+}): Promise<void> {
+  if (!resend) {
+    throw new Error("Email is not configured");
+  }
+  const { subject, html } = teamInviteEmail({
+    ...data,
+    loginUrl: `${BASE_URL}/login`,
+  });
+  await resend.emails.send({
+    from: getFromAddress(),
+    to: data.email,
+    subject,
+    html,
+  });
 }
 
 // ─── Leave Request Submitted (notify managers & admins) ──────────────

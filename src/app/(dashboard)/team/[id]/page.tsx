@@ -13,6 +13,7 @@ import {
   Check,
   X,
   AlertTriangle,
+  Mail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -616,13 +617,19 @@ export default function EmployeeProfilePage({
 }) {
   const { id: memberId } = use(params);
   const { data: session } = useSession();
+  const { toast } = useToast();
   const userRole = (session?.user as Record<string, unknown> | undefined)?.role as string | undefined;
+  const sessionUserId = (session?.user as Record<string, unknown> | undefined)?.id as
+    | string
+    | undefined;
   const canManage = userRole === "ADMIN" || userRole === "MANAGER";
   const isAdmin = userRole === "ADMIN";
 
   const [member, setMember] = useState<Member | null>(null);
   const [stats, setStats] = useState<EarningsStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showResendInvite, setShowResendInvite] = useState(false);
+  const [resendInviteBusy, setResendInviteBusy] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -711,20 +718,86 @@ export default function EmployeeProfilePage({
                 </p>
               )}
             </div>
-            {isAdmin && (
-              <a
-                href={`/api/team-members/${memberId}/export`}
-                download
-                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-                title="Subject Access Request (GDPR): download all data held about this employee"
-              >
-                <Download className="h-3.5 w-3.5" />
-                Export data (SAR)
-              </a>
-            )}
+            <div className="flex w-full shrink-0 flex-wrap gap-2 sm:ml-auto sm:w-auto sm:justify-end">
+              {canManage && sessionUserId && sessionUserId !== memberId && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowResendInvite(true)}
+                  className="inline-flex h-8 items-center gap-1.5"
+                >
+                  <Mail className="h-3.5 w-3.5" />
+                  Resend invite email
+                </Button>
+              )}
+              {isAdmin && (
+                <a
+                  href={`/api/team-members/${memberId}/export`}
+                  download
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                  title="Subject Access Request (GDPR): download all data held about this employee"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Export data (SAR)
+                </a>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
+
+      <Dialog
+        open={showResendInvite}
+        onClose={() => (resendInviteBusy ? null : setShowResendInvite(false))}
+        title="Resend invite email?"
+      >
+        <p className="text-sm text-gray-700">
+          We will email <strong>{member.email}</strong> the same welcome message as a new invite,
+          with a <strong>new temporary password</strong>. Their previous password will stop working.
+        </p>
+        <p className="mt-2 text-xs text-gray-500">
+          Use this if they did not receive the first email or cannot log in. You can resend a limited
+          number of times per hour.
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={resendInviteBusy}
+            onClick={() => setShowResendInvite(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            disabled={resendInviteBusy}
+            onClick={async () => {
+              setResendInviteBusy(true);
+              try {
+                const res = await fetch(`/api/team-members/${memberId}/resend-invite`, {
+                  method: "POST",
+                });
+                const data = (await res.json().catch(() => ({}))) as { error?: string };
+                if (!res.ok) {
+                  toast(data.error ?? "Could not resend invite", "error");
+                  return;
+                }
+                toast("Invite email sent. They will receive a new temporary password.", "success");
+                setShowResendInvite(false);
+              } catch {
+                toast("Something went wrong", "error");
+              } finally {
+                setResendInviteBusy(false);
+              }
+            }}
+          >
+            {resendInviteBusy ? "Sending…" : "Send invite email"}
+          </Button>
+        </div>
+      </Dialog>
 
       {/* Holiday pay earnings history (UK-only) */}
       {member.workCountry === "GB" && (

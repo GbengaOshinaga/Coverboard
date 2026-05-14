@@ -24,6 +24,7 @@ export const AUDIT_ACTIONS = [
   "team_member.deleted",
   "team_member.role_changed",
   "team_member.bulk_imported",
+  "team_member.invite_resent",
   "team_member.viewed",
   "leave_type.created",
   "leave_type.updated",
