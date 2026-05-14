@@ -2,25 +2,36 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { recordAudit, requestAuditContext } from "@/lib/audit";
+import { recordAudit, recordReadAudit, requestAuditContext } from "@/lib/audit";
+import type { AnyPlan } from "@/lib/plans";
 import { hasFeatureForEnum } from "@/lib/planFeatures";
+import {
+  EMPLOYMENT_TYPES,
+  normalizeEmploymentType,
+} from "@/lib/employment-types";
 import { z } from "zod";
 
 const updateSchema = z.object({
   name: z.string().min(2).optional(),
   role: z.enum(["ADMIN", "MANAGER", "MEMBER"]).optional(),
   memberType: z.enum(["EMPLOYEE", "CONTRACTOR", "FREELANCER"]).optional(),
-  employmentType: z.enum(["FULL_TIME", "PART_TIME", "VARIABLE_HOURS"]).optional(),
+  employmentType: z
+    .preprocess(normalizeEmploymentType, z.enum(EMPLOYMENT_TYPES))
+    .optional(),
   daysWorkedPerWeek: z.number().min(0).max(7).optional(),
   fteRatio: z.number().min(0).max(1).optional(),
   rightToWorkVerified: z.boolean().nullable().optional(),
   department: z.string().max(100).nullable().optional(),
   countryCode: z.string().min(2).max(2).optional(),
   workCountry: z.string().trim().toUpperCase().length(2).nullable().optional(),
-});
+}).transform((data) =>
+  data.employmentType === "ZERO_HOURS"
+    ? { ...data, daysWorkedPerWeek: 0 }
+    : data
+);
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession(authOptions);
@@ -63,6 +74,24 @@ export async function GET(
 
   if (!member) {
     return NextResponse.json({ error: "Member not found" }, { status: 404 });
+  }
+
+  // Pro-only read-side audit: log who opened this employee profile.
+  if ((sessionUser.id as string) !== id) {
+    void recordReadAudit({
+      plan: sessionUser.plan as AnyPlan | undefined,
+      organizationId: orgId,
+      action: "team_member.viewed",
+      resource: "team_member",
+      resourceId: id,
+      actor: {
+        id: sessionUser.id as string,
+        email: (session.user.email as string | null) ?? null,
+        role: userRole,
+      },
+      metadata: { subjectEmail: member.email },
+      context: requestAuditContext(request),
+    });
   }
 
   return NextResponse.json(member);

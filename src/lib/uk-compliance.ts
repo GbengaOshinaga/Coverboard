@@ -1,4 +1,8 @@
 import { countWeekdays } from "@/lib/utils";
+import {
+  isHoursAveragedEmploymentType,
+  type EmploymentType as EmploymentTypeValue,
+} from "@/lib/employment-types";
 
 /**
  * Mirrors Prisma enums `EmploymentType` and `BankHolidayRegion` (same string values).
@@ -8,8 +12,8 @@ export const EmploymentType = {
   FULL_TIME: "FULL_TIME",
   PART_TIME: "PART_TIME",
   VARIABLE_HOURS: "VARIABLE_HOURS",
+  ZERO_HOURS: "ZERO_HOURS",
 } as const;
-export type EmploymentType = (typeof EmploymentType)[keyof typeof EmploymentType];
 
 export const BankHolidayRegion = {
   ENGLAND_WALES: "ENGLAND_WALES",
@@ -20,14 +24,14 @@ export type BankHolidayRegion =
   (typeof BankHolidayRegion)[keyof typeof BankHolidayRegion];
 
 // Statutory Sick Pay weekly rate for 2026/27 (as of 6 April 2026).
-// Update each April via HMRC guidance (https://www.gov.uk/employers-sick-pay).
+// Update each April — see docs/april-statutory-rate-update.md.
 const DEFAULT_SSP_WEEKLY_RATE = 123.25;
 // Statutory Maternity Pay flat weekly rate for 2026/27 (as of 6 April 2026).
-// Update each April via HMRC guidance (https://www.gov.uk/maternity-pay-leave/pay).
+// Update each April — see docs/april-statutory-rate-update.md.
 const DEFAULT_SMP_WEEKLY_RATE = 194.32;
-// Lower Earnings Limit for Class 1 NICs (2025/26 tax year). Employees below
-// this weekly average earnings threshold are not entitled to SSP.
-// Update each April via HMRC guidance.
+// Lower Earnings Limit for Class 1 NICs — £125 for 2026/27 (held from 2025/26).
+// Employees below this weekly average earnings threshold are not entitled to SSP.
+// Update each April via HMRC guidance — see docs/april-statutory-rate-update.md.
 const DEFAULT_LEL_WEEKLY = 125;
 
 export const UK_SSP_WEEKLY_RATE = Number(
@@ -63,7 +67,7 @@ export const SSP_MAX_WEEKS = 28;
 export const SSP_MAX_DAYS_AT_5_DAY_WEEK = SSP_MAX_WEEKS * 5;
 
 export type UKContractInput = {
-  employmentType: EmploymentType;
+  employmentType: EmploymentTypeValue;
   daysWorkedPerWeek: number;
   weeklyHours: number[];
   /** Override the FTE denominator (default: FTE_STANDARD_HOURS_PER_WEEK = 37.5). */
@@ -85,12 +89,13 @@ export function calculateVariableHoursFte(
  * Pro-rated annual leave entitlement. Fractional days are rounded UP per the
  * Working Time Regulations — employers must not round down.
  */
-export function calculateUkProRatedAnnualLeave(input: UKContractInput): number {
+export function calculateUkProRatedAnnualLeave(input: UKContractInput): number | null {
   const fteHours = input.fullTimeHoursPerWeek ?? FTE_STANDARD_HOURS_PER_WEEK;
   if (input.employmentType === EmploymentType.PART_TIME) {
     return Math.ceil((input.daysWorkedPerWeek / 5) * 28);
   }
-  if (input.employmentType === EmploymentType.VARIABLE_HOURS) {
+  if (isHoursAveragedEmploymentType(input.employmentType)) {
+    if (input.weeklyHours.length === 0) return null;
     return Math.ceil(calculateVariableHoursFte(input.weeklyHours, fteHours) * 28);
   }
   return 28;

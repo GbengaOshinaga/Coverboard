@@ -30,6 +30,7 @@ enum EmploymentType {
   FULL_TIME
   PART_TIME
   VARIABLE_HOURS
+  ZERO_HOURS
 }
 
 enum LeaveCategory {
@@ -70,7 +71,7 @@ model Organization {
   ukCarryOverMax          Int               @default(0)
   ukCarryOverExpiryMonth  Int               @default(3)
   ukCarryOverExpiryDay    Int               @default(31)
-  dataResidency           DataResidency     @default(EU)
+  dataResidency           DataResidency     @default(UK)
   maxAdminUsers           Int               @default(2)
   plan                    SubscriptionPlan  @default(TRIAL)
   fullTimeHoursPerWeek    Decimal           @default(37.5) @db.Decimal(4, 1)

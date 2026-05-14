@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { COUNTRY_NAMES } from "@/lib/utils";
+import { EMPLOYMENT_TYPE_OPTIONS } from "@/lib/employment-types";
 
 type MemberData = {
   id?: string;
@@ -38,12 +39,6 @@ const countryOptions = Object.entries(COUNTRY_NAMES).map(([code, name]) => ({
   label: `${name} (${code})`,
 }));
 
-const employmentTypeOptions = [
-  { value: "FULL_TIME", label: "Full-time" },
-  { value: "PART_TIME", label: "Part-time" },
-  { value: "VARIABLE_HOURS", label: "Variable hours" },
-];
-
 export function MemberForm({
   initialData,
   onSubmit,
@@ -70,7 +65,9 @@ export function MemberForm({
     initialData?.employmentType ?? "FULL_TIME"
   );
   const [daysWorkedPerWeek, setDaysWorkedPerWeek] = useState(
-    String(initialData?.daysWorkedPerWeek ?? 5)
+    initialData?.employmentType === "ZERO_HOURS"
+      ? "0"
+      : String(initialData?.daysWorkedPerWeek ?? 5)
   );
   const [fteRatio, setFteRatio] = useState(String(initialData?.fteRatio ?? 1));
   const [department, setDepartment] = useState(initialData?.department ?? "");
@@ -97,7 +94,8 @@ export function MemberForm({
         role,
         memberType,
         employmentType,
-        daysWorkedPerWeek: parseFloat(daysWorkedPerWeek),
+        daysWorkedPerWeek:
+          employmentType === "ZERO_HOURS" ? 0 : parseFloat(daysWorkedPerWeek),
         fteRatio: parseFloat(fteRatio),
         rightToWorkVerified:
           rightToWorkVerified === "unknown"
@@ -177,9 +175,12 @@ export function MemberForm({
         <Select
           id="employmentType"
           label="Employment"
-          options={employmentTypeOptions}
+          options={EMPLOYMENT_TYPE_OPTIONS}
           value={employmentType}
-          onChange={(e) => setEmploymentType(e.target.value)}
+          onChange={(e) => {
+            setEmploymentType(e.target.value);
+            if (e.target.value === "ZERO_HOURS") setDaysWorkedPerWeek("0");
+          }}
         />
         <Input
           id="daysWorkedPerWeek"
@@ -190,6 +191,7 @@ export function MemberForm({
           step="0.5"
           value={daysWorkedPerWeek}
           onChange={(e) => setDaysWorkedPerWeek(e.target.value)}
+          disabled={employmentType === "ZERO_HOURS"}
         />
       </div>
 

@@ -328,9 +328,24 @@ export default function TeamPage() {
         </div>
       )}
 
-      {members.some((m) => m.countryCode === "GB" && (m.rightToWorkVerified === false || m.rightToWorkVerified === null)) && (
+      {members.some((m) => m.workCountry === "GB" && (m.rightToWorkVerified === false || m.rightToWorkVerified === null)) && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Compliance alert: Some employees do not have right-to-work verification completed.
+          <p>
+            Compliance alert: Some employees do not have right-to-work
+            verification completed.
+          </p>
+          {members.some(
+            (m) =>
+              m.workCountry === "GB" &&
+              m.employmentType === "ZERO_HOURS" &&
+              (m.rightToWorkVerified === false ||
+                m.rightToWorkVerified === null)
+          ) && (
+            <p className="mt-1 font-medium">
+              Right to work verification is especially important for zero-hours
+              and bank staff.
+            </p>
+          )}
         </div>
       )}
 

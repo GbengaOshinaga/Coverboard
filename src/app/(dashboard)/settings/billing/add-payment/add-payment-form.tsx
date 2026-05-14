@@ -16,7 +16,7 @@ import { ArrowLeft, CheckCircle, Lock } from "lucide-react";
 type Props = {
   publishableKey: string;
   planName: string;
-  planPriceGbp: number | null;
+  planPriceGbp: number;
   trialEndFormatted: string;
   alreadyAdded: boolean;
 };
@@ -112,9 +112,9 @@ export function AddPaymentForm({
         <CardHeader>
           <CardTitle className="text-base">Add a payment method</CardTitle>
           <CardDescription>
-            {planPriceGbp !== null && trialEndFormatted
+            {trialEndFormatted
               ? `Your card will be charged £${planPriceGbp}/month starting ${trialEndFormatted}.`
-              : "Your card will be charged once your trial ends."}
+              : `Your card will be charged £${planPriceGbp}/month after you confirm.`}
           </CardDescription>
         </CardHeader>
         <CardContent>

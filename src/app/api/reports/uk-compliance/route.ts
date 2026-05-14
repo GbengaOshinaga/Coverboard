@@ -20,6 +20,8 @@ import {
   ukComplianceUnavailablePayload,
 } from "@/lib/uk-workforce";
 import { countWeekdays } from "@/lib/utils";
+import { recordReadAudit, requestAuditContext } from "@/lib/audit";
+import type { AnyPlan } from "@/lib/plans";
 
 function absenceSpells(requests: { startDate: Date; endDate: Date }[]): number {
   if (requests.length === 0) return 0;
@@ -235,12 +237,36 @@ export async function GET(request: Request) {
       name: true,
       email: true,
       department: true,
+      employmentType: true,
       rightToWorkVerified: true,
     },
     orderBy: { name: "asc" },
   });
 
   const workforce = await getUKWorkforceCounts(orgId);
+
+  // Pro-only read-side audit for compliance reporting access.
+  void recordReadAudit({
+    plan: sessionUser.plan as AnyPlan | undefined,
+    organizationId: orgId,
+    action: "compliance_report.viewed",
+    resource: "compliance_report",
+    actor: {
+      id: sessionUser.id as string,
+      email: (session.user.email as string | null) ?? null,
+      role: userRole,
+    },
+    metadata: {
+      report: "uk-compliance",
+      filters: {
+        department: department ?? null,
+        contractType: employmentType ?? null,
+        bradfordThreshold: threshold,
+      },
+      employeesAnalysed: users.length,
+    },
+    context: requestAuditContext(request),
+  });
 
   return NextResponse.json({
     workforce,

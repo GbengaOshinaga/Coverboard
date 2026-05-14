@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
-import { Plus, MessageSquare, CheckCircle, XCircle, User, ChevronRight, SquareKanban, ExternalLink, Unlink, Pencil, Trash2, AlertTriangle, Banknote, MapPin } from "lucide-react";
+import { Plus, MessageSquare, CheckCircle, XCircle, User, ChevronRight, SquareKanban, ExternalLink, Unlink, Pencil, Trash2, AlertTriangle, Banknote, MapPin, CreditCard } from "lucide-react";
 import { Select } from "@/components/ui/select";
 
 /** Env vars and vendor-console setup are operator docs — only shown in the UI when running `next dev`. */
@@ -414,6 +414,28 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </Link>
+
+      {/* Billing link (admin only) */}
+      {isAdmin && (
+        <Link href="/settings/billing">
+          <Card className="hover:border-brand-200 hover:shadow-sm transition-all cursor-pointer">
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+                    <CreditCard size={18} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">Billing &amp; plan</p>
+                    <p className="text-xs text-gray-500">Manage your subscription, invoices, and payment method</p>
+                  </div>
+                </div>
+                <ChevronRight size={18} className="text-gray-400" />
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+      )}
 
       {/* Regions link */}
       {(userRole === "ADMIN" || userRole === "MANAGER") && orgSettings?.regionsEnabled && (

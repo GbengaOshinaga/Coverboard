@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { scheduleDeletion } from "@/lib/deletionScheduler";
 import { emailDeletionComplete } from "@/lib/billing-emails";
+import { verifyCronAuth } from "@/lib/cron-auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-const CRON_SECRET = process.env.CRON_SECRET;
 const STUB_NAME = "[deleted organization]";
 const STUB_SLUG_PREFIX = "deleted-";
 
@@ -133,12 +133,8 @@ async function promoteExpiredGraceToScheduled(now: Date): Promise<number> {
 }
 
 export async function POST(request: Request) {
-  if (CRON_SECRET) {
-    const authHeader = request.headers.get("authorization");
-    if (authHeader !== `Bearer ${CRON_SECRET}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-  }
+  const auth = verifyCronAuth(request);
+  if (!auth.ok) return auth.response;
 
   const now = new Date();
   const result = {

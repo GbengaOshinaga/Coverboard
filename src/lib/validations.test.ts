@@ -31,6 +31,24 @@ test("teamMemberSchema applies defaults for employmentType and numeric fields", 
   assert.equal(result.data.fteRatio, 1);
 });
 
+test("teamMemberSchema accepts ZERO_HOURS and stores days worked as 0", () => {
+  const result = teamMemberSchema.safeParse({
+    name: "Cara Patel",
+    email: "cara@example.com",
+    role: "MEMBER",
+    memberType: "EMPLOYEE",
+    employmentType: "ZERO_HOURS",
+    daysWorkedPerWeek: 5,
+    fteRatio: 0,
+    countryCode: "GB",
+    workCountry: "GB",
+  });
+  assert.equal(result.success, true);
+  if (!result.success) return;
+  assert.equal(result.data.employmentType, "ZERO_HOURS");
+  assert.equal(result.data.daysWorkedPerWeek, 0);
+});
+
 test("leaveTypeSchema enforces hex color format", () => {
   const result = leaveTypeSchema.safeParse({
     name: "Annual Leave",

@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email";
 import { weeklyDigestEmail } from "@/lib/email-templates";
+import { verifyCronAuth } from "@/lib/cron-auth";
 
 const BASE_URL = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
-const CRON_SECRET = process.env.CRON_SECRET;
 
 function startOfWeek(date: Date): Date {
   const d = new Date(date);
@@ -30,12 +30,8 @@ function formatWeekLabel(monday: Date): string {
 }
 
 export async function POST(request: Request) {
-  if (CRON_SECRET) {
-    const authHeader = request.headers.get("authorization");
-    if (authHeader !== `Bearer ${CRON_SECRET}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-  }
+  const auth = verifyCronAuth(request);
+  if (!auth.ok) return auth.response;
 
   try {
     const now = new Date();
@@ -148,4 +144,10 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
+}
+
+// Vercel cron triggers send GET by default; route both verbs to the same
+// handler so misconfiguration on either side still fires the digest.
+export async function GET(request: Request) {
+  return POST(request);
 }
