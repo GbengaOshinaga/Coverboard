@@ -719,7 +719,7 @@ export default function EmployeeProfilePage({
               )}
             </div>
             <div className="flex w-full shrink-0 flex-wrap gap-2 sm:ml-auto sm:w-auto sm:justify-end">
-              {canManage && sessionUserId && sessionUserId !== memberId && (
+              {canManage && (sessionUserId === undefined || sessionUserId !== memberId) && (
                 <Button
                   type="button"
                   variant="outline"
@@ -749,7 +749,9 @@ export default function EmployeeProfilePage({
 
       <Dialog
         open={showResendInvite}
-        onClose={() => (resendInviteBusy ? null : setShowResendInvite(false))}
+        onClose={() => {
+          if (!resendInviteBusy) setShowResendInvite(false);
+        }}
         title="Resend invite email?"
       >
         <p className="text-sm text-gray-700">

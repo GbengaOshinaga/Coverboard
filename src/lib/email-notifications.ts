@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { sendEmail, resend, getFromAddress } from "@/lib/email";
+import { getAppBaseUrl } from "@/lib/app-url";
 import {
   teamInviteEmail,
   leaveRequestSubmittedEmail,
@@ -10,8 +11,6 @@ import { countWeekdays } from "@/lib/utils";
 
 type EmailRecipient = { email: string };
 import { SessionUser } from "./types";
-
-const BASE_URL = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
 
 // ─── Team Invite ─────────────────────────────────────────────────────
 
@@ -24,13 +23,13 @@ export async function sendTeamInviteEmail(data: {
 }) {
   const { subject, html } = teamInviteEmail({
     ...data,
-    loginUrl: `${BASE_URL}/login`,
+    loginUrl: `${getAppBaseUrl()}/login`,
   });
 
   await sendEmail({ to: data.email, subject, html });
 }
 
-/** Same template as {@link sendTeamInviteEmail}; throws if email is not configured or Resend fails. */
+/** Same template as {@link sendTeamInviteEmail}; throws if email is not configured or Resend returns an error. */
 export async function sendTeamInviteEmailStrict(data: {
   inviteeName: string;
   inviterName: string;
@@ -43,14 +42,21 @@ export async function sendTeamInviteEmailStrict(data: {
   }
   const { subject, html } = teamInviteEmail({
     ...data,
-    loginUrl: `${BASE_URL}/login`,
+    loginUrl: `${getAppBaseUrl()}/login`,
   });
-  await resend.emails.send({
+  const { error } = await resend.emails.send({
     from: getFromAddress(),
     to: data.email,
     subject,
     html,
   });
+  if (error) {
+    const msg =
+      typeof error === "object" && error !== null && "message" in error
+        ? String((error as { message: unknown }).message)
+        : "Resend rejected the email";
+    throw new Error(msg);
+  }
 }
 
 // ─── Leave Request Submitted (notify managers & admins) ──────────────
@@ -82,7 +88,7 @@ export async function emailNewRequest(data: {
     endDate: data.endDate,
     daysRequested,
     note: data.note,
-    dashboardUrl: `${BASE_URL}/requests`,
+    dashboardUrl: `${getAppBaseUrl()}/requests`,
   });
 
   await Promise.all(
@@ -111,7 +117,7 @@ export async function emailRequestStatusChange(data: {
     endDate: data.endDate,
     daysRequested,
     reviewerName: data.reviewerName,
-    dashboardUrl: `${BASE_URL}/requests`,
+    dashboardUrl: `${getAppBaseUrl()}/requests`,
   });
 
   await sendEmail({ to: data.requesterEmail, subject, html });
@@ -143,7 +149,7 @@ export async function emailParentalLeaveReturnAlert(data: {
   const subject = `Return from ${data.leaveTypeName}: ${data.employeeName} returns on ${returnStr}`;
   const html = `<p>${data.employeeName} is due to return from ${data.leaveTypeName} on <strong>${returnStr}</strong>.</p>
 <p>Please ensure their role and workspace are ready and that any flexible working requests are processed in advance.</p>
-<p><a href="${BASE_URL}/team">View team calendar</a></p>`;
+<p><a href="${getAppBaseUrl()}/team">View team calendar</a></p>`;
 
   await Promise.all(
     managers.map((m) => sendEmail({ to: m.email, subject, html }))
@@ -206,7 +212,7 @@ export async function emailSspCapReached(data: {
   const { subject, html } = sspCapReachedEmail({
     employeeName: data.employeeName,
     sspEndDate: data.sspEndDate,
-    dashboardUrl: `${BASE_URL}/reports?tab=uk`,
+    dashboardUrl: `${getAppBaseUrl()}/reports?tab=uk`,
   });
 
   await Promise.all(

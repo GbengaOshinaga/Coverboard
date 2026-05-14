@@ -4,8 +4,7 @@
  * RESEND_API_KEY is absent.
  */
 import { sendEmail } from "@/lib/email";
-
-const APP_URL = process.env.NEXTAUTH_URL ?? "https://app.coverboard.app";
+import { getAppBaseUrl } from "@/lib/app-url";
 
 function base(content: string): string {
   return `<!DOCTYPE html><html><body style="font-family:-apple-system,sans-serif;max-width:560px;margin:40px auto;padding:32px;background:#fff;border-radius:8px;border:1px solid #e5e7eb;">
@@ -21,7 +20,7 @@ export async function emailTrialEndingSoon({ to, daysLeft }: { to: string; daysL
     html: base(`
       <h2 style="margin:0 0 12px">Your trial ends in ${daysLeft} days</h2>
       <p>Add your payment details now to keep your Coverboard account active.</p>
-      <p><a href="${APP_URL}/settings/billing/add-payment" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Add payment details</a></p>
+      <p><a href="${getAppBaseUrl()}/settings/billing/add-payment" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Add payment details</a></p>
     `),
   });
 }
@@ -34,7 +33,7 @@ export async function emailPaymentFailed({ to }: { to: string }) {
       <h2 style="margin:0 0 12px">Payment failed</h2>
       <p>We couldn&apos;t charge your card. Stripe will retry automatically, but
       updating your payment method now avoids any interruption.</p>
-      <p><a href="${APP_URL}/settings/billing/add-payment" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Update payment method</a></p>
+      <p><a href="${getAppBaseUrl()}/settings/billing/add-payment" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Update payment method</a></p>
     `),
   });
 }
@@ -47,7 +46,7 @@ export async function emailSubscriptionCanceled({ to }: { to: string }) {
       <h2 style="margin:0 0 12px">Subscription canceled</h2>
       <p>Your Coverboard subscription has been canceled. Your data is preserved
       for 90 days. Reactivate any time from the billing page.</p>
-      <p><a href="${APP_URL}/settings/billing" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Reactivate</a></p>
+      <p><a href="${getAppBaseUrl()}/settings/billing" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Reactivate</a></p>
     `),
   });
 }
@@ -59,7 +58,7 @@ export async function emailWelcomeActive({ to, planName }: { to: string; planNam
     html: base(`
       <h2 style="margin:0 0 12px">Your trial has ended — welcome aboard</h2>
       <p>Your ${planName} plan is now active. Thank you for choosing Coverboard.</p>
-      <p><a href="${APP_URL}/dashboard" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Open dashboard</a></p>
+      <p><a href="${getAppBaseUrl()}/dashboard" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Open dashboard</a></p>
     `),
   });
 }
@@ -72,7 +71,7 @@ export async function emailAccountPaused({ to, daysUntilDeletion }: { to: string
       <h2 style="margin:0 0 12px">Your trial has ended</h2>
       <p>Your account is paused. You have <strong>${daysUntilDeletion} days</strong>
       to add payment details before your data is permanently deleted.</p>
-      <p><a href="${APP_URL}/settings/billing/add-payment" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Reactivate now</a></p>
+      <p><a href="${getAppBaseUrl()}/settings/billing/add-payment" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Reactivate now</a></p>
     `),
   });
 }
@@ -100,7 +99,7 @@ export async function emailDeletionScheduled({
       deleted on <strong>${when}</strong> (${reason.replace(/_/g, " ")}).</p>
       <p>To keep your data, reactivate your subscription before that date.
       Once deletion runs, recovery is not possible.</p>
-      <p><a href="${APP_URL}/settings/billing/add-payment" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Reactivate and keep my data</a></p>
+      <p><a href="${getAppBaseUrl()}/settings/billing/add-payment" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Reactivate and keep my data</a></p>
     `),
   });
 }
@@ -113,7 +112,7 @@ export async function emailDeletionCanceled({ to }: { to: string }) {
       <h2 style="margin:0 0 12px">Deletion canceled</h2>
       <p>Your scheduled data deletion has been canceled and your account is
       fully active. Welcome back.</p>
-      <p><a href="${APP_URL}/dashboard" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Open dashboard</a></p>
+      <p><a href="${getAppBaseUrl()}/dashboard" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Open dashboard</a></p>
     `),
   });
 }
@@ -137,7 +136,7 @@ export async function emailDeletionComplete({
       user or business data remains.</p>
       <p>If you&apos;d like to start again, you can create a new account at any
       time.</p>
-      <p><a href="${APP_URL}/signup" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Create a new account</a></p>
+      <p><a href="${getAppBaseUrl()}/signup" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Create a new account</a></p>
     `),
   });
 }

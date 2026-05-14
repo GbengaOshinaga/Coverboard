@@ -112,10 +112,13 @@ export async function POST(
       where: { id: member.id },
       data: { passwordHash: previousHash },
     });
+    const detail =
+      err instanceof Error && err.message
+        ? err.message
+        : "Check your email provider configuration and try again.";
     return NextResponse.json(
       {
-        error:
-          "Could not send the email. The member's password was not changed. Check your email provider configuration and try again.",
+        error: `Could not send the email. The member's password was not changed. ${detail}`,
       },
       { status: 502 }
     );

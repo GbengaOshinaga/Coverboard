@@ -27,12 +27,15 @@ export async function sendEmail({
   }
 
   try {
-    await resend.emails.send({
+    const { error } = await resend.emails.send({
       from: getFromAddress(),
       to,
       subject,
       html,
     });
+    if (error) {
+      console.error(`Failed to send email to ${to}:`, error);
+    }
   } catch (error) {
     console.error(`Failed to send email to ${to}:`, error);
   }
