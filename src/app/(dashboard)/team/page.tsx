@@ -319,6 +319,8 @@ export default function TeamPage() {
               key={member.id}
               member={member}
               regionsEnabled={regionsEnabled}
+              showRightToWorkAlerts={canManage}
+              showViewLink={canManage}
               onEdit={canManage ? setEditMember : undefined}
               onAssignRegion={
                 regionsEnabled && canManage ? openAssignRegion : undefined
@@ -328,7 +330,12 @@ export default function TeamPage() {
         </div>
       )}
 
-      {members.some((m) => m.workCountry === "GB" && (m.rightToWorkVerified === false || m.rightToWorkVerified === null)) && (
+      {canManage &&
+        members.some(
+          (m) =>
+            m.workCountry === "GB" &&
+            (m.rightToWorkVerified === false || m.rightToWorkVerified === null)
+        ) && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <p>
             Compliance alert: Some employees do not have right-to-work

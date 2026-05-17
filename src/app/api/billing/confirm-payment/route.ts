@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -121,6 +122,10 @@ export async function POST(request: Request) {
         );
       }
     }
+
+    // Invalidate the dashboard layout so the trial banner (server component)
+    // re-renders with the updated cardAdded flag on the next navigation.
+    revalidatePath("/", "layout");
 
     return NextResponse.json({ success: true, deletionCanceled: wasScheduled });
   } catch (err: unknown) {

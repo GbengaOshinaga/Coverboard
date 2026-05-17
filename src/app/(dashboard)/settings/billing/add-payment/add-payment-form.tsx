@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { loadStripe, type Stripe as StripeJs } from "@stripe/stripe-js";
 import {
   Elements,
@@ -162,6 +163,7 @@ function Header() {
 function InnerForm({ planName }: { planName: string }) {
   const stripe = useStripe();
   const elements = useElements();
+  const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -212,6 +214,8 @@ function InnerForm({ planName }: { planName: string }) {
 
     setSuccess(true);
     setSubmitting(false);
+    // Re-fetch the dashboard layout so the trial banner picks up cardAdded=true.
+    router.refresh();
   }
 
   if (success) {

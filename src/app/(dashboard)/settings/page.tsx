@@ -85,7 +85,6 @@ type UKComplianceReport = {
 };
 
 export default function SettingsPage() {
-  const { data: session } = useSession();
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -99,6 +98,7 @@ export default function SettingsPage() {
   const [disconnectingJira, setDisconnectingJira] = useState(false);
   const [orgSettings, setOrgSettings] = useState<OrgSettings | null>(null);
   const [ukReport, setUkReport] = useState<UKComplianceReport | null>(null);
+  const [ukReportLoading, setUkReportLoading] = useState(false);
 
   const [editingType, setEditingType] = useState<LeaveType | null>(null);
   const [editName, setEditName] = useState("");
@@ -120,10 +120,14 @@ export default function SettingsPage() {
   const [savingPolicy, setSavingPolicy] = useState(false);
 
   const { toast } = useToast();
+  const { data: session, status: sessionStatus } = useSession();
   const user = session?.user as Record<string, unknown> | undefined;
   const userRole = user?.role as string | undefined;
   const orgName = user?.organizationName as string | undefined;
   const isAdmin = userRole === "ADMIN";
+  const canManage =
+    sessionStatus === "authenticated" &&
+    (userRole === "ADMIN" || userRole === "MANAGER");
 
   const fetchLeaveTypes = useCallback(async () => {
     setLoading(true);
@@ -135,8 +139,8 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => {
-    fetchLeaveTypes();
-  }, [fetchLeaveTypes]);
+    if (isAdmin) fetchLeaveTypes();
+  }, [isAdmin, fetchLeaveTypes]);
 
   // Check Slack integration status
   useEffect(() => {
@@ -154,6 +158,7 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => {
+    if (!canManage) return;
     async function fetchOrgSettings() {
       try {
         const res = await fetch("/api/organization/settings");
@@ -164,28 +169,43 @@ export default function SettingsPage() {
         // ignore
       }
     }
-    fetchOrgSettings();
-  }, []);
+    void fetchOrgSettings();
+  }, [canManage]);
 
   useEffect(() => {
+    if (!canManage) {
+      setUkReport(null);
+      setUkReportLoading(false);
+      return;
+    }
+    let cancelled = false;
     async function fetchUkReport() {
-      if (!orgSettings?.hasUkEmployees) {
-        setUkReport(null);
-        return;
-      }
+      setUkReportLoading(true);
       try {
         const res = await fetch("/api/reports/uk-compliance");
+        if (cancelled) return;
         if (res.ok) {
           setUkReport(await res.json());
+        } else {
+          setUkReport(null);
         }
       } catch {
-        // ignore
+        if (!cancelled) setUkReport(null);
+      } finally {
+        if (!cancelled) setUkReportLoading(false);
       }
     }
-    fetchUkReport();
-  }, [orgSettings?.hasUkEmployees]);
+    void fetchUkReport();
+    return () => {
+      cancelled = true;
+    };
+  }, [canManage]);
 
   useEffect(() => {
+    if (!canManage) {
+      setEarningsCoverage(null);
+      return;
+    }
     async function fetchCoverage() {
       if (!orgSettings?.hasUkEmployees) {
         setEarningsCoverage(null);
@@ -201,12 +221,8 @@ export default function SettingsPage() {
         // ignore
       }
     }
-    if (userRole === "ADMIN" || userRole === "MANAGER") {
-      fetchCoverage();
-    } else {
-      setEarningsCoverage(null);
-    }
-  }, [userRole, orgSettings?.hasUkEmployees]);
+    void fetchCoverage();
+  }, [canManage, orgSettings?.hasUkEmployees]);
 
   async function saveOrgSettings(next: Partial<OrgSettings>) {
     if (!orgSettings) return;
@@ -438,7 +454,7 @@ export default function SettingsPage() {
       )}
 
       {/* Regions link */}
-      {(userRole === "ADMIN" || userRole === "MANAGER") && orgSettings?.regionsEnabled && (
+      {canManage && orgSettings?.regionsEnabled && (
         <Link href="/settings/regions">
           <Card className="hover:border-brand-200 hover:shadow-sm transition-all cursor-pointer">
             <CardContent className="py-4">
@@ -521,7 +537,7 @@ export default function SettingsPage() {
         </Card>
       )}
 
-      {orgSettings && orgSettings.missingWorkLocationCount > 0 && (
+      {orgSettings && orgSettings.missingWorkLocationCount > 0 && canManage && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           We&apos;ve added work location to employee profiles. Please update your
           team&apos;s work locations to ensure the right compliance features are
@@ -532,7 +548,7 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {orgSettings && orgSettings.hasUkEmployees && (
+      {orgSettings && orgSettings.hasUkEmployees && isAdmin && (
         <Card>
           <CardHeader>
             <CardTitle>UK compliance settings</CardTitle>
@@ -656,25 +672,49 @@ export default function SettingsPage() {
         </Card>
       )}
 
-      {orgSettings?.hasUkEmployees && ukReport && (
+      {canManage && (ukReportLoading || ukReport) && (
         <Card>
           <CardHeader>
-            <CardTitle>UK Compliance</CardTitle>
-            <CardDescription>Holiday usage, absence triggers, SSP, and parental leave tracking</CardDescription>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+              <div className="min-w-0 space-y-1.5">
+                <CardTitle>UK Compliance</CardTitle>
+                <CardDescription>
+                  Holiday usage, absence triggers, SSP, and parental leave tracking
+                </CardDescription>
+              </div>
+              {ukReport && (
+                <Link
+                  href="/reports"
+                  className="shrink-0 text-sm font-medium text-brand-600 hover:underline"
+                >
+                  Open reports →
+                </Link>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-gray-600">
-            <p>Holiday usage rows: <strong>{ukReport.holidayUsage.length}</strong></p>
-            <p>
-              Bradford triggers above {ukReport.absenceTrigger.threshold}:{" "}
-              <strong>{ukReport.absenceTrigger.rows.filter((r) => r.flagged).length}</strong>
-            </p>
-            <p>Employees currently on SSP: <strong>{ukReport.sspLiability.length}</strong></p>
-            <p>Active parental leave cases: <strong>{ukReport.parentalTracker.length}</strong></p>
+            {ukReportLoading ? (
+              <div className="space-y-2 py-2">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-4 w-2/3" />
+              </div>
+            ) : ukReport ? (
+              <>
+                <p>Holiday usage rows: <strong>{ukReport.holidayUsage.length}</strong></p>
+                <p>
+                  Bradford triggers above {ukReport.absenceTrigger.threshold}:{" "}
+                  <strong>{ukReport.absenceTrigger.rows.filter((r) => r.flagged).length}</strong>
+                </p>
+                <p>Employees currently on SSP: <strong>{ukReport.sspLiability.length}</strong></p>
+                <p>Active parental leave cases: <strong>{ukReport.parentalTracker.length}</strong></p>
+              </>
+            ) : null}
           </CardContent>
         </Card>
       )}
 
-      {orgSettings?.hasUkEmployees && earningsCoverage && (
+      {orgSettings?.hasUkEmployees && earningsCoverage && canManage && (
         <Card>
           <CardHeader>
             <div className="flex items-start justify-between gap-3">
@@ -793,8 +833,9 @@ export default function SettingsPage() {
         </Card>
       )}
 
-      {/* Leave types */}
-      <Card>
+      {/* Leave types (admin only) */}
+      {isAdmin && (
+        <Card>
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
             <div className="min-w-0 flex-1 space-y-1.5">
@@ -803,16 +844,14 @@ export default function SettingsPage() {
                 Configure the types of leave available in your organization
               </CardDescription>
             </div>
-            {isAdmin && (
-              <Button
-                size="sm"
-                className="shrink-0 sm:mt-0.5"
-                onClick={() => setShowAdd(true)}
-              >
-                <Plus className="mr-1 h-3.5 w-3.5" />
-                Add type
-              </Button>
-            )}
+            <Button
+              size="sm"
+              className="shrink-0 sm:mt-0.5"
+              onClick={() => setShowAdd(true)}
+            >
+              <Plus className="mr-1 h-3.5 w-3.5" />
+              Add type
+            </Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -856,34 +895,31 @@ export default function SettingsPage() {
                     <Badge variant={lt.isPaid ? "success" : "outline"}>
                       {lt.isPaid ? "Paid" : "Unpaid"}
                     </Badge>
-                    {isAdmin && (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => openEditType(lt)}
-                          title="Edit"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleDeleteLeaveType(lt)}
-                          title="Delete"
-                          className="text-red-600 hover:bg-red-50"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </>
-                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openEditType(lt)}
+                      title="Edit"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDeleteLeaveType(lt)}
+                      title="Delete"
+                      className="text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
                 </div>
               ))}
             </div>
           )}
         </CardContent>
-      </Card>
+        </Card>
+      )}
 
       {/* Country policies */}
       {isAdmin && (

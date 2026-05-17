@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
+import { useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
+import { MEMBER_HIDDEN_NAV_HREFS } from "@/lib/member-route-access";
 import { X, LayoutDashboard, Calendar, FileText, Users, BarChart3, Settings, LifeBuoy, ScrollText } from "lucide-react";
 
 const navigation = [
@@ -25,6 +27,19 @@ export function Sidebar({
   onMobileClose?: () => void;
 }) {
   const pathname = usePathname();
+  const { data: session } = useSession();
+  const role = (session?.user as Record<string, unknown> | undefined)?.role as
+    | string
+    | undefined;
+
+  const navItems = useMemo(() => {
+    if (role === "MEMBER") {
+      return navigation.filter(
+        (item) => !MEMBER_HIDDEN_NAV_HREFS.includes(item.href)
+      );
+    }
+    return navigation;
+  }, [role]);
 
   // Close drawer on route change
   useEffect(() => {
@@ -62,7 +77,7 @@ export function Sidebar({
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-4">
-        {navigation.map((item) => {
+        {navItems.map((item) => {
           const isActive =
             pathname === item.href || pathname.startsWith(item.href + "/");
           return (

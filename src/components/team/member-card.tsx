@@ -32,11 +32,16 @@ const roleVariant: Record<string, "default" | "warning" | "outline"> = {
 export function MemberCard({
   member,
   regionsEnabled = false,
+  showRightToWorkAlerts = false,
+  showViewLink = false,
   onEdit,
   onAssignRegion,
 }: {
   member: Member;
   regionsEnabled?: boolean;
+  showRightToWorkAlerts?: boolean;
+  /** Admins and managers can open full employee profiles. */
+  showViewLink?: boolean;
   onEdit?: (member: Member) => void;
   onAssignRegion?: (member: Member) => void;
 }) {
@@ -90,7 +95,7 @@ export function MemberCard({
         <p className="text-xs text-gray-400 mt-0.5">
           {formatEmploymentType(member.employmentType)} • FTE {member.fteRatio}
         </p>
-        {needsRightToWork && (
+        {showRightToWorkAlerts && needsRightToWork && (
           <div
             className={`mt-1 rounded border px-2 py-1 text-[10px] font-medium ${
               isZeroHours
@@ -109,30 +114,34 @@ export function MemberCard({
         )}
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <Link
-          href={`/team/${member.id}`}
-          className="rounded-md px-3 py-1.5 text-xs font-medium text-brand-600 border border-brand-200 hover:bg-brand-50 transition-colors text-center"
-        >
-          View
-        </Link>
-        {onEdit && (
-          <button
-            onClick={() => onEdit(member)}
-            className="rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
-          >
-            Edit
-          </button>
-        )}
-        {onAssignRegion && (
-          <button
-            onClick={() => onAssignRegion(member)}
-            className="rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
-          >
-            Region
-          </button>
-        )}
-      </div>
+      {(showViewLink || onEdit || onAssignRegion) && (
+        <div className="flex flex-col gap-1.5">
+          {showViewLink && (
+            <Link
+              href={`/team/${member.id}`}
+              className="rounded-md px-3 py-1.5 text-xs font-medium text-brand-600 border border-brand-200 hover:bg-brand-50 transition-colors text-center"
+            >
+              View
+            </Link>
+          )}
+          {onEdit && (
+            <button
+              onClick={() => onEdit(member)}
+              className="rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
+            >
+              Edit
+            </button>
+          )}
+          {onAssignRegion && (
+            <button
+              onClick={() => onAssignRegion(member)}
+              className="rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
+            >
+              Region
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

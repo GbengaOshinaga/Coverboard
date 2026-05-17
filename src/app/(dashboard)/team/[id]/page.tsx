@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, use } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Banknote,
@@ -630,6 +631,9 @@ export default function EmployeeProfilePage({
   const [loading, setLoading] = useState(true);
   const [showResendInvite, setShowResendInvite] = useState(false);
   const [resendInviteBusy, setResendInviteBusy] = useState(false);
+  const [showRemoveMember, setShowRemoveMember] = useState(false);
+  const [removeMemberBusy, setRemoveMemberBusy] = useState(false);
+  const router = useRouter();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -742,6 +746,18 @@ export default function EmployeeProfilePage({
                   Export data (SAR)
                 </a>
               )}
+              {isAdmin && (sessionUserId === undefined || sessionUserId !== memberId) && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowRemoveMember(true)}
+                  className="inline-flex h-8 items-center gap-1.5 border-red-200 text-red-700 hover:bg-red-50"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Remove from team
+                </Button>
+              )}
             </div>
           </div>
         </CardContent>
@@ -797,6 +813,59 @@ export default function EmployeeProfilePage({
             }}
           >
             {resendInviteBusy ? "Sending…" : "Send invite email"}
+          </Button>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={showRemoveMember}
+        onClose={() => {
+          if (!removeMemberBusy) setShowRemoveMember(false);
+        }}
+        title="Remove team member?"
+      >
+        <p className="text-sm text-gray-700">
+          This permanently deletes <strong>{member.name}</strong> ({member.email}) from your
+          workspace. Their leave history and other data tied to this account will be removed.
+        </p>
+        <p className="mt-2 text-xs text-amber-800">
+          This cannot be undone. Export a SAR first if you need a record of their data.
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={removeMemberBusy}
+            onClick={() => setShowRemoveMember(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="destructive"
+            disabled={removeMemberBusy}
+            onClick={async () => {
+              setRemoveMemberBusy(true);
+              try {
+                const res = await fetch(`/api/team-members/${memberId}`, { method: "DELETE" });
+                const data = (await res.json().catch(() => ({}))) as { error?: string };
+                if (!res.ok) {
+                  toast(data.error ?? "Could not remove member", "error");
+                  return;
+                }
+                toast(`${member.name} has been removed from the team.`, "success");
+                setShowRemoveMember(false);
+                router.push("/team");
+              } catch {
+                toast("Something went wrong", "error");
+              } finally {
+                setRemoveMemberBusy(false);
+              }
+            }}
+          >
+            {removeMemberBusy ? "Removing…" : "Remove member"}
           </Button>
         </div>
       </Dialog>

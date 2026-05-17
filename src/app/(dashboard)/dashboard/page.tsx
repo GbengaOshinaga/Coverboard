@@ -17,6 +17,8 @@ export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
   const orgId = (session!.user as Record<string, unknown>).organizationId as string;
   const currentUserId = (session!.user as Record<string, unknown>).id as string;
+  const userRole = (session!.user as Record<string, unknown>).role as string;
+  const canSeeComplianceAlerts = userRole === "ADMIN" || userRole === "MANAGER";
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -75,21 +77,25 @@ export default async function DashboardPage() {
     }),
     // Current user's leave balances
     getUserLeaveBalances(currentUserId, today.getFullYear()),
-    prisma.user.count({
-      where: {
-        organizationId: orgId,
-        workCountry: "GB",
-        OR: [{ rightToWorkVerified: false }, { rightToWorkVerified: null }],
-      },
-    }),
-    prisma.user.count({
-      where: {
-        organizationId: orgId,
-        workCountry: "GB",
-        employmentType: EmploymentType.ZERO_HOURS,
-        OR: [{ rightToWorkVerified: false }, { rightToWorkVerified: null }],
-      },
-    }),
+    canSeeComplianceAlerts
+      ? prisma.user.count({
+          where: {
+            organizationId: orgId,
+            workCountry: "GB",
+            OR: [{ rightToWorkVerified: false }, { rightToWorkVerified: null }],
+          },
+        })
+      : Promise.resolve(0),
+    canSeeComplianceAlerts
+      ? prisma.user.count({
+          where: {
+            organizationId: orgId,
+            workCountry: "GB",
+            employmentType: EmploymentType.ZERO_HOURS,
+            OR: [{ rightToWorkVerified: false }, { rightToWorkVerified: null }],
+          },
+        })
+      : Promise.resolve(0),
   ]);
 
   const outTodayCount = outToday.length;
@@ -173,7 +179,7 @@ export default async function DashboardPage() {
       {/* Leave balances */}
       <LeaveBalances balances={myBalances} />
 
-      {rightToWorkRiskCount > 0 && (
+      {canSeeComplianceAlerts && rightToWorkRiskCount > 0 && (
         <Card className="border-amber-200 bg-amber-50">
           <CardContent className="space-y-1 py-3 text-sm text-amber-800">
             <p>

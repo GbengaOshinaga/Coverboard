@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import {
   Card,
@@ -226,7 +226,6 @@ export default function ReportsPage() {
 
   const user = session?.user as Record<string, unknown> | undefined;
   const userRole = user?.role as string | undefined;
-  const isReviewer = userRole === "ADMIN" || userRole === "MANAGER";
   const isAdmin = userRole === "ADMIN";
 
   const fetchReport = useCallback(async () => {
@@ -252,8 +251,8 @@ export default function ReportsPage() {
   }, [threshold]);
 
   useEffect(() => {
-    if (isReviewer) fetchReport();
-  }, [fetchReport, isReviewer]);
+    void fetchReport();
+  }, [fetchReport]);
 
   useEffect(() => {
     if (
@@ -275,8 +274,8 @@ export default function ReportsPage() {
         // ignore
       }
     }
-    if (isReviewer) fetchAnalytics();
-  }, [isReviewer]);
+    void fetchAnalytics();
+  }, []);
 
   const fetchPayroll = useCallback(async () => {
     setPayrollLoading(true);
@@ -297,10 +296,10 @@ export default function ReportsPage() {
   }, [payrollFrom, payrollTo, toast]);
 
   useEffect(() => {
-    if (activeTab === "payroll" && isReviewer && !payrollReport) {
+    if (activeTab === "payroll" && !payrollReport) {
       fetchPayroll();
     }
-  }, [activeTab, isReviewer, payrollReport, fetchPayroll]);
+  }, [activeTab, payrollReport, fetchPayroll]);
 
   function exportPayrollCsv() {
     if (!payrollReport) return;
@@ -493,8 +492,8 @@ export default function ReportsPage() {
         // ignore
       }
     }
-    if (isReviewer) fetchVariableUsers();
-  }, [isReviewer]);
+    void fetchVariableUsers();
+  }, []);
 
   useEffect(() => {
     async function loadHours() {
@@ -545,38 +544,41 @@ export default function ReportsPage() {
     setSavingHours(false);
   }
 
-  if (!isReviewer) {
-    return (
-      <div className="space-y-6">
-        <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">
-          Reports
-        </h1>
-        <p className="text-sm text-gray-500">
-          Reports are available to admins and managers only.
-        </p>
-      </div>
+  const tabs = useMemo(() => {
+    const reviewerTabs: {
+      id: ActiveTab;
+      label: string;
+      adminOnly?: boolean;
+      requiresUk?: boolean;
+    }[] = [
+      { id: "analytics", label: "Analytics" },
+      { id: "bradford", label: "Bradford Factor", requiresUk: true },
+      { id: "right-to-work", label: "Right to work", requiresUk: true },
+      { id: "weekly-hours", label: "Weekly hours" },
+      { id: "holiday-usage", label: "Holiday usage", requiresUk: true },
+      { id: "ssp", label: "SSP liability", requiresUk: true },
+      { id: "parental", label: "Parental leave", requiresUk: true },
+      { id: "payroll", label: "Payroll export" },
+      {
+        id: "year-end",
+        label: "Year-end rollover",
+        adminOnly: true,
+        requiresUk: true,
+      },
+    ];
+    return reviewerTabs.filter(
+      (t) =>
+        (!t.adminOnly || isAdmin) && (!t.requiresUk || hasUkWorkforce)
     );
-  }
+  }, [isAdmin, hasUkWorkforce]);
 
-  const allTabs: {
-    id: ActiveTab;
-    label: string;
-    adminOnly?: boolean;
-    requiresUk?: boolean;
-  }[] = [
-    { id: "analytics", label: "Analytics" },
-    { id: "bradford", label: "Bradford Factor", requiresUk: true },
-    { id: "right-to-work", label: "Right to work", requiresUk: true },
-    { id: "weekly-hours", label: "Weekly hours" },
-    { id: "holiday-usage", label: "Holiday usage", requiresUk: true },
-    { id: "ssp", label: "SSP liability", requiresUk: true },
-    { id: "parental", label: "Parental leave", requiresUk: true },
-    { id: "payroll", label: "Payroll export" },
-    { id: "year-end", label: "Year-end rollover", adminOnly: true, requiresUk: true },
-  ];
-  const tabs = allTabs.filter(
-    (t) => (!t.adminOnly || isAdmin) && (!t.requiresUk || hasUkWorkforce)
-  );
+  useEffect(() => {
+    const ids = tabs.map((t) => t.id);
+    if (!ids.length) return;
+    if (!ids.includes(activeTab)) {
+      setActiveTab(ids[0]!);
+    }
+  }, [tabs, activeTab]);
 
   const ukOnlyNote =
     report?.workforce && report.workforce.total > 0
@@ -689,27 +691,26 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* Tab navigation */}
-      <div className="flex flex-wrap gap-1.5 border-b border-gray-200 pb-2">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-              activeTab === tab.id
-                ? "bg-brand-600 text-white"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
       {loading ? (
         <TableSkeleton rows={6} />
       ) : (
         <>
+          <div className="flex flex-wrap gap-1.5 border-b border-gray-200 pb-2">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  activeTab === tab.id
+                    ? "bg-brand-600 text-white"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
           {/* Bradford Factor */}
           {activeTab === "bradford" && (
             <Card>
