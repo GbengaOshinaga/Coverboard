@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
+import { getAppBaseUrl } from "@/lib/app-url";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -12,7 +13,7 @@ export const metadata: Metadata = {
   },
   description:
     "See who's out, plan coverage, and manage team leave in one place. Built for small, distributed teams with country-specific leave policies — including full UK statutory compliance.",
-  metadataBase: new URL(process.env.NEXTAUTH_URL ?? "http://localhost:3000"),
+  metadataBase: new URL(getAppBaseUrl()),
   openGraph: {
     title: "Coverboard — Team Leave Management",
     description:

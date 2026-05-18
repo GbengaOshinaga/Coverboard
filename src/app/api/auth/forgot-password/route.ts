@@ -3,13 +3,12 @@ import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email";
 import { passwordResetEmail } from "@/lib/email-templates";
+import { getAppBaseUrl } from "@/lib/app-url";
 import { z } from "zod";
 
 const schema = z.object({
   email: z.string().email(),
 });
-
-const BASE_URL = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
 
 export async function POST(request: Request) {
   try {
@@ -52,7 +51,7 @@ export async function POST(request: Request) {
       },
     });
 
-    const resetUrl = `${BASE_URL}/reset-password?token=${token}`;
+    const resetUrl = `${getAppBaseUrl()}/reset-password?token=${token}`;
     const { subject, html } = passwordResetEmail({
       userName: user.name,
       resetUrl,

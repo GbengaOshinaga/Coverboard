@@ -3,8 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email";
 import { weeklyDigestEmail } from "@/lib/email-templates";
 import { verifyCronAuth } from "@/lib/cron-auth";
-
-const BASE_URL = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
+import { getAppBaseUrl } from "@/lib/app-url";
 
 function startOfWeek(date: Date): Date {
   const d = new Date(date);
@@ -122,7 +121,7 @@ export async function POST(request: Request) {
           outThisWeek: thisWeekAbsences,
           outNextWeek: nextWeekAbsences,
           pendingCount: pendingRequests,
-          dashboardUrl: `${BASE_URL}/dashboard`,
+          dashboardUrl: `${getAppBaseUrl()}/dashboard`,
         });
 
         sendEmail({ to: recipient.email, subject, html }).catch((err) =>

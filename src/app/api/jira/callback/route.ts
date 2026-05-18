@@ -3,15 +3,17 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getJiraClientId } from "@/lib/jira";
+import { getAppBaseUrl } from "@/lib/app-url";
 
 const JIRA_CLIENT_SECRET = process.env.JIRA_CLIENT_SECRET ?? "";
-const JIRA_REDIRECT_URI = process.env.JIRA_REDIRECT_URI ?? "http://localhost:3000/api/jira/callback";
-const BASE_URL = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
+const JIRA_REDIRECT_URI =
+  process.env.JIRA_REDIRECT_URI ?? `${getAppBaseUrl()}/api/jira/callback`;
 
 export async function GET(request: Request) {
+  const baseUrl = getAppBaseUrl();
   const session = await getServerSession(authOptions);
   if (!session?.user) {
-    return NextResponse.redirect(`${BASE_URL}/login`);
+    return NextResponse.redirect(`${baseUrl}/login`);
   }
 
   const userId = (session.user as Record<string, unknown>).id as string;
@@ -23,11 +25,11 @@ export async function GET(request: Request) {
   const error = searchParams.get("error");
 
   if (error) {
-    return NextResponse.redirect(`${BASE_URL}/settings?jira_error=${encodeURIComponent(error)}`);
+    return NextResponse.redirect(`${baseUrl}/settings?jira_error=${encodeURIComponent(error)}`);
   }
 
   if (!code || !state) {
-    return NextResponse.redirect(`${BASE_URL}/settings?jira_error=missing_params`);
+    return NextResponse.redirect(`${baseUrl}/settings?jira_error=missing_params`);
   }
 
   // Validate state from cookie
@@ -36,7 +38,7 @@ export async function GET(request: Request) {
   const savedState = stateMatch?.[1];
 
   if (!savedState || savedState !== state) {
-    return NextResponse.redirect(`${BASE_URL}/settings?jira_error=invalid_state`);
+    return NextResponse.redirect(`${baseUrl}/settings?jira_error=invalid_state`);
   }
 
   try {
@@ -56,7 +58,7 @@ export async function GET(request: Request) {
     if (!tokenRes.ok) {
       const errText = await tokenRes.text();
       console.error("Jira token exchange failed:", errText);
-      return NextResponse.redirect(`${BASE_URL}/settings?jira_error=token_exchange_failed`);
+      return NextResponse.redirect(`${baseUrl}/settings?jira_error=token_exchange_failed`);
     }
 
     const tokenData = await tokenRes.json();
@@ -70,13 +72,13 @@ export async function GET(request: Request) {
     );
 
     if (!resourcesRes.ok) {
-      return NextResponse.redirect(`${BASE_URL}/settings?jira_error=resources_failed`);
+      return NextResponse.redirect(`${baseUrl}/settings?jira_error=resources_failed`);
     }
 
     const resources = await resourcesRes.json();
 
     if (!Array.isArray(resources) || resources.length === 0) {
-      return NextResponse.redirect(`${BASE_URL}/settings?jira_error=no_sites`);
+      return NextResponse.redirect(`${baseUrl}/settings?jira_error=no_sites`);
     }
 
     const site = resources[0];
@@ -103,11 +105,11 @@ export async function GET(request: Request) {
       },
     });
 
-    const response = NextResponse.redirect(`${BASE_URL}/settings?jira_connected=true`);
+    const response = NextResponse.redirect(`${baseUrl}/settings?jira_connected=true`);
     response.cookies.delete("jira_oauth_state");
     return response;
   } catch (error) {
     console.error("Jira callback error:", error);
-    return NextResponse.redirect(`${BASE_URL}/settings?jira_error=unknown`);
+    return NextResponse.redirect(`${baseUrl}/settings?jira_error=unknown`);
   }
 }

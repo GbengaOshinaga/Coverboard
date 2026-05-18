@@ -3,8 +3,10 @@ import { getServerSession } from "next-auth";
 import crypto from "crypto";
 import { authOptions } from "@/lib/auth";
 import { isJiraConfigured, getJiraClientId } from "@/lib/jira";
+import { getAppBaseUrl } from "@/lib/app-url";
 
-const JIRA_REDIRECT_URI = process.env.JIRA_REDIRECT_URI ?? "http://localhost:3000/api/jira/callback";
+const JIRA_REDIRECT_URI =
+  process.env.JIRA_REDIRECT_URI ?? `${getAppBaseUrl()}/api/jira/callback`;
 const SCOPES = "read:jira-work write:jira-work read:jira-user read:me offline_access";
 
 export async function GET() {
