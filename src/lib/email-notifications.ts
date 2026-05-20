@@ -3,6 +3,7 @@ import { sendEmail, resend, getFromAddress } from "@/lib/email";
 import { getAppBaseUrl } from "@/lib/app-url";
 import {
   teamInviteEmail,
+  signupWelcomeEmail,
   leaveRequestSubmittedEmail,
   leaveRequestStatusEmail,
   sspCapReachedEmail,
@@ -11,6 +12,33 @@ import { countWeekdays } from "@/lib/utils";
 
 type EmailRecipient = { email: string };
 import { SessionUser } from "./types";
+
+// ─── Signup Welcome ──────────────────────────────────────────────────
+
+const SIGNUP_PLAN_NAMES: Record<string, string> = {
+  starter: "Starter",
+  growth: "Growth",
+  scale: "Scale",
+  pro: "Pro",
+};
+
+export async function sendSignupWelcomeEmail(data: {
+  userName: string;
+  orgName: string;
+  email: string;
+  plan: string;
+  trialDays?: number;
+}) {
+  const { subject, html } = signupWelcomeEmail({
+    userName: data.userName,
+    orgName: data.orgName,
+    planName: SIGNUP_PLAN_NAMES[data.plan] ?? data.plan,
+    trialDays: data.trialDays ?? 14,
+    dashboardUrl: `${getAppBaseUrl()}/dashboard`,
+  });
+
+  await sendEmail({ to: data.email, subject, html });
+}
 
 // ─── Team Invite ─────────────────────────────────────────────────────
 

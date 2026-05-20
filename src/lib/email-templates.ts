@@ -137,6 +137,39 @@ export function passwordResetEmail(data: {
   };
 }
 
+// ─── Signup Welcome ──────────────────────────────────────────────────
+
+export function signupWelcomeEmail(data: {
+  userName: string;
+  orgName: string;
+  planName: string;
+  trialDays: number;
+  dashboardUrl: string;
+}): { subject: string; html: string } {
+  return {
+    subject: `Welcome to Coverboard — ${data.orgName} is ready`,
+    html: layout(`
+      <h1 style="margin:0 0 8px;font-size:20px;color:#111827;">Welcome to Coverboard</h1>
+      <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
+        Hi ${data.userName}, your team <strong>${data.orgName}</strong> is set up and you&rsquo;re the admin.
+        You&rsquo;re on a ${data.trialDays}-day free trial of the <strong>${data.planName}</strong> plan &mdash; no card required.
+      </p>
+      <div style="background-color:#f9fafb;border-radius:6px;padding:16px;margin-bottom:16px;">
+        <p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#111827;">Get started</p>
+        <ul style="margin:0;padding-left:20px;font-size:14px;color:#6b7280;line-height:1.7;">
+          <li>Complete onboarding to configure leave types</li>
+          <li>Invite your team from the Team page</li>
+          <li>See who&rsquo;s out on your dashboard calendar</li>
+        </ul>
+      </div>
+      ${button("Open dashboard", data.dashboardUrl)}
+      <p style="margin:16px 0 0;font-size:13px;color:#9ca3af;line-height:1.5;">
+        If you didn&rsquo;t create this account, you can ignore this email.
+      </p>
+    `),
+  };
+}
+
 // ─── Team Invite ─────────────────────────────────────────────────────
 
 export function teamInviteEmail(data: {

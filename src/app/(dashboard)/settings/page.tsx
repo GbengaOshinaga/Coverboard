@@ -54,7 +54,14 @@ type OrgSettings = {
   industry: string | null;
   hasUkEmployees: boolean;
   missingWorkLocationCount: number;
+  deletionScheduledFor: string | null;
 };
+
+const DELETION_DATE_FMT = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
 
 type LeavePolicy = {
   id: string;
@@ -110,6 +117,7 @@ export default function SettingsPage() {
   const [earningsCoverage, setEarningsCoverage] = useState<EarningsCoverage[] | null>(null);
 
   const [confirmRegionsEnable, setConfirmRegionsEnable] = useState(false);
+  const [cancelingDeletion, setCancelingDeletion] = useState(false);
 
   const [policies, setPolicies] = useState<LeavePolicy[]>([]);
   const [showAddPolicy, setShowAddPolicy] = useState(false);
@@ -223,6 +231,30 @@ export default function SettingsPage() {
     }
     void fetchCoverage();
   }, [canManage, orgSettings?.hasUkEmployees]);
+
+  async function refreshOrgSettings() {
+    try {
+      const res = await fetch("/api/organization/settings");
+      if (res.ok) setOrgSettings(await res.json());
+    } catch {
+      // ignore
+    }
+  }
+
+  async function handleCancelDeletion() {
+    setCancelingDeletion(true);
+    try {
+      const res = await fetch("/api/account/delete/cancel", { method: "POST" });
+      if (res.ok) {
+        toast("Deletion canceled — your data is safe", "success");
+        await refreshOrgSettings();
+      } else {
+        toast("Could not cancel deletion", "error");
+      }
+    } finally {
+      setCancelingDeletion(false);
+    }
+  }
 
   async function saveOrgSettings(next: Partial<OrgSettings>) {
     if (!orgSettings) return;
@@ -1513,24 +1545,61 @@ export default function SettingsPage() {
         </div>
       </Dialog>
 
-      {isAdmin && (
-        <Card className="border-red-200">
-          <CardHeader>
-            <CardTitle className="text-red-900">Danger zone</CardTitle>
-            <CardDescription>
-              Permanently delete your organization and all data. A 30-day grace
-              period applies.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link
-              href="/account/delete"
-              className="inline-flex rounded-md border border-red-200 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
-            >
-              Delete account and all data →
-            </Link>
-          </CardContent>
-        </Card>
+      {isAdmin && orgSettings && (
+        orgSettings.deletionScheduledFor ? (
+          <Card className="border-red-200">
+            <CardHeader>
+              <CardTitle className="text-red-900">
+                Account scheduled for deletion
+              </CardTitle>
+              <CardDescription>
+                Your organization is in the 30-day grace period before permanent
+                deletion.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-red-900">
+                Your account is scheduled for permanent deletion on{" "}
+                <strong>
+                  {DELETION_DATE_FMT.format(
+                    new Date(orgSettings.deletionScheduledFor)
+                  )}
+                </strong>
+                . After that date, all team data, leave records, and billing
+                history are irrecoverably deleted.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={cancelingDeletion}
+                onClick={handleCancelDeletion}
+                className="border-red-200 text-red-700 hover:bg-red-50"
+              >
+                {cancelingDeletion
+                  ? "Canceling…"
+                  : "Cancel deletion and keep my data"}
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="border-red-200">
+            <CardHeader>
+              <CardTitle className="text-red-900">Danger zone</CardTitle>
+              <CardDescription>
+                Permanently delete your organization and all data. A 30-day grace
+                period applies.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Link
+                href="/account/delete"
+                className="inline-flex rounded-md border border-red-200 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+              >
+                Delete account and all data →
+              </Link>
+            </CardContent>
+          </Card>
+        )
       )}
     </div>
   );

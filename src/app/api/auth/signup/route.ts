@@ -5,6 +5,7 @@ import { z } from "zod";
 import { stripe } from "@/lib/stripe";
 import { STRIPE_PRICE_IDS, type StripePlanKey } from "@/config/stripePrices";
 import { ensureStripeCustomer } from "@/lib/billing-customer";
+import { sendSignupWelcomeEmail } from "@/lib/email-notifications";
 
 const signupSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -152,6 +153,16 @@ export async function POST(request: Request) {
         data: { trialEndsAt, subscriptionStatus: "trialing" },
       });
     }
+
+    sendSignupWelcomeEmail({
+      userName: name,
+      orgName,
+      email,
+      plan,
+      trialDays,
+    }).catch((err) =>
+      console.error("Signup welcome email failed:", err)
+    );
 
     return NextResponse.json(
       {

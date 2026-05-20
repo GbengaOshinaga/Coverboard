@@ -18,8 +18,6 @@ type BillingSummary = {
   cardAdded: boolean;
   cancelAtPeriodEnd: boolean;
   currentPeriodEnd: string | null;
-  deletionScheduledFor: string | null;
-  deletionReason: string | null;
   trialExpiredGraceEndsAt: string | null;
   invoices: Array<{
     id: string;
@@ -84,18 +82,6 @@ export default function BillingPage() {
       refresh();
     } else {
       toast("Could not reactivate", "error");
-    }
-  }
-
-  async function handleCancelDeletion() {
-    setBusy(true);
-    const res = await fetch("/api/account/delete/cancel", { method: "POST" });
-    setBusy(false);
-    if (res.ok) {
-      toast("Deletion canceled — your data is safe", "success");
-      refresh();
-    } else {
-      toast("Could not cancel deletion", "error");
     }
   }
 
@@ -169,26 +155,6 @@ export default function BillingPage() {
             className="font-medium underline underline-offset-2"
           >
             Reactivate
-          </button>
-        </div>
-      )}
-
-      {summary.deletionScheduledFor && (
-        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900">
-          <p className="font-semibold">
-            Your account is scheduled for permanent deletion on{" "}
-            {FMT.format(new Date(summary.deletionScheduledFor))}.
-          </p>
-          <p className="mt-1 text-red-800">
-            After that date, all team data, leave records, and billing history
-            are irrecoverably deleted.
-          </p>
-          <button
-            onClick={handleCancelDeletion}
-            disabled={busy}
-            className="mt-2 font-medium underline underline-offset-2"
-          >
-            Cancel deletion and keep my data
           </button>
         </div>
       )}
