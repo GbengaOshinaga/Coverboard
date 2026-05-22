@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { calculateHolidayPayRate } from "@/lib/holidayPay";
+import { syncUserAverageWeeklyEarnings } from "@/lib/smpCalculator";
 import {
   holidayPayNotApplicablePayload,
   isUkHolidayPayApplicable,
@@ -78,6 +79,10 @@ export async function POST(
         },
       })
     )
+  );
+
+  await syncUserAverageWeeklyEarnings(memberId).catch((err) =>
+    console.error("Failed to sync average weekly earnings:", err)
   );
 
   // Return updated stats

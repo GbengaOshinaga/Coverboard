@@ -127,14 +127,19 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
     setError("");
 
     const needsEvidence = selectedLeaveType?.requiresEvidence ?? false;
+
+    if (needsEvidence && isSspLeave && !sicknessNote.trim()) {
+      setError("Please add sickness note (fit note) details for this absence.");
+      return;
+    }
+
     const hasEvidence =
-      evidenceProvided || (isSspLeave && sicknessNote.trim().length > 0);
+      (isSspLeave && sicknessNote.trim().length > 0) ||
+      (!isSspLeave && evidenceProvided);
 
     if (needsEvidence && !hasEvidence) {
       setError(
-        isSspLeave
-          ? "Please confirm you have a fit note, or add sickness note details below."
-          : "Please confirm that supporting evidence is available for this leave type."
+        "Please confirm that supporting evidence is available for this leave type."
       );
       return;
     }
@@ -258,41 +263,41 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
               ? "Statutory sick pay requires a fit note (or other medical evidence) for this absence."
               : "This leave type requires supporting documentation (e.g. medical or statutory evidence)."}
           </p>
-          {isSspLeave && (
+          {isSspLeave ? (
             <div className="space-y-1">
               <label
                 htmlFor="sicknessNote"
                 className="block text-sm font-medium text-gray-700"
               >
-                Sickness note details (optional)
+                Sickness note (fit note) details
               </label>
               <textarea
                 id="sicknessNote"
                 rows={3}
+                required
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                 placeholder="e.g. Fit note reference, diagnosis summary, or dates covered..."
                 value={sicknessNote}
                 onChange={(e) => setSicknessNote(e.target.value)}
               />
               <p className="text-xs text-gray-500">
-                Visible to admins and managers reviewing your request. Adding
-                details here counts as evidence provided.
+                Required for SSP. Visible to admins and managers reviewing your
+                request.
               </p>
             </div>
+          ) : (
+            <label className="flex items-start gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                checked={evidenceProvided}
+                onChange={(e) => setEvidenceProvided(e.target.checked)}
+              />
+              <span>
+                I confirm supporting evidence is available for this leave
+              </span>
+            </label>
           )}
-          <label className="flex items-start gap-2 text-sm text-gray-700">
-            <input
-              type="checkbox"
-              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
-              checked={evidenceProvided}
-              onChange={(e) => setEvidenceProvided(e.target.checked)}
-            />
-            <span>
-              {isSspLeave
-                ? "I confirm medical evidence (e.g. a fit note) is available for this absence"
-                : "I confirm supporting evidence is available for this leave"}
-            </span>
-          </label>
         </div>
       )}
 
