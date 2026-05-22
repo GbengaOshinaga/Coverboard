@@ -22,6 +22,7 @@ async function main() {
   await prisma.bankHoliday.deleteMany();
   await prisma.jiraUserMapping.deleteMany();
   await prisma.jiraIntegration.deleteMany();
+  await prisma.slackIntegration.deleteMany();
   await prisma.passwordResetToken.deleteMany();
   await prisma.leavePolicy.deleteMany();
   await prisma.publicHoliday.deleteMany();

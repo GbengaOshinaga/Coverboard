@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { verifySlackRequest, resolveSlackUser, isSlackConfigured } from "@/lib/slack";
+import {
+  verifySlackRequest,
+  resolveSlackUser,
+  isSlackAppConfigured,
+  getSlackIntegrationByTeamId,
+  createSlackClient,
+} from "@/lib/slack";
 import { getUserLeaveBalances } from "@/lib/leave-balances";
 import { countWeekdays } from "@/lib/utils";
 import {
@@ -11,14 +17,13 @@ import {
 import { notifyNewRequest } from "@/lib/slack-notifications";
 
 export async function POST(request: Request) {
-  if (!isSlackConfigured()) {
+  if (!isSlackAppConfigured()) {
     return NextResponse.json(
       { response_type: "ephemeral", text: "Slack integration is not configured." },
       { status: 200 }
     );
   }
 
-  // Read body as text for signature verification
   const rawBody = await request.text();
   const timestamp = request.headers.get("x-slack-request-timestamp") ?? "";
   const signature = request.headers.get("x-slack-signature") ?? "";
@@ -27,14 +32,34 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
-  // Parse the URL-encoded form body
   const params = new URLSearchParams(rawBody);
   const command = params.get("command");
   const text = params.get("text") ?? "";
   const slackUserId = params.get("user_id") ?? "";
+  const teamId = params.get("team_id") ?? "";
 
-  // Resolve the Slack user to a Coverboard user
-  const user = await resolveSlackUser(slackUserId);
+  if (!teamId) {
+    return NextResponse.json({
+      response_type: "ephemeral",
+      text: "Missing workspace information.",
+    });
+  }
+
+  const integration = await getSlackIntegrationByTeamId(teamId);
+  if (!integration) {
+    return NextResponse.json({
+      response_type: "ephemeral",
+      text: "This Slack workspace is not connected to Coverboard. Ask your admin to connect Slack in Settings.",
+    });
+  }
+
+  const slack = createSlackClient(integration.botToken);
+  const user = await resolveSlackUser(
+    slackUserId,
+    slack,
+    integration.organizationId
+  );
+
   if (!user) {
     return NextResponse.json({
       response_type: "ephemeral",
@@ -48,7 +73,29 @@ export async function POST(request: Request) {
     case "/mybalance":
       return handleMyBalance(user.id, user.name);
     case "/requestleave":
-      return handleRequestLeave(user.id, user.organizationId, text);
+      return handleRequestLeave(
+        user.id,
+        user.organizationId,
+        text,
+        leaveRequest => {
+          const daysRequested = countWeekdays(
+            leaveRequest.startDate,
+            leaveRequest.endDate
+          );
+          notifyNewRequest({
+            organizationId: user.organizationId,
+            requestId: leaveRequest.id,
+            userName: leaveRequest.user.name,
+            leaveTypeName: leaveRequest.leaveType.name,
+            startDate: leaveRequest.startDate,
+            endDate: leaveRequest.endDate,
+            note: leaveRequest.note,
+            daysRequested,
+          }).catch((err) =>
+            console.error("Failed to send Slack notification:", err)
+          );
+        }
+      );
     default:
       return NextResponse.json({
         response_type: "ephemeral",
@@ -130,10 +177,16 @@ async function handleMyBalance(userId: string, userName: string) {
 async function handleRequestLeave(
   userId: string,
   organizationId: string,
-  text: string
+  text: string,
+  onCreated: (leaveRequest: {
+    id: string;
+    startDate: Date;
+    endDate: Date;
+    note: string | null;
+    user: { name: string };
+    leaveType: { name: string };
+  }) => void
 ) {
-  // Expected format: "2026-03-01 2026-03-05 Annual Leave optional note here"
-  // Or simpler: "2026-03-01 2026-03-05 Annual"
   const parts = text.trim().split(/\s+/);
 
   if (parts.length < 3) {
@@ -153,7 +206,6 @@ async function handleRequestLeave(
   const leaveTypeName = parts[2];
   const note = parts.slice(3).join(" ") || undefined;
 
-  // Validate dates
   const startDate = new Date(startStr);
   const endDate = new Date(endStr);
 
@@ -171,7 +223,6 @@ async function handleRequestLeave(
     });
   }
 
-  // Find matching leave type (case-insensitive partial match)
   const leaveTypes = await prisma.leaveType.findMany({
     where: { organizationId },
   });
@@ -188,7 +239,6 @@ async function handleRequestLeave(
     });
   }
 
-  // Create the leave request
   const leaveRequest = await prisma.leaveRequest.create({
     data: {
       startDate,
@@ -204,17 +254,7 @@ async function handleRequestLeave(
   });
 
   const daysRequested = countWeekdays(startDate, endDate);
-
-  // Send notification to the channel (fire and forget)
-  notifyNewRequest({
-    requestId: leaveRequest.id,
-    userName: leaveRequest.user.name,
-    leaveTypeName: leaveRequest.leaveType.name,
-    startDate,
-    endDate,
-    note: note ?? null,
-    daysRequested,
-  }).catch((err) => console.error("Failed to send Slack notification:", err));
+  onCreated(leaveRequest);
 
   const blocks = buildRequestConfirmation({
     leaveTypeName: leaveRequest.leaveType.name,

@@ -195,6 +195,7 @@ export async function PATCH(
     // Send notifications (fire and forget)
     if (status === "APPROVED" || status === "REJECTED") {
       notifyRequestStatusChange({
+        organizationId: leaveRequest.user.organizationId,
         requesterEmail: updated.user.email,
         status,
         leaveTypeName: updated.leaveType.name,

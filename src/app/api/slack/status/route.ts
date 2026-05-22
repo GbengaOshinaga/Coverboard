@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { slack, isSlackConfigured, getNotificationChannel } from "@/lib/slack";
+import { prisma } from "@/lib/prisma";
+import { isSlackAppConfigured, createSlackClient } from "@/lib/slack";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -9,23 +10,53 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!isSlackConfigured()) {
+  const orgId = (session.user as Record<string, unknown>).organizationId as string;
+
+  if (!isSlackAppConfigured()) {
     return NextResponse.json({
       configured: false,
       connected: false,
       botName: null,
+      teamName: null,
       channel: null,
+      connectedBy: null,
+    });
+  }
+
+  const integration = await prisma.slackIntegration.findUnique({
+    where: { organizationId: orgId },
+    select: {
+      teamName: true,
+      notificationChannel: true,
+      botToken: true,
+      createdAt: true,
+      connectedBy: { select: { name: true } },
+    },
+  });
+
+  if (!integration) {
+    return NextResponse.json({
+      configured: true,
+      connected: false,
+      botName: null,
+      teamName: null,
+      channel: null,
+      connectedBy: null,
     });
   }
 
   try {
-    const result = await slack!.auth.test();
+    const client = createSlackClient(integration.botToken);
+    const auth = await client.auth.test();
+
     return NextResponse.json({
       configured: true,
       connected: true,
-      botName: result.user,
-      teamName: result.team,
-      channel: getNotificationChannel(),
+      botName: auth.user ?? null,
+      teamName: integration.teamName,
+      channel: integration.notificationChannel,
+      connectedBy: integration.connectedBy.name,
+      connectedAt: integration.createdAt,
     });
   } catch (error) {
     console.error("Slack connection test failed:", error);
@@ -33,8 +64,10 @@ export async function GET() {
       configured: true,
       connected: false,
       botName: null,
-      channel: getNotificationChannel(),
-      error: "Failed to connect to Slack",
+      teamName: integration.teamName,
+      channel: integration.notificationChannel,
+      connectedBy: integration.connectedBy.name,
+      error: "Failed to connect to Slack — try reconnecting",
     });
   }
 }

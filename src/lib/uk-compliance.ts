@@ -172,8 +172,8 @@ export type SspEligibilityResult =
  *   2. Cumulative SSP paid in this PIW must be under the 28-week cap
  *      (28 × qualifyingDaysPerWeek; 140 days at a 5-day week).
  *
- * Callers should resolve `averageWeeklyEarnings` from HR records or the
- * 8-week running total of `WeeklyEarning` rows.
+ * `User.averageWeeklyEarnings` is synced from the last 8 paid `WeeklyEarning`
+ * weeks (see `syncUserAverageWeeklyEarnings` / `resolveAverageWeeklyEarnings`).
  */
 export function calculateSspEntitlement(
   input: SspEligibilityInput

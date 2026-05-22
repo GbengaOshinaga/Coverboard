@@ -287,23 +287,40 @@ Under **Interactivity & Shortcuts**, enable interactivity and set:
 
 This allows the Approve / Reject buttons on leave request notifications.
 
-### 5. Install to workspace
+### 5. Add OAuth redirect URL
 
-Install the app to your Slack workspace and copy the **Bot User OAuth Token** and **Signing Secret**.
+Under **OAuth & Permissions**, add a redirect URL:
 
-### 6. Add environment variables
+- `https://your-domain.com/api/slack/callback` (use ngrok for local dev)
+
+You do **not** need to install the app manually to your workspace — each Coverboard customer admin connects from **Settings → Connect Slack**.
+
+### 6. Add environment variables (platform operator)
+
+Set these once on your Coverboard deployment (Vercel, etc.):
 
 ```
-SLACK_BOT_TOKEN="xoxb-your-bot-token"
+SLACK_CLIENT_ID="your-client-id"
+SLACK_CLIENT_SECRET="your-client-secret"
 SLACK_SIGNING_SECRET="your-signing-secret"
 SLACK_NOTIFICATION_CHANNEL="#time-off"
 ```
 
-The notification channel is where new leave request notifications (with approve/reject buttons) are posted. Defaults to `#time-off` if not set.
+Optional: `SLACK_REDIRECT_URI` if it differs from `{NEXTAUTH_URL}/api/slack/callback`.
+
+### 7. Enable distribution (production SaaS)
+
+In your Slack app, open **Manage Distribution** and allow installation on other workspaces (Share with any workspace, or publish to the Slack App Directory). Without this, only the workspace where you created the app can connect.
+
+### 8. Per-customer connection
+
+After signup, an **admin** opens **Settings** and clicks **Connect Slack**. That installs the bot into *their* Slack workspace and stores the bot token for their organization. No action is required from individual employees.
+
+The default notification channel is `#time-off` (configurable per org in Settings after connecting). Invite the bot to that channel: `/invite @YourBotName`.
 
 ### How user matching works
 
-The bot matches Slack users to Coverboard accounts by **email address**. When someone runs a slash command, the bot looks up their Slack profile email and finds the matching Coverboard user. Make sure team members use the same email in both systems.
+The bot matches Slack users to Coverboard accounts by **email address** within the same organization. When someone runs a slash command, the bot looks up their Slack profile email and finds the matching Coverboard user. Make sure team members use the same email in both systems.
 
 ## Jira Integration Setup
 

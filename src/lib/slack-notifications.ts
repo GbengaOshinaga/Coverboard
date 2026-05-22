@@ -1,4 +1,9 @@
-import { slack, getNotificationChannel, findSlackUserByEmail, isSlackConfigured } from "@/lib/slack";
+import {
+  createSlackClient,
+  getSlackIntegrationByOrgId,
+  findSlackUserByEmail,
+  isSlackAppConfigured,
+} from "@/lib/slack";
 import { buildNewRequestNotification, buildStatusUpdateMessage } from "@/lib/slack-messages";
 import { countWeekdays } from "@/lib/utils";
 
@@ -7,6 +12,7 @@ import { countWeekdays } from "@/lib/utils";
  * Includes approve/reject buttons for managers.
  */
 export async function notifyNewRequest(data: {
+  organizationId: string;
   requestId: string;
   userName: string;
   leaveTypeName: string;
@@ -15,14 +21,17 @@ export async function notifyNewRequest(data: {
   note: string | null;
   daysRequested: number;
 }) {
-  if (!isSlackConfigured() || !slack) return;
+  if (!isSlackAppConfigured()) return;
 
-  const channel = getNotificationChannel();
+  const integration = await getSlackIntegrationByOrgId(data.organizationId);
+  if (!integration) return;
+
+  const slack = createSlackClient(integration.botToken);
   const blocks = buildNewRequestNotification(data);
 
   try {
     await slack.chat.postMessage({
-      channel,
+      channel: integration.notificationChannel,
       blocks,
       text: `New leave request from ${data.userName}: ${data.leaveTypeName} (${data.daysRequested} days)`,
     });
@@ -35,6 +44,7 @@ export async function notifyNewRequest(data: {
  * Send a DM to the requester when their leave is approved or rejected.
  */
 export async function notifyRequestStatusChange(data: {
+  organizationId: string;
   requesterEmail: string;
   status: "APPROVED" | "REJECTED";
   leaveTypeName: string;
@@ -42,12 +52,16 @@ export async function notifyRequestStatusChange(data: {
   endDate: Date;
   reviewerName: string;
 }) {
-  if (!isSlackConfigured() || !slack) return;
+  if (!isSlackAppConfigured()) return;
 
+  const integration = await getSlackIntegrationByOrgId(data.organizationId);
+  if (!integration) return;
+
+  const slack = createSlackClient(integration.botToken);
   const daysRequested = countWeekdays(data.startDate, data.endDate);
 
   try {
-    const slackUserId = await findSlackUserByEmail(data.requesterEmail);
+    const slackUserId = await findSlackUserByEmail(data.requesterEmail, slack);
     if (!slackUserId) return;
 
     const blocks = buildStatusUpdateMessage({

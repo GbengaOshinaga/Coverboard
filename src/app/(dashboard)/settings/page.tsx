@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -31,6 +32,7 @@ type SlackStatus = {
   botName: string | null;
   teamName?: string | null;
   channel: string | null;
+  connectedBy?: string | null;
   error?: string;
 };
 
@@ -103,6 +105,9 @@ export default function SettingsPage() {
   const [slackStatus, setSlackStatus] = useState<SlackStatus | null>(null);
   const [jiraStatus, setJiraStatus] = useState<JiraStatus | null>(null);
   const [disconnectingJira, setDisconnectingJira] = useState(false);
+  const [disconnectingSlack, setDisconnectingSlack] = useState(false);
+  const [slackChannelInput, setSlackChannelInput] = useState("");
+  const [savingSlackChannel, setSavingSlackChannel] = useState(false);
   const [orgSettings, setOrgSettings] = useState<OrgSettings | null>(null);
   const [ukReport, setUkReport] = useState<UKComplianceReport | null>(null);
   const [ukReportLoading, setUkReportLoading] = useState(false);
@@ -128,6 +133,8 @@ export default function SettingsPage() {
   const [savingPolicy, setSavingPolicy] = useState(false);
 
   const { toast } = useToast();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session, status: sessionStatus } = useSession();
   const user = session?.user as Record<string, unknown> | undefined;
   const userRole = user?.role as string | undefined;
@@ -150,20 +157,45 @@ export default function SettingsPage() {
     if (isAdmin) fetchLeaveTypes();
   }, [isAdmin, fetchLeaveTypes]);
 
-  // Check Slack integration status
-  useEffect(() => {
-    async function checkSlack() {
-      try {
-        const res = await fetch("/api/slack/status");
-        if (res.ok) {
-          setSlackStatus(await res.json());
-        }
-      } catch {
-        // Silently fail
+  const refreshSlackStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/slack/status");
+      if (res.ok) {
+        const data = await res.json();
+        setSlackStatus(data);
+        if (data.channel) setSlackChannelInput(data.channel);
       }
+    } catch {
+      // Silently fail
     }
-    checkSlack();
   }, []);
+
+  useEffect(() => {
+    void refreshSlackStatus();
+  }, [refreshSlackStatus]);
+
+  useEffect(() => {
+    if (searchParams.get("slack_connected") === "true") {
+      toast("Slack connected", "success");
+      void refreshSlackStatus();
+      router.replace("/settings");
+    }
+    const slackError = searchParams.get("slack_error");
+    if (slackError) {
+      const messages: Record<string, string> = {
+        forbidden: "Only admins can connect Slack",
+        missing_params: "Slack authorization was incomplete",
+        invalid_state: "Slack authorization expired — try again",
+        token_exchange_failed: "Could not complete Slack authorization",
+        invalid_response: "Unexpected response from Slack",
+        workspace_already_linked:
+          "This Slack workspace is already linked to another Coverboard team",
+        unknown: "Something went wrong connecting Slack",
+      };
+      toast(messages[slackError] ?? "Could not connect Slack", "error");
+      router.replace("/settings");
+    }
+  }, [searchParams, toast, refreshSlackStatus, router]);
 
   useEffect(() => {
     if (!canManage) return;
@@ -1076,7 +1108,7 @@ export default function SettingsPage() {
                 Slack Integration
               </CardTitle>
               <CardDescription>
-                Connect Slack for /whosout, /requestleave, and /mybalance commands
+                Connect your team&apos;s Slack workspace for leave commands and notifications
               </CardDescription>
             </div>
             {slackStatus?.connected ? (
@@ -1085,12 +1117,9 @@ export default function SettingsPage() {
                 Connected
               </Badge>
             ) : slackStatus?.configured ? (
-              <Badge variant="error" className="flex items-center gap-1">
-                <XCircle className="h-3 w-3" />
-                Error
-              </Badge>
+              <Badge variant="outline">Not connected</Badge>
             ) : (
-              <Badge variant="outline">Not configured</Badge>
+              <Badge variant="outline">Not available</Badge>
             )}
           </div>
         </CardHeader>
@@ -1107,10 +1136,65 @@ export default function SettingsPage() {
                   <span className="font-medium">{slackStatus.teamName}</span>
                 </div>
               )}
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">Notification channel</span>
-                <span className="font-medium">{slackStatus.channel}</span>
-              </div>
+              {slackStatus.connectedBy && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500">Connected by</span>
+                  <span className="font-medium">{slackStatus.connectedBy}</span>
+                </div>
+              )}
+              {isAdmin ? (
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Notification channel
+                  </label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="slackChannel"
+                      type="text"
+                      placeholder="#time-off"
+                      value={slackChannelInput}
+                      onChange={(e) => setSlackChannelInput(e.target.value)}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={savingSlackChannel || !slackChannelInput.trim()}
+                      onClick={async () => {
+                        setSavingSlackChannel(true);
+                        try {
+                          const res = await fetch("/api/slack/channel", {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ channel: slackChannelInput.trim() }),
+                          });
+                          if (res.ok) {
+                            toast("Notification channel updated", "success");
+                            await refreshSlackStatus();
+                          } else {
+                            const data = await res.json();
+                            toast(data.error ?? "Failed to update channel", "error");
+                          }
+                        } catch {
+                          toast("Failed to update channel", "error");
+                        } finally {
+                          setSavingSlackChannel(false);
+                        }
+                      }}
+                    >
+                      {savingSlackChannel ? "Saving…" : "Save"}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Invite the bot to this channel first ({`/invite @${slackStatus.botName}`}).
+                  </p>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500">Notification channel</span>
+                  <span className="font-medium">{slackStatus.channel}</span>
+                </div>
+              )}
               <div className="mt-3 rounded-lg bg-gray-50 p-3">
                 <p className="text-xs font-medium text-gray-600 mb-2">Available commands:</p>
                 <div className="space-y-1 text-xs text-gray-500">
@@ -1119,53 +1203,75 @@ export default function SettingsPage() {
                   <p><code className="rounded bg-gray-200 px-1">/requestleave</code> — Submit a leave request from Slack</p>
                 </div>
               </div>
+              {isAdmin && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  disabled={disconnectingSlack}
+                  onClick={async () => {
+                    setDisconnectingSlack(true);
+                    try {
+                      const res = await fetch("/api/slack/disconnect", { method: "POST" });
+                      if (res.ok) {
+                        toast("Slack disconnected", "success");
+                        setSlackStatus({
+                          configured: true,
+                          connected: false,
+                          botName: null,
+                          teamName: null,
+                          channel: null,
+                          connectedBy: null,
+                        });
+                      } else {
+                        toast("Failed to disconnect Slack", "error");
+                      }
+                    } catch {
+                      toast("Failed to disconnect Slack", "error");
+                    } finally {
+                      setDisconnectingSlack(false);
+                    }
+                  }}
+                >
+                  <Unlink className="mr-1 h-3.5 w-3.5" />
+                  {disconnectingSlack ? "Disconnecting…" : "Disconnect Slack"}
+                </Button>
+              )}
+            </div>
+          ) : slackStatus?.configured ? (
+            <div className="space-y-3">
+              {slackStatus.error && (
+                <p className="text-sm text-red-700">{slackStatus.error}</p>
+              )}
+              <p className="text-sm text-gray-500">
+                Connect your company Slack workspace so your team can use leave commands
+                and receive approval notifications in Slack.
+              </p>
+              {isAdmin ? (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    window.location.href = "/api/slack/connect";
+                  }}
+                >
+                  Connect Slack
+                </Button>
+              ) : (
+                <p className="text-xs text-gray-400">Ask an admin to connect Slack.</p>
+              )}
             </div>
           ) : (
-            <div className="space-y-3">
-              {SHOW_DEPLOYMENT_INTEGRATION_DOCS ? (
-                <>
-                  <p className="text-sm text-gray-500">
-                    To enable the Slack bot, add these environment variables to your deployment:
-                  </p>
-                  <div className="rounded-lg bg-gray-50 p-3 font-mono text-xs text-gray-600 space-y-1">
-                    <p>SLACK_BOT_TOKEN=xoxb-...</p>
-                    <p>SLACK_SIGNING_SECRET=...</p>
-                    <p>SLACK_NOTIFICATION_CHANNEL=#time-off</p>
-                  </div>
-                  <div className="rounded-lg bg-blue-50 p-3">
-                    <p className="text-xs text-blue-700">
-                      <strong>Setup guide:</strong> Create a Slack app at{" "}
-                      <a
-                        href="https://api.slack.com/apps"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline"
-                      >
-                        api.slack.com/apps
-                      </a>
-                      . Add bot token scopes: <code className="rounded bg-blue-100 px-1">commands</code>,{" "}
-                      <code className="rounded bg-blue-100 px-1">chat:write</code>,{" "}
-                      <code className="rounded bg-blue-100 px-1">users:read</code>,{" "}
-                      <code className="rounded bg-blue-100 px-1">users:read.email</code>.
-                      Set slash command URLs to <code className="rounded bg-blue-100 px-1">your-domain/api/slack/commands</code>{" "}
-                      and interactivity URL to <code className="rounded bg-blue-100 px-1">your-domain/api/slack/interactions</code>.
-                    </p>
-                  </div>
-                </>
-              ) : (
-                <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-4">
-                  <p className="text-sm text-gray-600">
-                    The Slack bot isn&apos;t configured for this deployment. Credentials are set on the server by whoever hosts Coverboard — not from this screen.
-                  </p>
-                  {isAdmin ? (
-                    <p className="mt-2 text-xs text-gray-500">
-                      If your team self-hosts, point a developer or DevOps engineer at the Slack section in the project README.
-                    </p>
-                  ) : (
-                    <p className="mt-2 text-xs text-gray-500">
-                      Ask an organisation admin if you need this enabled.
-                    </p>
-                  )}
+            <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-4">
+              <p className="text-sm text-gray-600">
+                Slack is not enabled on this Coverboard deployment yet. The platform operator
+                must configure the Slack app credentials on the server.
+              </p>
+              {SHOW_DEPLOYMENT_INTEGRATION_DOCS && (
+                <div className="mt-3 rounded-lg bg-gray-50 p-3 font-mono text-xs text-gray-600 space-y-1">
+                  <p>SLACK_CLIENT_ID=...</p>
+                  <p>SLACK_CLIENT_SECRET=...</p>
+                  <p>SLACK_SIGNING_SECRET=...</p>
+                  <p>SLACK_REDIRECT_URI=https://your-domain/api/slack/callback</p>
                 </div>
               )}
             </div>

@@ -27,6 +27,7 @@ import {
   calculateSMPPhaseRates,
   getAweForUser,
   isMaternityLeaveType,
+  resolveAverageWeeklyEarnings,
 } from "@/lib/smpCalculator";
 import { calculateBradfordFactor } from "@/lib/uk-compliance";
 import { z } from "zod";
@@ -162,7 +163,13 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    if (leaveTypeConfig.requiresEvidence && !evidenceProvided) {
+    const evidenceConfirmed =
+      evidenceProvided === true ||
+      (leaveTypeConfig.requiresEvidence &&
+        typeof sicknessNote === "string" &&
+        sicknessNote.trim().length > 0);
+
+    if (leaveTypeConfig.requiresEvidence && !evidenceConfirmed) {
       return NextResponse.json(
         { error: "Evidence is required for this leave type" },
         { status: 400 }
@@ -333,11 +340,16 @@ export async function POST(request: Request) {
           0
         );
 
+        const averageWeeklyEarnings = await resolveAverageWeeklyEarnings(
+          userId,
+          startDate,
+          employee.averageWeeklyEarnings === null
+            ? null
+            : Number(employee.averageWeeklyEarnings)
+        );
+
         const entitlement = calculateSspEntitlement({
-          averageWeeklyEarnings:
-            employee.averageWeeklyEarnings === null
-              ? null
-              : Number(employee.averageWeeklyEarnings),
+          averageWeeklyEarnings,
           sspDaysPaidInPeriod: cumulativePrior,
           qualifyingDaysPerWeek: employee.qualifyingDaysPerWeek,
         });
@@ -393,7 +405,9 @@ export async function POST(request: Request) {
         note,
         sicknessNote: sicknessNote ?? undefined,
         userId,
-        evidenceProvided: evidenceProvided ?? false,
+        evidenceProvided: leaveTypeConfig.requiresEvidence
+          ? evidenceConfirmed
+          : (evidenceProvided ?? false),
         kitDaysUsed: kitDaysUsed ?? 0,
         splitDaysUsed: splitDaysUsed ?? 0,
         childBirthDate: childBirthDate ?? undefined,
@@ -455,6 +469,7 @@ export async function POST(request: Request) {
     const orgId = (session.user as Record<string, unknown>).organizationId as string;
 
     notifyNewRequest({
+      organizationId: orgId,
       requestId: leaveRequest.id,
       userName: leaveRequest.user.name,
       leaveTypeName: leaveRequest.leaveType.name,

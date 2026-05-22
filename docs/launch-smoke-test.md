@@ -140,7 +140,7 @@ You'll need one admin and one member. The admin is created by signup; the member
 This step needs an SSP leave large enough to trip the 28-week cap. The easiest path: submit a long sickness leave for the member that exceeds `28 × qualifyingDaysPerWeek` days.
 
 **Preflight:**
-- Confirm the member's `qualifyingDaysPerWeek = 5` (default) and `averageWeeklyEarnings` is set above the LEL (£125+). If it's null, the SSP eligibility check will return `Below Lower Earnings Limit` and you won't see the cap path.
+- Confirm the member's `qualifyingDaysPerWeek = 5` (default). Add at least 8 weeks of paid `WeeklyEarning` history in **Settings → Holiday pay earnings** (or via `POST /api/weekly-earnings`) so `User.averageWeeklyEarnings` is auto-synced above the LEL (£125+). If earnings history is missing, SSP returns `Missing average weekly earnings`.
 - Pick start/end dates that span ~30 working weeks (e.g. start = today, end = today + 210 days). For a 5-day qualifying week, anything over 140 payable working days will reach the cap.
 
 **Do:**

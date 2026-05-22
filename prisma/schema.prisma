@@ -97,9 +97,10 @@ model Organization {
   leaveTypes       LeaveType[]
   publicHolidays   PublicHoliday[]
   bankHolidays     BankHoliday[]
-  jiraIntegration  JiraIntegration?
-  jiraUserMappings JiraUserMapping[]
-  regions          Region[]
+  jiraIntegration   JiraIntegration?
+  jiraUserMappings  JiraUserMapping[]
+  slackIntegration  SlackIntegration?
+  regions           Region[]
 
   @@index([deletionScheduledFor])
   @@index([trialExpiredGraceEndsAt])
@@ -136,8 +137,9 @@ model User {
   leaveRequests       LeaveRequest[]          @relation("UserLeaveRequests")
   reviewedLeaves      LeaveRequest[]          @relation("ReviewerLeaveRequests")
   passwordResetTokens PasswordResetToken[]
-  jiraUserMapping     JiraUserMapping?
-  jiraConnections     JiraIntegration[]       @relation("JiraConnectedBy")
+  jiraUserMapping      JiraUserMapping?
+  jiraConnections      JiraIntegration[]       @relation("JiraConnectedBy")
+  slackConnections     SlackIntegration[]      @relation("SlackConnectedBy")
   weeklyHours         UserWeeklyHours[]
   carryOverBalances   LeaveCarryOverBalance[]
   weeklyEarnings      WeeklyEarning[]
@@ -258,6 +260,24 @@ model JiraUserMapping {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([userId, organizationId])
+}
+
+model SlackIntegration {
+  id                  String   @id @default(cuid())
+  teamId              String   @unique
+  teamName            String
+  botToken            String
+  botUserId           String?
+  notificationChannel String   @default("#time-off")
+  organizationId      String   @unique
+  connectedByUserId   String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connectedBy  User         @relation("SlackConnectedBy", fields: [connectedByUserId], references: [id])
+
+  @@index([organizationId])
 }
 
 model PasswordResetToken {

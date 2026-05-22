@@ -15,6 +15,8 @@ type LeaveType = {
   id: string;
   name: string;
   color: string;
+  requiresEvidence: boolean;
+  minNoticeDays: number;
 };
 
 type OverlapData = {
@@ -48,6 +50,8 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
   const [endDate, setEndDate] = useState("");
   const [leaveTypeId, setLeaveTypeId] = useState("");
   const [note, setNote] = useState("");
+  const [sicknessNote, setSicknessNote] = useState("");
+  const [evidenceProvided, setEvidenceProvided] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [overlapData, setOverlapData] = useState<OverlapData | null>(null);
@@ -72,10 +76,17 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
     fetchBalances();
   }, []);
 
+  const selectedLeaveType = useMemo(
+    () => leaveTypes.find((lt) => lt.id === leaveTypeId) ?? null,
+    [leaveTypes, leaveTypeId]
+  );
+
   const selectedBalance = useMemo(
     () => balances.find((b) => b.leaveTypeId === leaveTypeId) ?? null,
     [balances, leaveTypeId]
   );
+
+  const isSspLeave = selectedLeaveType?.name.includes("SSP") ?? false;
 
   const requestedDays = useMemo(() => {
     if (!startDate || !endDate) return 0;
@@ -106,9 +117,28 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
     return () => clearTimeout(timer);
   }, [checkOverlap]);
 
+  useEffect(() => {
+    setSicknessNote("");
+    setEvidenceProvided(false);
+  }, [leaveTypeId]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+
+    const needsEvidence = selectedLeaveType?.requiresEvidence ?? false;
+    const hasEvidence =
+      evidenceProvided || (isSspLeave && sicknessNote.trim().length > 0);
+
+    if (needsEvidence && !hasEvidence) {
+      setError(
+        isSspLeave
+          ? "Please confirm you have a fit note, or add sickness note details below."
+          : "Please confirm that supporting evidence is available for this leave type."
+      );
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -120,6 +150,8 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
           endDate: new Date(endDate).toISOString(),
           leaveTypeId,
           note: note || undefined,
+          sicknessNote: sicknessNote.trim() || undefined,
+          evidenceProvided: needsEvidence ? hasEvidence : undefined,
         }),
       });
 
@@ -215,6 +247,62 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
           onChange={(e) => setNote(e.target.value)}
         />
       </div>
+
+      {selectedLeaveType?.requiresEvidence && (
+        <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm font-medium text-amber-900">
+            Evidence required
+          </p>
+          <p className="text-xs text-amber-800">
+            {isSspLeave
+              ? "Statutory sick pay requires a fit note (or other medical evidence) for this absence."
+              : "This leave type requires supporting documentation (e.g. medical or statutory evidence)."}
+          </p>
+          {isSspLeave && (
+            <div className="space-y-1">
+              <label
+                htmlFor="sicknessNote"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Sickness note details (optional)
+              </label>
+              <textarea
+                id="sicknessNote"
+                rows={3}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                placeholder="e.g. Fit note reference, diagnosis summary, or dates covered..."
+                value={sicknessNote}
+                onChange={(e) => setSicknessNote(e.target.value)}
+              />
+              <p className="text-xs text-gray-500">
+                Visible to admins and managers reviewing your request. Adding
+                details here counts as evidence provided.
+              </p>
+            </div>
+          )}
+          <label className="flex items-start gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+              checked={evidenceProvided}
+              onChange={(e) => setEvidenceProvided(e.target.checked)}
+            />
+            <span>
+              {isSspLeave
+                ? "I confirm medical evidence (e.g. a fit note) is available for this absence"
+                : "I confirm supporting evidence is available for this leave"}
+            </span>
+          </label>
+        </div>
+      )}
+
+      {selectedLeaveType && selectedLeaveType.minNoticeDays > 0 && (
+        <p className="text-xs text-gray-500">
+          This leave type requires at least {selectedLeaveType.minNoticeDays}{" "}
+          day{selectedLeaveType.minNoticeDays !== 1 ? "s" : ""} notice before the
+          start date.
+        </p>
+      )}
 
       {/* Overlap detection */}
       {startDate && endDate && (

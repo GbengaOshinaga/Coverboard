@@ -210,3 +210,53 @@ export async function getAweForUser(
     .reverse();
   return calculateAWE(earnings);
 }
+
+/**
+ * Recompute average weekly earnings from `WeeklyEarning` rows (last 8 paid
+ * weeks) and persist on `User.averageWeeklyEarnings` for SSP / reports.
+ * Sets the field to `null` when there is no qualifying earnings history.
+ */
+export async function syncUserAverageWeeklyEarnings(
+  userId: string,
+  beforeDate: Date = new Date()
+): Promise<number | null> {
+  const computed = await getAweForUser(userId, beforeDate);
+  const { prisma } = await import("@/lib/prisma");
+  await prisma.user.update({
+    where: { id: userId },
+    data: { averageWeeklyEarnings: computed },
+  });
+  return computed;
+}
+
+/**
+ * SSP / LEL checks: prefer a fresh 8-week average from weekly earnings;
+ * fall back to the cached `User.averageWeeklyEarnings` when no history exists.
+ */
+export async function resolveAverageWeeklyEarnings(
+  userId: string,
+  beforeDate: Date = new Date(),
+  stored: number | null | undefined = undefined
+): Promise<number | null> {
+  const computed = await getAweForUser(userId, beforeDate);
+  if (computed !== null) {
+    const { prisma } = await import("@/lib/prisma");
+    await prisma.user.update({
+      where: { id: userId },
+      data: { averageWeeklyEarnings: computed },
+    });
+    return computed;
+  }
+  if (stored !== undefined) {
+    return stored === null ? null : Number(stored);
+  }
+  const { prisma } = await import("@/lib/prisma");
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { averageWeeklyEarnings: true },
+  });
+  if (user?.averageWeeklyEarnings === null || user?.averageWeeklyEarnings === undefined) {
+    return null;
+  }
+  return Number(user.averageWeeklyEarnings);
+}
