@@ -258,21 +258,25 @@ If the org isn't on Pro (or trialing), these should **not** appear — read-audi
 
 **Do:**
 1. **Settings → Danger zone → Delete account**.
-2. Confirm (whatever the explicit confirmation step is in the UI — typing the org name etc.).
+2. Confirm by typing `DELETE`.
 
 **Verify (UI):**
-- [ ] Red banner: "Your account is scheduled for permanent deletion on [date]. After that date, all team data, leave records, and billing history are irrecoverably deleted."
+- [ ] Settings shows the **Account scheduled for deletion** card in place of Danger zone, with a `Cancel deletion and keep my data` button.
+- [ ] Every dashboard page now shows a red top banner: "Your organisation is scheduled for permanent deletion on [date] (N days left)."
+- [ ] The rest of the app **still works** (user-requested deletion does not lock — that's intentional so admins can wind down).
 
 **Verify (DB):**
 - [ ] `Organization.deletionScheduledFor` is set to ~30 days from now.
-- [ ] `Organization.plan = "LOCKED"`.
+- [ ] `Organization.deletionReason = "user_requested"`.
+- [ ] `Organization.plan` is **unchanged** (e.g. `TRIAL` / `STARTER` / etc.). LOCKED is reserved for billing-triggered deletions (Stripe cancel / pause).
 - [ ] `DataDeletionAudit` row with `event = "scheduled"`.
 
 **Verify (email):**
 - [ ] Admin received "deletion scheduled" email.
 
-**Verify (middleware lock):**
-- [ ] Reload any dashboard page — should redirect to **/locked**.
+**Verify (cancel path):**
+- [ ] Click the banner's **Cancel deletion** link (or the Settings button).
+- [ ] `Organization.deletionScheduledFor` is cleared, `DataDeletionAudit` gets an `event = "canceled"` row, and the banner disappears.
 
 ---
 

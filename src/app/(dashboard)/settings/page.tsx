@@ -1261,17 +1261,37 @@ export default function SettingsPage() {
               )}
             </div>
           ) : (
-            <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-4">
-              <p className="text-sm text-gray-600">
-                Slack is not enabled on this Coverboard deployment yet. The platform operator
-                must configure the Slack app credentials on the server.
-              </p>
-              {SHOW_DEPLOYMENT_INTEGRATION_DOCS && (
-                <div className="mt-3 rounded-lg bg-gray-50 p-3 font-mono text-xs text-gray-600 space-y-1">
-                  <p>SLACK_CLIENT_ID=...</p>
-                  <p>SLACK_CLIENT_SECRET=...</p>
-                  <p>SLACK_SIGNING_SECRET=...</p>
-                  <p>SLACK_REDIRECT_URI=https://your-domain/api/slack/callback</p>
+            <div className="space-y-3">
+              {SHOW_DEPLOYMENT_INTEGRATION_DOCS ? (
+                <>
+                  <p className="text-sm text-gray-500">
+                    To enable Slack, add these environment variables to your deployment and restart
+                    the app:
+                  </p>
+                  <div className="rounded-lg bg-gray-50 p-3 font-mono text-xs text-gray-600 space-y-1">
+                    <p>SLACK_CLIENT_ID=...</p>
+                    <p>SLACK_CLIENT_SECRET=...</p>
+                    <p>SLACK_SIGNING_SECRET=...</p>
+                    <p>SLACK_REDIRECT_URI=https://your-domain/api/slack/callback</p>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    After restart, return here and use <strong>Connect Slack</strong> to link your
+                    workspace (admin only).
+                  </p>
+                </>
+              ) : (
+                <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-4">
+                  <p className="text-sm text-gray-600">
+                    Slack isn&apos;t available for your organisation yet.
+                  </p>
+                  <p className="mt-2 text-xs text-gray-500">
+                    If Slack is included in your plan,{" "}
+                    <Link href="/help" className="font-medium text-brand-600 hover:text-brand-700">
+                      contact support
+                    </Link>{" "}
+                    to request access. Once it&apos;s enabled, an organisation admin can connect
+                    your workspace from this page.
+                  </p>
                 </div>
               )}
             </div>
@@ -1653,7 +1673,7 @@ export default function SettingsPage() {
 
       {isAdmin && orgSettings && (
         orgSettings.deletionScheduledFor ? (
-          <Card className="border-red-200">
+          <Card id="danger-zone" className="border-red-200 scroll-mt-6">
             <CardHeader>
               <CardTitle className="text-red-900">
                 Account scheduled for deletion
@@ -1688,7 +1708,7 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         ) : (
-          <Card className="border-red-200">
+          <Card id="danger-zone" className="border-red-200 scroll-mt-6">
             <CardHeader>
               <CardTitle className="text-red-900">Danger zone</CardTitle>
               <CardDescription>

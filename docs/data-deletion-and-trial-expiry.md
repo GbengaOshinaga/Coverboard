@@ -22,10 +22,14 @@ Whichever path triggers it, the org row is updated with `deletionRequestedAt`, `
 
 Once scheduled, your account is in a 30-day window where:
 
-- The lock screen takes over for billing-triggered cases — only `/settings/billing/**`, `/settings/profile/**`, `/api/billing/**`, `/api/auth/**`, `/login`, `/signup`, `/logout` and `/locked` are reachable
-- For user-requested deletions, the rest of the app continues to work until the scheduled date
-- All data is still on disk, untouched
-- The admin can cancel deletion (see below) and pick up where they left off
+- **All data is still on disk, untouched.**
+- A persistent red banner appears on every dashboard page so the team knows what's happening.
+- The admin can cancel deletion at any point from **Settings → Danger zone** (see below).
+
+What happens to access depends on which path triggered it:
+
+- **Billing-triggered** (paused / cancelled / payment failed) — the org `plan` is set to `LOCKED` and the lock screen takes over. Only `/settings/billing`, `/settings/profile`, `/account/delete`, `/api/billing`, `/api/account`, `/api/auth`, `/login`, `/signup`, `/logout` and `/locked` are reachable. The admin has to pay or add a card to recover.
+- **User-requested** (admin clicked Delete account) — the app keeps working normally. The `plan` is unchanged. This is deliberate: the admin needs the app to wind down (export data, finish pending approvals, communicate with the team) and changing their mind shouldn't require a billing change.
 
 For trial-expired cases the flow has two stages: first a `trialExpiredGraceEndsAt` is set 30 days out (`trial_grace_started` audit). When that date passes, a daily cron promotes the org to a full `scheduled` deletion (a second 30-day window). In effect, trial users get up to 60 days from trial end before any data is touched.
 
@@ -35,7 +39,7 @@ For trial-expired cases the flow has two stages: first a `trialExpiredGraceEndsA
 
 For billing-triggered cases the easiest cancel is to **add a card and pay an invoice** (for paused/cancelled trials) or **reactivate the subscription** (for cancel-at-period-end). The Stripe webhook clears `deletionScheduledFor` and writes an audit entry.
 
-For user-requested deletions the admin needs to contact support to call the cancel endpoint — there is no in-app "undo" button by design (the Danger Zone exists to make deletion intentional, not casual).
+For user-requested deletions the admin can use **Cancel deletion and keep my data** on the Settings page (or `POST /api/account/delete/cancel`).
 
 ---
 

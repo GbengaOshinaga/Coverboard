@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { TrialBanner } from "@/components/layout/trial-banner";
+import { DeletionScheduledBanner } from "@/components/layout/deletion-scheduled-banner";
 
 export default async function DashboardLayout({
   children,
@@ -26,6 +27,7 @@ export default async function DashboardLayout({
       trialEndsAt: true,
       subscriptionStatus: true,
       cardAdded: true,
+      deletionScheduledFor: true,
     },
   });
 
@@ -33,13 +35,20 @@ export default async function DashboardLayout({
     redirect("/onboarding");
   }
 
+  const isAdmin = role === "ADMIN";
   const banner = org ? (
-    <TrialBanner
-      trialEndsAt={org.trialEndsAt}
-      subscriptionStatus={org.subscriptionStatus}
-      cardAdded={org.cardAdded}
-      isAdmin={role === "ADMIN"}
-    />
+    <>
+      <DeletionScheduledBanner
+        deletionScheduledFor={org.deletionScheduledFor}
+        isAdmin={isAdmin}
+      />
+      <TrialBanner
+        trialEndsAt={org.trialEndsAt}
+        subscriptionStatus={org.subscriptionStatus}
+        cardAdded={org.cardAdded}
+        isAdmin={isAdmin}
+      />
+    </>
   ) : null;
 
   return <DashboardShell banner={banner}>{children}</DashboardShell>;
