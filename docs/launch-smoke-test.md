@@ -15,6 +15,8 @@ Before starting, confirm:
 - [ ] `STRIPE_WEBHOOK_SECRET` is set and matches the active staging webhook endpoint.
 - [ ] `CRON_SECRET` is set (the cron routes now refuse to run in production without it — staging should match).
 - [ ] `RESEND_API_KEY` (or whichever email provider) is set so you can confirm emails were sent. If staging swallows emails, use the provider's "sent" log instead.
+- [ ] Staging database has all migrations applied (`npx prisma migrate deploy` with the staging `DATABASE_URL`). Required for Slack (`SlackIntegration` table) and other recent schema changes — Vercel build only runs `prisma generate`, not migrate.
+- [ ] Slack app env vars on staging: `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_SIGNING_SECRET`, and `NEXTAUTH_URL` matching the staging host.
 - [ ] Stripe CLI is installed locally so you can `stripe trigger` events if a webhook gets stuck.
 - [ ] You have a clean throwaway email alias for the test admin (e.g. `coverboard-smoke-YYYYMMDD@yourdomain`).
 
