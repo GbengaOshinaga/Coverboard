@@ -14,10 +14,6 @@ import { useToast } from "@/components/ui/toast";
 import { Plus, MessageSquare, CheckCircle, XCircle, User, ChevronRight, SquareKanban, ExternalLink, Unlink, Pencil, Trash2, AlertTriangle, Banknote, MapPin, CreditCard } from "lucide-react";
 import { Select } from "@/components/ui/select";
 
-/** Env vars and vendor-console setup are operator docs — only shown in the UI when running `next dev`. */
-const SHOW_DEPLOYMENT_INTEGRATION_DOCS =
-  process.env.NODE_ENV === "development";
-
 type LeaveType = {
   id: string;
   name: string;
@@ -1261,39 +1257,18 @@ export default function SettingsPage() {
               )}
             </div>
           ) : (
-            <div className="space-y-3">
-              {SHOW_DEPLOYMENT_INTEGRATION_DOCS ? (
-                <>
-                  <p className="text-sm text-gray-500">
-                    To enable Slack, add these environment variables to your deployment and restart
-                    the app:
-                  </p>
-                  <div className="rounded-lg bg-gray-50 p-3 font-mono text-xs text-gray-600 space-y-1">
-                    <p>SLACK_CLIENT_ID=...</p>
-                    <p>SLACK_CLIENT_SECRET=...</p>
-                    <p>SLACK_SIGNING_SECRET=...</p>
-                    <p>SLACK_REDIRECT_URI=https://your-domain/api/slack/callback</p>
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    After restart, return here and use <strong>Connect Slack</strong> to link your
-                    workspace (admin only).
-                  </p>
-                </>
-              ) : (
-                <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-4">
-                  <p className="text-sm text-gray-600">
-                    Slack isn&apos;t available for your organisation yet.
-                  </p>
-                  <p className="mt-2 text-xs text-gray-500">
-                    If Slack is included in your plan,{" "}
-                    <Link href="/help" className="font-medium text-brand-600 hover:text-brand-700">
-                      contact support
-                    </Link>{" "}
-                    to request access. Once it&apos;s enabled, an organisation admin can connect
-                    your workspace from this page.
-                  </p>
-                </div>
-              )}
+            <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-4">
+              <p className="text-sm text-gray-600">
+                Slack isn&apos;t available for your organisation yet.
+              </p>
+              <p className="mt-2 text-xs text-gray-500">
+                If Slack is included in your plan,{" "}
+                <Link href="/help" className="font-medium text-brand-600 hover:text-brand-700">
+                  contact support
+                </Link>{" "}
+                to request access. Once it&apos;s enabled, an organisation admin can connect your
+                workspace from this page.
+              </p>
             </div>
           )}
         </CardContent>
@@ -1396,52 +1371,18 @@ export default function SettingsPage() {
               )}
             </div>
           ) : (
-            <div className="space-y-3">
-              {SHOW_DEPLOYMENT_INTEGRATION_DOCS ? (
-                <>
-                  <p className="text-sm text-gray-500">
-                    To enable the Jira integration, add these environment variables to your deployment:
-                  </p>
-                  <div className="rounded-lg bg-gray-50 p-3 font-mono text-xs text-gray-600 space-y-1">
-                    <p>JIRA_CLIENT_ID=...</p>
-                    <p>JIRA_CLIENT_SECRET=...</p>
-                    <p>JIRA_REDIRECT_URI=https://your-domain/api/jira/callback</p>
-                  </div>
-                  <div className="rounded-lg bg-blue-50 p-3">
-                    <p className="text-xs text-blue-700">
-                      <strong>Setup guide:</strong> Create an OAuth 2.0 (3LO) app at{" "}
-                      <a
-                        href="https://developer.atlassian.com/console/myapps/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline"
-                      >
-                        developer.atlassian.com
-                      </a>
-                      . Add scopes: <code className="rounded bg-blue-100 px-1">read:jira-work</code>,{" "}
-                      <code className="rounded bg-blue-100 px-1">write:jira-work</code>,{" "}
-                      <code className="rounded bg-blue-100 px-1">read:jira-user</code>,{" "}
-                      <code className="rounded bg-blue-100 px-1">read:me</code>,{" "}
-                      <code className="rounded bg-blue-100 px-1">offline_access</code>.
-                    </p>
-                  </div>
-                </>
-              ) : (
-                <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-4">
-                  <p className="text-sm text-gray-600">
-                    Jira isn&apos;t configured for this deployment. OAuth credentials are set on the server by whoever hosts Coverboard — not from this screen.
-                  </p>
-                  {isAdmin ? (
-                    <p className="mt-2 text-xs text-gray-500">
-                      If your team self-hosts, point a developer or DevOps engineer at the Jira section in the project README.
-                    </p>
-                  ) : (
-                    <p className="mt-2 text-xs text-gray-500">
-                      Ask an organisation admin if you need this enabled.
-                    </p>
-                  )}
-                </div>
-              )}
+            <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-4">
+              <p className="text-sm text-gray-600">
+                Jira isn&apos;t available for your organisation yet.
+              </p>
+              <p className="mt-2 text-xs text-gray-500">
+                If Jira is included in your plan,{" "}
+                <Link href="/help" className="font-medium text-brand-600 hover:text-brand-700">
+                  contact support
+                </Link>{" "}
+                to request access. Once it&apos;s enabled, an organisation admin can connect your
+                site from this page.
+              </p>
             </div>
           )}
         </CardContent>

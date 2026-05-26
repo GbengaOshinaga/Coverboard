@@ -332,13 +332,14 @@ Go to [developer.atlassian.com/console/myapps](https://developer.atlassian.com/c
 
 ### 2. Configure scopes
 
-Add the following scopes:
+In the developer console, open your app → **Permissions** → add **Jira API** scopes:
 
 - `read:jira-work` — Search issues
 - `write:jira-work` — Reassign issues
 - `read:jira-user` — Look up users by email
 - `read:me` — Read the connecting user's identity
-- `offline_access` — Obtain a refresh token
+
+You will **not** see `offline_access` as a checkbox in the console. Atlassian treats it as a special OAuth scope: Coverboard adds it to the authorize URL when an admin clicks **Connect Jira**, which is how refresh tokens are issued. No separate console step is required.
 
 ### 3. Set the callback URL
 
