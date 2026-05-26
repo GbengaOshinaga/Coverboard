@@ -57,7 +57,7 @@ async function executeDeletion(organizationId: string): Promise<{
         data: {
           name: STUB_NAME,
           slug: `${STUB_SLUG_PREFIX}${org.id}`,
-          onboardingCompleted: false,
+          onboardingCompleted: true,
           stripeCustomerId: null,
           stripeSubscriptionId: null,
           stripePriceId: null,

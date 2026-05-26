@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { requireActiveSession } from "@/lib/require-active-session";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { TrialBanner } from "@/components/layout/trial-banner";
 import { DeletionScheduledBanner } from "@/components/layout/deletion-scheduled-banner";
@@ -11,14 +10,9 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await getServerSession(authOptions);
-
-  if (!session) {
-    redirect("/login");
-  }
+  const { session, orgId } = await requireActiveSession();
 
   const sessionUser = session.user as Record<string, unknown>;
-  const orgId = sessionUser.organizationId as string;
   const role = sessionUser.role as string | undefined;
   const org = await prisma.organization.findUnique({
     where: { id: orgId },
