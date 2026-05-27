@@ -7,7 +7,6 @@ import { prisma } from "@/lib/prisma";
 import { teamMemberSchema } from "@/lib/validations";
 import { sendTeamInviteEmail } from "@/lib/email-notifications";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
-import { hasUKEmployees } from "@/lib/uk-workforce";
 import { hasUkStatutoryLeaveTypes } from "@/lib/uk-statutory";
 import { hasFeatureForEnum } from "@/lib/planFeatures";
 
@@ -52,7 +51,6 @@ export async function POST(request: Request) {
   }
 
   const { rows, dryRun } = parsed.data;
-  const hadUkEmployees = await hasUKEmployees(orgId);
 
   type ValidRow = {
     index: number;
@@ -263,9 +261,7 @@ export async function POST(request: Request) {
 
   const addedUkEmployee = toCreate.some((row) => row.data.workCountry === "GB");
   const shouldSuggestUkSetup =
-    addedUkEmployee &&
-    !hadUkEmployees &&
-    !(await hasUkStatutoryLeaveTypes(orgId));
+    addedUkEmployee && !(await hasUkStatutoryLeaveTypes(orgId));
 
   return NextResponse.json(
     {

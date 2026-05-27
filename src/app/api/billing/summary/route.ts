@@ -53,7 +53,25 @@ export async function GET() {
     pdf: string | null;
   };
   let invoices: InvoiceDTO[] = [];
+  let paymentMethodBrand: string | null = null;
+  let paymentMethodLast4: string | null = null;
+
   if (stripe && org.stripeCustomerId) {
+    try {
+      const customer = await stripe.customers.retrieve(org.stripeCustomerId, {
+        expand: ["invoice_settings.default_payment_method"],
+      });
+      if (customer && !("deleted" in customer && customer.deleted)) {
+        const pm = customer.invoice_settings?.default_payment_method;
+        if (pm && typeof pm === "object" && "card" in pm && pm.card) {
+          paymentMethodBrand = pm.card.brand ?? null;
+          paymentMethodLast4 = pm.card.last4 ?? null;
+        }
+      }
+    } catch (err) {
+      console.error("Failed to retrieve Stripe customer:", err);
+    }
+
     try {
       const list = await stripe.invoices.list({
         customer: org.stripeCustomerId,
@@ -80,6 +98,8 @@ export async function GET() {
     subscriptionStatus: org.subscriptionStatus,
     trialEndsAt: org.trialEndsAt,
     cardAdded: org.cardAdded,
+    paymentMethodBrand,
+    paymentMethodLast4,
     cancelAtPeriodEnd: org.cancelAtPeriodEnd,
     currentPeriodEnd: org.currentPeriodEnd,
     deletionScheduledFor: org.deletionScheduledFor,

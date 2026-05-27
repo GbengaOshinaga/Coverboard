@@ -20,6 +20,7 @@ type Props = {
   planPriceGbp: number;
   trialEndFormatted: string;
   alreadyAdded: boolean;
+  updateMode?: boolean;
 };
 
 export function AddPaymentForm({
@@ -28,6 +29,7 @@ export function AddPaymentForm({
   planPriceGbp,
   trialEndFormatted,
   alreadyAdded,
+  updateMode = false,
 }: Props) {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
@@ -49,10 +51,10 @@ export function AddPaymentForm({
     init();
   }, []);
 
-  if (alreadyAdded) {
+  if (alreadyAdded && !updateMode) {
     return (
       <>
-        <Header />
+        <Header updateMode={false} />
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-start gap-3 rounded-md bg-emerald-50 p-4 text-sm text-emerald-800">
@@ -65,12 +67,18 @@ export function AddPaymentForm({
                 </p>
               </div>
             </div>
-            <div className="mt-4 flex justify-end">
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
               <Link
-                href="/dashboard"
+                href="/settings/billing/add-payment?update=1"
+                className="rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Update payment method
+              </Link>
+              <Link
+                href="/settings/billing"
                 className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
               >
-                Back to dashboard
+                Back to billing
               </Link>
             </div>
           </CardContent>
@@ -82,7 +90,7 @@ export function AddPaymentForm({
   if (!publishableKey) {
     return (
       <>
-        <Header />
+        <Header updateMode={false} />
         <Card>
           <CardContent className="pt-6 text-sm text-gray-700">
             Billing is not configured. Set NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY and
@@ -96,7 +104,7 @@ export function AddPaymentForm({
   if (initError) {
     return (
       <>
-        <Header />
+        <Header updateMode={false} />
         <Card>
           <CardContent className="pt-6 text-sm text-red-700">
             {initError}
@@ -108,14 +116,18 @@ export function AddPaymentForm({
 
   return (
     <>
-      <Header />
+      <Header updateMode={updateMode} />
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Add a payment method</CardTitle>
+          <CardTitle className="text-base">
+            {updateMode ? "Update payment method" : "Add a payment method"}
+          </CardTitle>
           <CardDescription>
-            {trialEndFormatted
-              ? `Your card will be charged £${planPriceGbp}/month starting ${trialEndFormatted}.`
-              : `Your card will be charged £${planPriceGbp}/month after you confirm.`}
+            {updateMode
+              ? "Enter new card details. Future invoices will use this card."
+              : trialEndFormatted
+                ? `Your card will be charged £${planPriceGbp}/month starting ${trialEndFormatted}.`
+                : `Your card will be charged £${planPriceGbp}/month after you confirm.`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -124,7 +136,7 @@ export function AddPaymentForm({
               stripe={stripePromise}
               options={{ clientSecret, appearance: { theme: "stripe" } }}
             >
-              <InnerForm planName={planName} />
+              <InnerForm planName={planName} updateMode={updateMode} />
             </Elements>
           ) : (
             <p className="text-sm text-gray-500">Loading secure payment form…</p>
@@ -139,7 +151,7 @@ export function AddPaymentForm({
   );
 }
 
-function Header() {
+function Header({ updateMode }: { updateMode: boolean }) {
   return (
     <div className="mb-6 flex items-center gap-3">
       <Link
@@ -150,17 +162,25 @@ function Header() {
       </Link>
       <div>
         <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">
-          Add payment details
+          {updateMode ? "Update payment method" : "Add payment details"}
         </h1>
         <p className="text-sm text-gray-500">
-          Keep your Coverboard access after the trial ends
+          {updateMode
+            ? "Replace the card used for your Coverboard subscription"
+            : "Keep your Coverboard access after the trial ends"}
         </p>
       </div>
     </div>
   );
 }
 
-function InnerForm({ planName }: { planName: string }) {
+function InnerForm({
+  planName,
+  updateMode,
+}: {
+  planName: string;
+  updateMode: boolean;
+}) {
   const stripe = useStripe();
   const elements = useElements();
   const router = useRouter();
@@ -224,15 +244,16 @@ function InnerForm({ planName }: { planName: string }) {
         <div className="flex items-start gap-3 rounded-md bg-emerald-50 p-4 text-sm text-emerald-800">
           <CheckCircle size={18} className="mt-0.5 shrink-0" />
           <p>
-            You&apos;re all set. Your {planName} plan is ready to activate when
-            the trial ends.
+            {updateMode
+              ? "Your payment method has been updated."
+              : `You're all set. Your ${planName} plan is ready to activate when the trial ends.`}
           </p>
         </div>
         <Link
-          href="/dashboard"
+          href="/settings/billing"
           className="inline-flex rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
         >
-          Back to dashboard
+          Back to billing
         </Link>
       </div>
     );
@@ -245,7 +266,11 @@ function InnerForm({ planName }: { planName: string }) {
         <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div>
       )}
       <Button type="submit" disabled={submitting || !stripe} className="w-full">
-        {submitting ? "Saving…" : "Save card & activate plan"}
+        {submitting
+          ? "Saving…"
+          : updateMode
+            ? "Save new card"
+            : "Save card & activate plan"}
       </Button>
     </form>
   );

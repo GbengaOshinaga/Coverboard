@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -41,7 +42,12 @@ type Member = {
 
 export default function TeamPage() {
   const { data: session } = useSession();
+  const searchParams = useSearchParams();
+  const earningsFilter = searchParams.get("earnings");
   const [members, setMembers] = useState<Member[]>([]);
+  const [missingEarningsIds, setMissingEarningsIds] = useState<Set<string> | null>(
+    null
+  );
   const [regions, setRegions] = useState<Region[]>([]);
   const [regionsEnabled, setRegionsEnabled] = useState(false);
   const [regionFilter, setRegionFilter] = useState<string>("ALL");
@@ -77,6 +83,33 @@ export default function TeamPage() {
   }, [fetchMembers]);
 
   useEffect(() => {
+    if (earningsFilter !== "missing" || !canManage) {
+      setMissingEarningsIds(null);
+      return;
+    }
+    let cancelled = false;
+    fetch("/api/weekly-earnings/coverage")
+      .then((r) => (r.ok ? r.json() : []))
+      .then(
+        (
+          rows: Array<{ id: string; hasAnyHistory: boolean; workCountry?: string }>
+        ) => {
+          if (cancelled) return;
+          const ids = new Set(
+            rows.filter((r) => !r.hasAnyHistory).map((r) => r.id)
+          );
+          setMissingEarningsIds(ids);
+        }
+      )
+      .catch(() => {
+        if (!cancelled) setMissingEarningsIds(new Set());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [earningsFilter, canManage]);
+
+  useEffect(() => {
     let cancelled = false;
     fetch("/api/organization/settings")
       .then((r) => (r.ok ? r.json() : null))
@@ -92,12 +125,23 @@ export default function TeamPage() {
     };
   }, [fetchRegions]);
 
+  const earningsFilterLoading =
+    earningsFilter === "missing" && canManage && missingEarningsIds === null;
+
   const filteredMembers = useMemo(() => {
-    if (regionFilter === "ALL") return members;
+    let list = members;
+    if (earningsFilter === "missing") {
+      if (!missingEarningsIds) return [];
+      list = list.filter(
+        (m) =>
+          m.workCountry === "GB" && missingEarningsIds.has(m.id)
+      );
+    }
+    if (regionFilter === "ALL") return list;
     if (regionFilter === "UNASSIGNED")
-      return members.filter((m) => !m.regionId);
-    return members.filter((m) => m.regionId === regionFilter);
-  }, [members, regionFilter]);
+      return list.filter((m) => !m.regionId);
+    return list.filter((m) => m.regionId === regionFilter);
+  }, [members, regionFilter, earningsFilter, missingEarningsIds]);
 
   const unassignedCount = useMemo(
     () => members.filter((m) => !m.regionId).length,
@@ -280,6 +324,34 @@ export default function TeamPage() {
         </div>
       )}
 
+      {earningsFilter === "missing" && canManage && (
+        <div className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <div className="flex-1 text-amber-900">
+            <p className="font-medium">
+              Showing UK employees with no earnings history
+            </p>
+            <p className="mt-0.5 text-xs text-amber-700">
+              Open a profile and add earnings under{" "}
+              <strong>Earnings history</strong>, or use bulk import.{" "}
+              <Link
+                href="/settings"
+                className="font-medium underline hover:no-underline"
+              >
+                Full coverage report →
+              </Link>
+              {" · "}
+              <Link
+                href="/team"
+                className="font-medium underline hover:no-underline"
+              >
+                Show all team members
+              </Link>
+            </p>
+          </div>
+        </div>
+      )}
+
       {regionsEnabled && canManage && unassignedCount > 0 && regions.length > 0 && (
         <div className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
@@ -302,7 +374,7 @@ export default function TeamPage() {
         </div>
       )}
 
-      {loading ? (
+      {loading || earningsFilterLoading ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {Array.from({ length: 4 }).map((_, i) => (
             <CardSkeleton key={i} />

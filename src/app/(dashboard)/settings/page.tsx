@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -12,6 +12,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { Plus, MessageSquare, CheckCircle, XCircle, User, ChevronRight, SquareKanban, ExternalLink, Unlink, Pencil, Trash2, AlertTriangle, Banknote, MapPin, CreditCard } from "lucide-react";
+import { EarningsCoveragePanel } from "@/components/settings/earnings-coverage-panel";
 import { Select } from "@/components/ui/select";
 
 type LeaveType = {
@@ -116,6 +117,7 @@ export default function SettingsPage() {
   const [editSaving, setEditSaving] = useState(false);
 
   const [earningsCoverage, setEarningsCoverage] = useState<EarningsCoverage[] | null>(null);
+  const [enablingUkStatutory, setEnablingUkStatutory] = useState(false);
 
   const [confirmRegionsEnable, setConfirmRegionsEnable] = useState(false);
   const [cancelingDeletion, setCancelingDeletion] = useState(false);
@@ -139,6 +141,14 @@ export default function SettingsPage() {
   const canManage =
     sessionStatus === "authenticated" &&
     (userRole === "ADMIN" || userRole === "MANAGER");
+
+  const needsUkStatutorySetup = useMemo(
+    () =>
+      Boolean(orgSettings?.hasUkEmployees) &&
+      leaveTypes.length > 0 &&
+      !leaveTypes.some((lt) => lt.name.includes("SSP")),
+    [orgSettings?.hasUkEmployees, leaveTypes]
+  );
 
   const fetchLeaveTypes = useCallback(async () => {
     setLoading(true);
@@ -358,6 +368,21 @@ export default function SettingsPage() {
       toast(data?.error ?? "Failed to update", "error");
     }
     setEditSaving(false);
+  }
+
+  async function handleEnableUkStatutory() {
+    setEnablingUkStatutory(true);
+    try {
+      const res = await fetch("/api/organization/uk-statutory", { method: "POST" });
+      if (res.ok) {
+        toast("UK statutory leave types enabled", "success");
+        await Promise.all([fetchLeaveTypes(), fetchPolicies()]);
+      } else {
+        toast("Could not enable UK statutory leave types", "error");
+      }
+    } finally {
+      setEnablingUkStatutory(false);
+    }
   }
 
   async function handleDeleteLeaveType(lt: LeaveType) {
@@ -793,102 +818,7 @@ export default function SettingsPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {earningsCoverage.length === 0 ? (
-              <p className="py-4 text-center text-sm text-gray-400">
-                No employees in this organization yet.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {earningsCoverage
-                  .filter((e) => !e.hasAnyHistory)
-                  .map((emp) => (
-                    <div
-                      key={emp.id}
-                      className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm"
-                    >
-                      <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
-                      <div className="flex-1">
-                        <p className="text-amber-900">
-                          Holiday pay for{" "}
-                          <strong>{emp.name}</strong> is based on basic
-                          salary only.{" "}
-                          <Link
-                            href={`/team/${emp.id}#earnings-history`}
-                            className="font-medium underline hover:no-underline"
-                          >
-                            Add earnings history →
-                          </Link>
-                        </p>
-                        {(emp.department || emp.countryCode) && (
-                          <p className="mt-0.5 text-xs text-amber-700">
-                            {[emp.department, emp.countryCode]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-
-
-                {earningsCoverage.every((e) => e.hasAnyHistory) && (
-                  <p className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-                    All employees have at least some earnings history on
-                    file. Keep it up to date weekly for accurate holiday
-                    pay calculations.
-                  </p>
-                )}
-
-                {earningsCoverage.some((e) => e.hasAnyHistory) && (
-                  <details className="mt-2">
-                    <summary className="cursor-pointer text-xs font-medium text-gray-600 hover:text-gray-900">
-                      Coverage per employee (
-                      {earningsCoverage.filter((e) => e.hasAnyHistory).length}{" "}
-                      of {earningsCoverage.length} with history)
-                    </summary>
-                    <div className="mt-2 overflow-x-auto">
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="border-b border-gray-100 text-left text-gray-500">
-                            <th className="py-1.5 pr-4">Employee</th>
-                            <th className="py-1.5 pr-4">Paid weeks</th>
-                            <th className="py-1.5 pr-4">Total weeks</th>
-                            <th className="py-1.5">Last week on file</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {earningsCoverage.map((e) => (
-                            <tr
-                              key={e.id}
-                              className="border-b border-gray-50"
-                            >
-                              <td className="py-1.5 pr-4 text-gray-900">
-                                {e.name}
-                              </td>
-                              <td
-                                className={`py-1.5 pr-4 ${e.paidWeeks >= 52 ? "text-emerald-700" : e.paidWeeks > 0 ? "text-amber-700" : "text-red-700"}`}
-                              >
-                                {e.paidWeeks}
-                              </td>
-                              <td className="py-1.5 pr-4 text-gray-600">
-                                {e.totalWeeks}
-                              </td>
-                              <td className="py-1.5 text-gray-600">
-                                {e.lastWeekStartDate
-                                  ? new Date(
-                                      e.lastWeekStartDate
-                                    ).toLocaleDateString("en-GB")
-                                  : "—"}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </details>
-                )}
-              </div>
-            )}
+            <EarningsCoveragePanel employees={earningsCoverage} />
           </CardContent>
         </Card>
       )}
@@ -915,6 +845,26 @@ export default function SettingsPage() {
           </div>
         </CardHeader>
         <CardContent>
+          {needsUkStatutorySetup && (
+            <div className="mb-4 flex flex-col gap-3 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex gap-3">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                <p>
+                  UK statutory leave types (SSP, maternity, paternity, and
+                  others) are not enabled yet. Enable them to match what you
+                  selected during onboarding.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                className="shrink-0"
+                disabled={enablingUkStatutory}
+                onClick={() => void handleEnableUkStatutory()}
+              >
+                {enablingUkStatutory ? "Enabling…" : "Enable UK statutory types"}
+              </Button>
+            </div>
+          )}
           {loading ? (
             <div className="space-y-2">
               {Array.from({ length: 3 }).map((_, i) => (

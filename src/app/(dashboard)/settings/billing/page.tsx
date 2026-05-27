@@ -16,6 +16,8 @@ type BillingSummary = {
   subscriptionStatus: string | null;
   trialEndsAt: string | null;
   cardAdded: boolean;
+  paymentMethodBrand: string | null;
+  paymentMethodLast4: string | null;
   cancelAtPeriodEnd: boolean;
   currentPeriodEnd: string | null;
   trialExpiredGraceEndsAt: string | null;
@@ -196,6 +198,29 @@ export default function BillingPage() {
             >
               Add payment details
             </Link>
+          )}
+
+          {summary.cardAdded && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-gray-100 bg-gray-50 px-3 py-2">
+              <p className="text-sm text-gray-700">
+                {summary.paymentMethodLast4 ? (
+                  <>
+                    Card on file:{" "}
+                    <span className="font-medium capitalize text-gray-900">
+                      {summary.paymentMethodBrand ?? "Card"} •••• {summary.paymentMethodLast4}
+                    </span>
+                  </>
+                ) : (
+                  <span className="font-medium text-gray-900">Payment method on file</span>
+                )}
+              </p>
+              <Link
+                href="/settings/billing/add-payment?update=1"
+                className="text-sm font-medium text-brand-600 hover:text-brand-700"
+              >
+                Update card
+              </Link>
+            </div>
           )}
 
           <div className="flex flex-wrap gap-2 pt-2">

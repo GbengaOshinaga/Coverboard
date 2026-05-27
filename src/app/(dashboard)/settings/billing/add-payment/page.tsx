@@ -9,12 +9,19 @@ import {
 import { planKeyForBilling } from "@/lib/billing-plan";
 import { AddPaymentForm } from "./add-payment-form";
 
-export default async function AddPaymentPage() {
+export default async function AddPaymentPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ update?: string }>;
+}) {
   const session = await getServerSession(authOptions);
   if (!session?.user) redirect("/login");
 
   const sessionUser = session.user as Record<string, unknown>;
   if (sessionUser.role !== "ADMIN") redirect("/dashboard");
+
+  const { update } = await searchParams;
+  const updateMode = update === "1" || update === "true";
 
   const orgId = sessionUser.organizationId as string;
   const org = await prisma.organization.findUnique({
@@ -56,6 +63,7 @@ export default async function AddPaymentPage() {
         planPriceGbp={planPrice}
         trialEndFormatted={trialEndFormatted}
         alreadyAdded={org.cardAdded}
+        updateMode={updateMode}
       />
     </div>
   );

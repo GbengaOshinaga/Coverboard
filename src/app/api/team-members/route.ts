@@ -6,7 +6,6 @@ import { prisma } from "@/lib/prisma";
 import { teamMemberSchema } from "@/lib/validations";
 import { sendTeamInviteEmail } from "@/lib/email-notifications";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
-import { hasUKEmployees } from "@/lib/uk-workforce";
 import { hasUkStatutoryLeaveTypes } from "@/lib/uk-statutory";
 import { hasFeatureForEnum } from "@/lib/planFeatures";
 
@@ -93,7 +92,6 @@ export async function POST(request: Request) {
       workCountry,
     } = parsed.data;
     const orgId = (session.user as Record<string, unknown>).organizationId as string;
-    const hadUkEmployees = await hasUKEmployees(orgId);
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
@@ -200,9 +198,7 @@ export async function POST(request: Request) {
     });
 
     const shouldSuggestUkSetup =
-      workCountry === "GB" &&
-      !hadUkEmployees &&
-      !(await hasUkStatutoryLeaveTypes(orgId));
+      workCountry === "GB" && !(await hasUkStatutoryLeaveTypes(orgId));
 
     return NextResponse.json(
       { ...member, tempPassword, ukStatutorySetupSuggested: shouldSuggestUkSetup },
