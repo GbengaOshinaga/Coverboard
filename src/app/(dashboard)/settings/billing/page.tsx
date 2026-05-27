@@ -123,11 +123,15 @@ export default function BillingPage() {
       ? "warning"
       : "outline";
 
-  const periodEnd = summary.currentPeriodEnd
-    ? FMT.format(new Date(summary.currentPeriodEnd))
+  const accessEndsAt = summary.currentPeriodEnd ?? summary.trialEndsAt;
+  const accessEndsLabel = accessEndsAt
+    ? FMT.format(new Date(accessEndsAt))
     : null;
   const trialEnd = summary.trialEndsAt
     ? FMT.format(new Date(summary.trialEndsAt))
+    : null;
+  const periodEnd = summary.currentPeriodEnd
+    ? FMT.format(new Date(summary.currentPeriodEnd))
     : null;
 
   return (
@@ -147,17 +151,30 @@ export default function BillingPage() {
         </div>
       </div>
 
-      {summary.cancelAtPeriodEnd && periodEnd && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-          Your plan will cancel on {periodEnd}. You can reactivate any time before
-          then.{" "}
-          <button
+      {summary.cancelAtPeriodEnd && (
+        <div className="flex flex-col gap-3 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+          <p>
+            {accessEndsLabel ? (
+              <>
+                Your plan is scheduled to cancel on{" "}
+                <strong>{accessEndsLabel}</strong>. You keep access until then.
+              </>
+            ) : (
+              <>
+                Your subscription is scheduled to cancel at the end of the
+                current period. You keep access until then.
+              </>
+            )}{" "}
+            Reactivate anytime to keep billing and avoid data deletion.
+          </p>
+          <Button
+            size="sm"
+            className="shrink-0 bg-amber-800 hover:bg-amber-900"
             onClick={handleReactivate}
             disabled={busy}
-            className="font-medium underline underline-offset-2"
           >
-            Reactivate
-          </button>
+            Reactivate subscription
+          </Button>
         </div>
       )}
 
@@ -224,19 +241,31 @@ export default function BillingPage() {
           )}
 
           <div className="flex flex-wrap gap-2 pt-2">
-            <Link
-              href="/settings/billing/change-plan"
-              className="rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              Change plan
-            </Link>
-            {!summary.cancelAtPeriodEnd && status !== "canceled" && (
-              <button
-                onClick={() => setConfirming(true)}
-                className="rounded-md border border-red-200 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+            {summary.cancelAtPeriodEnd ? (
+              <Button
+                size="sm"
+                onClick={handleReactivate}
+                disabled={busy}
               >
-                Cancel subscription
-              </button>
+                Reactivate subscription
+              </Button>
+            ) : (
+              <>
+                <Link
+                  href="/settings/billing/change-plan"
+                  className="rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Change plan
+                </Link>
+                {status !== "canceled" && (
+                  <button
+                    onClick={() => setConfirming(true)}
+                    className="rounded-md border border-red-200 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+                  >
+                    Cancel subscription
+                  </button>
+                )}
+              </>
             )}
           </div>
         </CardContent>

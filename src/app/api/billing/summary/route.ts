@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
 import { planKeyFromPriceId, PLAN_DISPLAY_NAME, PLAN_MONTHLY_PRICE_GBP } from "@/config/stripePrices";
+import { subscriptionAccessEndDate } from "@/lib/stripe-subscription";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -37,6 +38,28 @@ export async function GET() {
 
   if (!org) {
     return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+  }
+
+  let currentPeriodEnd = org.currentPeriodEnd;
+  if (
+    stripe &&
+    org.stripeSubscriptionId &&
+    org.cancelAtPeriodEnd &&
+    !currentPeriodEnd
+  ) {
+    try {
+      const sub = await stripe.subscriptions.retrieve(org.stripeSubscriptionId);
+      const accessEnd = subscriptionAccessEndDate(sub);
+      if (accessEnd) {
+        currentPeriodEnd = accessEnd;
+        await prisma.organization.update({
+          where: { id: orgId },
+          data: { currentPeriodEnd: accessEnd },
+        });
+      }
+    } catch (err) {
+      console.error("Failed to hydrate subscription period end:", err);
+    }
   }
 
   const planKey = org.stripePriceId ? planKeyFromPriceId(org.stripePriceId) : null;
@@ -101,7 +124,7 @@ export async function GET() {
     paymentMethodBrand,
     paymentMethodLast4,
     cancelAtPeriodEnd: org.cancelAtPeriodEnd,
-    currentPeriodEnd: org.currentPeriodEnd,
+    currentPeriodEnd,
     deletionScheduledFor: org.deletionScheduledFor,
     deletionReason: org.deletionReason,
     trialExpiredGraceEndsAt: org.trialExpiredGraceEndsAt,

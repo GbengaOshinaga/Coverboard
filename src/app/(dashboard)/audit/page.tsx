@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
 import { Download, ShieldCheck, Lock } from "lucide-react";
+import { CardSkeleton } from "@/components/ui/skeleton";
 import { toCsv, downloadCsv } from "@/lib/csv-export";
 import { AUDIT_ACTIONS } from "@/lib/audit";
 import { hasAuditTrail, type AnyPlan } from "@/lib/plans";
@@ -49,13 +50,25 @@ const RESOURCES = [
   "onboarding",
 ];
 
+function AuditPageSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="space-y-1">
+        <div className="h-8 w-40 animate-pulse rounded-md bg-gray-200/70" />
+        <div className="h-4 w-72 max-w-full animate-pulse rounded-md bg-gray-200/70" />
+      </div>
+      <CardSkeleton />
+      <CardSkeleton />
+    </div>
+  );
+}
+
 export default function AuditPage() {
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [plan, setPlan] = useState<AnyPlan | undefined>();
   const [denied, setDenied] = useState(false);
 
   const [filterAction, setFilterAction] = useState("");
@@ -68,21 +81,8 @@ export default function AuditPage() {
   const user = session?.user as Record<string, unknown> | undefined;
   const userRole = user?.role as string | undefined;
   const isAdmin = userRole === "ADMIN";
-
-  useEffect(() => {
-    async function fetchPlan() {
-      try {
-        const res = await fetch("/api/organization/settings");
-        if (res.ok) {
-          const data = await res.json();
-          setPlan(data.plan);
-        }
-      } catch {
-        // ignore
-      }
-    }
-    if (isAdmin) fetchPlan();
-  }, [isAdmin]);
+  const plan = user?.plan as AnyPlan | undefined;
+  const hasAccess = hasAuditTrail(plan);
 
   const buildQuery = useCallback(
     (cursor?: string) => {
@@ -123,8 +123,13 @@ export default function AuditPage() {
   }, [buildQuery]);
 
   useEffect(() => {
-    if (isAdmin) fetchLogs();
-  }, [isAdmin, fetchLogs]);
+    if (sessionStatus !== "authenticated" || !isAdmin) return;
+    if (!hasAccess) {
+      setLoading(false);
+      return;
+    }
+    fetchLogs();
+  }, [sessionStatus, isAdmin, hasAccess, fetchLogs]);
 
   async function loadMore() {
     if (!nextCursor) return;
@@ -202,6 +207,10 @@ export default function AuditPage() {
     []
   );
 
+  if (sessionStatus === "loading") {
+    return <AuditPageSkeleton />;
+  }
+
   if (!isAdmin) {
     return (
       <div className="space-y-6">
@@ -215,8 +224,7 @@ export default function AuditPage() {
     );
   }
 
-
-  const planBlocked = !hasAuditTrail(plan) || denied;
+  const planBlocked = denied || !hasAccess;
 
   return (
     <div className="space-y-6">

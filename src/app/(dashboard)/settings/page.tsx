@@ -489,7 +489,7 @@ export default function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div>
+      <div className="mb-6">
         <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Settings</h1>
         <p className="text-sm text-gray-500">
           Manage your organization and leave policies

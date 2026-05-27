@@ -218,6 +218,14 @@ export default function ChangePlanPage() {
               Add payment details
             </Link>
           )}
+          {summary.cancelAtPeriodEnd && (
+            <Link
+              href="/settings/billing"
+              className="font-medium underline underline-offset-2"
+            >
+              Reactivate on billing →
+            </Link>
+          )}
         </div>
       )}
 

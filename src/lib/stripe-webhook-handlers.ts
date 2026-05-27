@@ -1,6 +1,7 @@
 import type Stripe from "stripe";
 import { planKeyFromPriceId, PLAN_KEY_TO_ENUM, PLAN_DISPLAY_NAME } from "@/config/stripePrices";
 import { DELETION_GRACE_DAYS } from "@/lib/deletionScheduler";
+import { subscriptionAccessEndDate } from "@/lib/stripe-subscription";
 
 export type PlanEnum =
   | "TRIAL"
@@ -66,13 +67,6 @@ export type WebhookDeps = {
   };
 };
 
-function readCurrentPeriodEnd(sub: Stripe.Subscription): number | null {
-  const top = (sub as unknown as { current_period_end?: number }).current_period_end;
-  if (typeof top === "number") return top;
-  const item = sub.items.data[0]?.current_period_end;
-  return typeof item === "number" ? item : null;
-}
-
 export async function handleSubscriptionUpdated(
   sub: Stripe.Subscription,
   deps: WebhookDeps
@@ -89,7 +83,7 @@ export async function handleSubscriptionUpdated(
   const nextPlan: PlanEnum =
     sub.status === "active" && planKey ? PLAN_KEY_TO_ENUM[planKey] : org.plan;
 
-  const periodEndSec = readCurrentPeriodEnd(sub);
+  const accessEnd = subscriptionAccessEndDate(sub);
 
   await deps.updateOrganization(org.id, {
     subscriptionStatus: sub.status,
@@ -97,9 +91,7 @@ export async function handleSubscriptionUpdated(
     plan: nextPlan,
     cancelAtPeriodEnd: sub.cancel_at_period_end ?? false,
     trialEndsAt: sub.trial_end ? new Date(sub.trial_end * 1000) : org.trialEndsAt,
-    currentPeriodEnd: periodEndSec
-      ? new Date(periodEndSec * 1000)
-      : org.currentPeriodEnd,
+    currentPeriodEnd: accessEnd ?? org.currentPeriodEnd,
   });
 
   if (sub.status === "past_due" && org.adminEmail) {
