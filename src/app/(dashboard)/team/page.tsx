@@ -60,7 +60,9 @@ export default function TeamPage() {
   const [pendingRegionNotes, setPendingRegionNotes] = useState("");
   const [savingRegion, setSavingRegion] = useState(false);
 
-  const userRole = (session?.user as Record<string, unknown> | undefined)?.role as string | undefined;
+  const user = session?.user as Record<string, unknown> | undefined;
+  const userRole = user?.role as string | undefined;
+  const sessionUserId = user?.id as string | undefined;
   const canManage = userRole === "ADMIN" || userRole === "MANAGER";
   const { toast } = useToast();
 
@@ -143,10 +145,22 @@ export default function TeamPage() {
     return list.filter((m) => m.regionId === regionFilter);
   }, [members, regionFilter, earningsFilter, missingEarningsIds]);
 
-  const unassignedCount = useMemo(
-    () => members.filter((m) => !m.regionId).length,
+  const unassignedMembers = useMemo(
+    () => members.filter((m) => !m.regionId),
     [members]
   );
+  const unassignedCount = unassignedMembers.length;
+  const unassignedOthersCount = useMemo(
+    () =>
+      sessionUserId
+        ? unassignedMembers.filter((m) => m.id !== sessionUserId).length
+        : unassignedMembers.length,
+    [unassignedMembers, sessionUserId]
+  );
+  const unassignedOnlySelf =
+    unassignedCount === 1 &&
+    Boolean(sessionUserId) &&
+    unassignedMembers[0]?.id === sessionUserId;
 
   function openAssignRegion(member: Member) {
     setAssigningRegion(member);
@@ -352,27 +366,45 @@ export default function TeamPage() {
         </div>
       )}
 
-      {regionsEnabled && canManage && unassignedCount > 0 && regions.length > 0 && (
-        <div className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-          <div className="flex-1 text-amber-900">
-            <p className="font-medium">
-              {unassignedCount} team member{unassignedCount === 1 ? "" : "s"} {unassignedCount === 1 ? "has" : "have"} no
-              region assigned.
-            </p>
-            <p className="mt-0.5 text-xs text-amber-700">
-              Cover requirements only apply to members assigned to a region.
-              Assign them below or{" "}
-              <Link
-                href="/settings/regions"
-                className="font-medium underline hover:no-underline"
-              >
-                manage regions →
-              </Link>
+      {regionsEnabled &&
+        canManage &&
+        unassignedOthersCount > 0 &&
+        regions.length > 0 && (
+          <div className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <div className="flex-1 text-amber-900">
+              <p className="font-medium">
+                {unassignedOthersCount} team member
+                {unassignedOthersCount === 1 ? "" : "s"}{" "}
+                {unassignedOthersCount === 1 ? "has" : "have"} no region
+                assigned.
+              </p>
+              <p className="mt-0.5 text-xs text-amber-700">
+                Cover requirements only apply to members assigned to a region.
+                Assign them below or{" "}
+                <Link
+                  href="/settings/regions"
+                  className="font-medium underline hover:no-underline"
+                >
+                  manage regions →
+                </Link>
+              </p>
+            </div>
+          </div>
+        )}
+
+      {regionsEnabled &&
+        canManage &&
+        unassignedOnlySelf &&
+        regions.length > 0 && (
+          <div className="rounded-md border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+            <p>
+              You don&apos;t have a region assigned. That&apos;s fine for setup
+              — assign yourself on your card below only if you take leave and
+              want regional cover checks to apply to you.
             </p>
           </div>
-        </div>
-      )}
+        )}
 
       {loading || earningsFilterLoading ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">

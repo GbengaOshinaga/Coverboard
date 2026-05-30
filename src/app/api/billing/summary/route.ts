@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
 import { planKeyFromPriceId, PLAN_DISPLAY_NAME, PLAN_MONTHLY_PRICE_GBP } from "@/config/stripePrices";
 import { subscriptionAccessEndDate } from "@/lib/stripe-subscription";
+import { TAX_ID_TYPE_LABELS } from "@/config/billing-countries";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -78,6 +79,15 @@ export async function GET() {
   let invoices: InvoiceDTO[] = [];
   let paymentMethodBrand: string | null = null;
   let paymentMethodLast4: string | null = null;
+  let billingCountry: string | null = null;
+  type TaxIdDTO = {
+    id: string;
+    type: string;
+    typeLabel: string;
+    value: string;
+    verificationStatus: string | null;
+  };
+  let taxIds: TaxIdDTO[] = [];
 
   if (stripe && org.stripeCustomerId) {
     try {
@@ -90,6 +100,7 @@ export async function GET() {
           paymentMethodBrand = pm.card.brand ?? null;
           paymentMethodLast4 = pm.card.last4 ?? null;
         }
+        billingCountry = customer.address?.country ?? null;
       }
     } catch (err) {
       console.error("Failed to retrieve Stripe customer:", err);
@@ -112,6 +123,21 @@ export async function GET() {
     } catch (err) {
       console.error("Failed to list Stripe invoices:", err);
     }
+
+    try {
+      const taxList = await stripe.customers.listTaxIds(org.stripeCustomerId, {
+        limit: 20,
+      });
+      taxIds = taxList.data.map((t) => ({
+        id: t.id,
+        type: t.type,
+        typeLabel: TAX_ID_TYPE_LABELS[t.type] ?? t.type,
+        value: t.value,
+        verificationStatus: t.verification?.status ?? null,
+      }));
+    } catch (err) {
+      console.error("Failed to list Stripe tax IDs:", err);
+    }
   }
 
   return NextResponse.json({
@@ -129,5 +155,7 @@ export async function GET() {
     deletionReason: org.deletionReason,
     trialExpiredGraceEndsAt: org.trialExpiredGraceEndsAt,
     invoices,
+    billingCountry,
+    taxIds,
   });
 }

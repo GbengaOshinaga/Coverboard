@@ -77,6 +77,9 @@ export async function POST(request: Request) {
     if (stripeSubscriptionId) {
       await stripe.subscriptions.update(stripeSubscriptionId, {
         default_payment_method: parsed.data.paymentMethodId,
+        // Belt-and-braces: re-assert Stripe Tax in case this customer's
+        // subscription pre-dates the rollout.
+        automatic_tax: { enabled: true },
       });
     } else {
       const planKey = planKeyForBilling(org);
@@ -92,6 +95,7 @@ export async function POST(request: Request) {
         payment_settings: {
           save_default_payment_method: "on_subscription",
         },
+        automatic_tax: { enabled: true },
         ...(trialEnd ? { trial_end: trialEnd } : {}),
         metadata: {
           organization_id: orgId,

@@ -8,6 +8,13 @@ type EnsureStripeCustomerInput = {
   stripeCustomerId: string | null;
   /** Admin email to attach to the Stripe customer (set at signup; optional during recovery). */
   email?: string | null;
+  /**
+   * ISO 3166 alpha-2 country code for the customer's billing address.
+   * Stored on `customer.address.country` so Stripe Tax can calculate VAT.
+   * Optional in recovery flows where the customer already exists; required
+   * in practice at signup because `automatic_tax` needs an address.
+   */
+  country?: string | null;
   /** Free-form label persisted to `metadata.provisioning_path` for ops triage. */
   provisioningPath?: string;
   /** Extra metadata merged onto the customer. */
@@ -33,6 +40,7 @@ export async function ensureStripeCustomer({
   organizationName,
   stripeCustomerId,
   email,
+  country,
   provisioningPath = "billing_recovery",
   metadata = {},
 }: EnsureStripeCustomerInput): Promise<string> {
@@ -42,6 +50,7 @@ export async function ensureStripeCustomer({
     {
       name: organizationName,
       ...(email ? { email } : {}),
+      ...(country ? { address: { country } } : {}),
       metadata: {
         organization_id: organizationId,
         provisioning_path: provisioningPath,

@@ -9,6 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { PRICING } from "@/config/pricing";
 import { trackClient, AnalyticsEvents } from "@/lib/analytics";
+import {
+  BILLING_COUNTRIES,
+  DEFAULT_BILLING_COUNTRY,
+} from "@/config/billing-countries";
 
 type PlanKey = "starter" | "growth" | "scale" | "pro";
 
@@ -41,6 +45,7 @@ function SignupInner() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [plan, setPlan] = useState<PlanKey>(initialPlan);
+  const [billingCountry, setBillingCountry] = useState(DEFAULT_BILLING_COUNTRY);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -53,7 +58,14 @@ function SignupInner() {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, orgName, plan }),
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          orgName,
+          plan,
+          billingCountry,
+        }),
       });
 
       const data = await res.json();
@@ -156,6 +168,8 @@ function SignupInner() {
                 </div>
                 <p className="mt-2 text-xs text-gray-400">
                   You can change this later. Nothing charged during the 14-day trial.
+                  Prices shown are exclusive of VAT or local taxes, which we
+                  calculate at checkout based on your billing country.
                 </p>
               </div>
               <Input
@@ -167,6 +181,31 @@ function SignupInner() {
                 onChange={(e) => setOrgName(e.target.value)}
                 required
               />
+              <div>
+                <label
+                  htmlFor="billingCountry"
+                  className="mb-1.5 block text-sm font-medium text-gray-700"
+                >
+                  Billing country
+                </label>
+                <select
+                  id="billingCountry"
+                  value={billingCountry}
+                  onChange={(e) => setBillingCountry(e.target.value)}
+                  className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  required
+                >
+                  {BILLING_COUNTRIES.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-500">
+                  Used for VAT calculation. You can add a VAT number after
+                  signup in billing settings.
+                </p>
+              </div>
               <div className="border-t border-gray-100 pt-4">
                 <p className="mb-3 text-xs font-medium text-gray-500 uppercase tracking-wide">
                   Your account

@@ -9,6 +9,10 @@ import { sendSignupWelcomeEmail } from "@/lib/email-notifications";
 import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
 import { checkAuthRateLimit, getClientIp } from "@/lib/rate-limit";
+import {
+  DEFAULT_BILLING_COUNTRY,
+  isValidBillingCountry,
+} from "@/config/billing-countries";
 
 const signupSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -16,6 +20,13 @@ const signupSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters"),
   orgName: z.string().min(2, "Team name must be at least 2 characters"),
   plan: z.enum(["starter", "growth", "scale", "pro"]).default("growth"),
+  billingCountry: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .length(2)
+    .refine(isValidBillingCountry, "Please pick a supported billing country")
+    .default(DEFAULT_BILLING_COUNTRY),
 });
 
 export async function POST(request: Request) {
@@ -33,7 +44,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { name, email, password, orgName, plan } = parsed.data;
+    const { name, email, password, orgName, plan, billingCountry } = parsed.data;
 
     const existingUser = await prisma.user.findUnique({
       where: { email },
@@ -103,6 +114,7 @@ export async function POST(request: Request) {
           organizationName: orgName,
           stripeCustomerId: null,
           email,
+          country: billingCountry,
           provisioningPath: "signup",
           metadata: { admin_user_id: result.user.id },
         });
@@ -120,6 +132,11 @@ export async function POST(request: Request) {
                 missing_payment_method: "pause",
               },
             },
+            // Stripe Tax: calculate VAT/GST automatically based on customer
+            // address + any tax IDs they later attach. Tax is added on top of
+            // our listed prices ("exclusive" behaviour), matching the
+            // "£X/month + VAT where applicable" copy on the pricing page.
+            automatic_tax: { enabled: true },
             metadata: {
               organization_id: result.org.id,
               plan_key: selectedPlan,

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 import { ArrowLeft, CreditCard, FileText } from "lucide-react";
+import { BillingTaxSection, type TaxId } from "@/components/billing/tax-section";
 
 type BillingSummary = {
   plan: string;
@@ -30,6 +31,8 @@ type BillingSummary = {
     created: number;
     pdf: string | null;
   }>;
+  billingCountry: string | null;
+  taxIds: TaxId[];
 };
 
 const FMT = new Intl.DateTimeFormat("en-GB", {
@@ -270,6 +273,12 @@ export default function BillingPage() {
           </div>
         </CardContent>
       </Card>
+
+      <BillingTaxSection
+        billingCountry={summary.billingCountry}
+        taxIds={summary.taxIds ?? []}
+        onChanged={refresh}
+      />
 
       <Card>
         <CardHeader>

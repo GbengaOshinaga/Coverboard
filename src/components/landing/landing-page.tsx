@@ -404,6 +404,9 @@ function PricingSection() {
                     </span>
                     <span className="text-gray-500 text-sm">/month</span>
                   </div>
+                  <p className="mt-1 text-xs text-gray-400">
+                    Excl. VAT where applicable
+                  </p>
                 </div>
 
                 <ul className="space-y-3 mb-8 flex-1">

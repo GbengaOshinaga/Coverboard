@@ -85,6 +85,10 @@ export async function POST(request: Request) {
     await stripe.subscriptions.update(org.stripeSubscriptionId, {
       items: [{ id: itemId, price: targetPriceId }],
       proration_behavior: "create_prorations",
+      // Idempotent: re-asserting `enabled: true` on every plan change means
+      // subscriptions created before Stripe Tax shipped get migrated on the
+      // first plan change a customer makes after this code rolls out.
+      automatic_tax: { enabled: true },
       metadata: {
         ...(sub.metadata ?? {}),
         plan_key: targetPlanKey,

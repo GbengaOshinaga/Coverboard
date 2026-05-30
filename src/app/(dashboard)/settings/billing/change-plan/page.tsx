@@ -245,10 +245,13 @@ export default function ChangePlanPage() {
                 <CardDescription>{plan.blurb}</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-1 flex-col gap-4">
-                <p className="text-2xl font-semibold text-gray-900">
-                  £{plan.priceGbp}
-                  <span className="text-sm font-normal text-gray-500">/month</span>
-                </p>
+                <div>
+                  <p className="text-2xl font-semibold text-gray-900">
+                    £{plan.priceGbp}
+                    <span className="text-sm font-normal text-gray-500">/month</span>
+                  </p>
+                  <p className="text-xs text-gray-400">Excl. VAT where applicable</p>
+                </div>
                 <ul className="min-h-0 flex-1 space-y-2 text-sm text-gray-700">
                   {plan.features.map((f) => (
                     <li key={f} className="flex gap-2">
