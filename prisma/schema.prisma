@@ -109,6 +109,7 @@ model Organization {
 model User {
   id                        String         @id @default(cuid())
   email                     String         @unique
+  emailVerified             DateTime?
   name                      String
   passwordHash              String
   role                      Role           @default(MEMBER)
@@ -137,6 +138,7 @@ model User {
   leaveRequests       LeaveRequest[]          @relation("UserLeaveRequests")
   reviewedLeaves      LeaveRequest[]          @relation("ReviewerLeaveRequests")
   passwordResetTokens PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
   jiraUserMapping      JiraUserMapping?
   jiraConnections      JiraIntegration[]       @relation("JiraConnectedBy")
   slackConnections     SlackIntegration[]      @relation("SlackConnectedBy")
@@ -289,6 +291,19 @@ model PasswordResetToken {
   createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  userId    String
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model PublicHoliday {

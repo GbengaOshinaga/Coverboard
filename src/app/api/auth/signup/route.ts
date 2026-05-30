@@ -6,6 +6,7 @@ import { stripe } from "@/lib/stripe";
 import { STRIPE_PRICE_IDS, type StripePlanKey } from "@/config/stripePrices";
 import { ensureStripeCustomer } from "@/lib/billing-customer";
 import { sendSignupWelcomeEmail } from "@/lib/email-notifications";
+import { sendVerificationEmail } from "@/lib/email-verification";
 import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
 import { checkAuthRateLimit, getClientIp } from "@/lib/rate-limit";
@@ -185,6 +186,17 @@ export async function POST(request: Request) {
       trialDays,
     }).catch((err) =>
       console.error("Signup welcome email failed:", err)
+    );
+
+    // Fire-and-forget the verification email. Sign-in is not blocked on
+    // verification (the dashboard banner prompts the user instead), so a
+    // transient Resend outage shouldn't fail signup.
+    sendVerificationEmail({
+      userId: result.user.id,
+      userName: name,
+      email,
+    }).catch((err) =>
+      console.error("Signup verification email failed:", err)
     );
 
     trackServer(

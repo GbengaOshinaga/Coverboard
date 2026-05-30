@@ -115,6 +115,31 @@ export function weeklyDigestEmail(data: {
   };
 }
 
+// ─── Email Verification ──────────────────────────────────────────────
+
+export function emailVerificationEmail(data: {
+  userName: string;
+  verifyUrl: string;
+  expiresInHours: number;
+}): { subject: string; html: string } {
+  return {
+    subject: "Verify your email for Coverboard",
+    html: layout(`
+      <h1 style="margin:0 0 8px;font-size:20px;color:#111827;">Confirm your email</h1>
+      <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
+        Hi ${data.userName}, please confirm that this email belongs to you so
+        we can finish setting up your Coverboard account.
+      </p>
+      ${button("Verify email", data.verifyUrl)}
+      <p style="margin:16px 0 0;font-size:13px;color:#9ca3af;line-height:1.5;">
+        This link expires in ${data.expiresInHours} hours. If you didn&rsquo;t
+        create a Coverboard account, you can safely ignore this email — no
+        account will be created without confirmation.
+      </p>
+    `),
+  };
+}
+
 // ─── Password Reset ──────────────────────────────────────────────────
 
 export function passwordResetEmail(data: {

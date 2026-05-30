@@ -15,7 +15,11 @@ import { NextResponse } from "next/server";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 
-export type LimiterName = "login" | "signup" | "passwordReset";
+export type LimiterName =
+  | "login"
+  | "signup"
+  | "passwordReset"
+  | "emailVerificationResend";
 
 const LIMITER_CONFIG: Record<
   LimiterName,
@@ -29,6 +33,9 @@ const LIMITER_CONFIG: Record<
   // 5/hour/IP. Forgot-password sends real emails; we don't want to be
   // weaponised into a free email-blasting service.
   passwordReset: { tokens: 5, window: "1 h" },
+  // Email-verification resend — same email-sending concern as forgot-password.
+  // Bucketed separately so we can tune independently if abuse patterns differ.
+  emailVerificationResend: { tokens: 5, window: "1 h" },
 };
 
 let redisClient: Redis | null | undefined;
