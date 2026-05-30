@@ -5,7 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
 import { cancelScheduledDeletion } from "@/lib/deletionScheduler";
 import { emailDeletionCanceled } from "@/lib/billing-emails";
-import { AnalyticsEvents, trackServer } from "@/lib/analytics";
+import { AnalyticsEvents } from "@/lib/analytics/events";
+import { trackServer } from "@/lib/analytics/server";
 
 export async function POST() {
   const session = await getServerSession(authOptions);

@@ -5,7 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { notifyRequestStatusChange } from "@/lib/slack-notifications";
 import { emailRequestStatusChange } from "@/lib/email-notifications";
 import { recordAudit, requestAuditContext, type AuditAction } from "@/lib/audit";
-import { AnalyticsEvents, trackServer } from "@/lib/analytics";
+import { AnalyticsEvents } from "@/lib/analytics/events";
+import { trackServer } from "@/lib/analytics/server";
 import {
   calculateSMPPhaseDates,
   calculateSMPPhaseRates,

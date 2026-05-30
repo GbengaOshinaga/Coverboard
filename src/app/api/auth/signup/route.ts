@@ -6,7 +6,8 @@ import { stripe } from "@/lib/stripe";
 import { STRIPE_PRICE_IDS, type StripePlanKey } from "@/config/stripePrices";
 import { ensureStripeCustomer } from "@/lib/billing-customer";
 import { sendSignupWelcomeEmail } from "@/lib/email-notifications";
-import { AnalyticsEvents, trackServer } from "@/lib/analytics";
+import { AnalyticsEvents } from "@/lib/analytics/events";
+import { trackServer } from "@/lib/analytics/server";
 import { checkAuthRateLimit, getClientIp } from "@/lib/rate-limit";
 
 const signupSchema = z.object({

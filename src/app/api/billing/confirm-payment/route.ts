@@ -9,7 +9,8 @@ import { emailDeletionCanceled } from "@/lib/billing-emails";
 import { planKeyForBilling } from "@/lib/billing-plan";
 import { ensureStripeCustomer } from "@/lib/billing-customer";
 import { STRIPE_PRICE_IDS } from "@/config/stripePrices";
-import { AnalyticsEvents, trackServer } from "@/lib/analytics";
+import { AnalyticsEvents } from "@/lib/analytics/events";
+import { trackServer } from "@/lib/analytics/server";
 import { z } from "zod";
 
 const schema = z.object({

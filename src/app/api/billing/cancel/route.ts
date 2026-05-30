@@ -4,7 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
 import { subscriptionAccessEndDate } from "@/lib/stripe-subscription";
-import { AnalyticsEvents, trackServer } from "@/lib/analytics";
+import { AnalyticsEvents } from "@/lib/analytics/events";
+import { trackServer } from "@/lib/analytics/server";
 
 export async function POST() {
   const session = await getServerSession(authOptions);

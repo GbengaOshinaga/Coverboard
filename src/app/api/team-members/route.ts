@@ -7,7 +7,8 @@ import { teamMemberSchema } from "@/lib/validations";
 import { sendTeamInviteEmail } from "@/lib/email-notifications";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { hasUkStatutoryLeaveTypes } from "@/lib/uk-statutory";
-import { AnalyticsEvents, trackServer } from "@/lib/analytics";
+import { AnalyticsEvents } from "@/lib/analytics/events";
+import { trackServer } from "@/lib/analytics/server";
 import { hasFeatureForEnum } from "@/lib/planFeatures";
 
 export async function GET() {

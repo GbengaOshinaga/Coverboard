@@ -8,7 +8,8 @@ import {
   getHolidaysForYear,
 } from "@/lib/country-policies";
 import { enableUkStatutoryLeaveTypes } from "@/lib/uk-statutory";
-import { AnalyticsEvents, trackServer } from "@/lib/analytics";
+import { AnalyticsEvents } from "@/lib/analytics/events";
+import { trackServer } from "@/lib/analytics/server";
 import { sendTeamInviteEmail } from "@/lib/email-notifications";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { z } from "zod";

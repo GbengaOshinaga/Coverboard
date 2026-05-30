@@ -1,3 +1,5 @@
+import "server-only";
+
 import { PostHog } from "posthog-node";
 import type { AnalyticsEventName } from "./events";
 import { sanitizeAnalyticsProperties } from "./sanitize";

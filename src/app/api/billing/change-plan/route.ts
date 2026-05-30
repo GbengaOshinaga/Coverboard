@@ -11,7 +11,8 @@ import {
   planKeyFromPriceId,
   type StripePlanKey,
 } from "@/config/stripePrices";
-import { AnalyticsEvents, trackServer } from "@/lib/analytics";
+import { AnalyticsEvents } from "@/lib/analytics/events";
+import { trackServer } from "@/lib/analytics/server";
 
 const schema = z.object({
   planKey: z.enum(["starter", "growth", "scale", "pro"]),

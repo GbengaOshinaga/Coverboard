@@ -6,7 +6,8 @@ import { stripe } from "@/lib/stripe";
 import { scheduleDeletion } from "@/lib/deletionScheduler";
 import { emailDeletionScheduled } from "@/lib/billing-emails";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
-import { AnalyticsEvents, trackServer } from "@/lib/analytics";
+import { AnalyticsEvents } from "@/lib/analytics/events";
+import { trackServer } from "@/lib/analytics/server";
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);

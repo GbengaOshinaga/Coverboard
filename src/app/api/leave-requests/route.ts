@@ -19,7 +19,8 @@ import {
   selectSicknessAuditMeta,
 } from "@/lib/audit";
 import type { AnyPlan } from "@/lib/plans";
-import { AnalyticsEvents, trackServer } from "@/lib/analytics";
+import { AnalyticsEvents } from "@/lib/analytics/events";
+import { trackServer } from "@/lib/analytics/server";
 import {
   getDailyHolidayPayRateForUser,
 } from "@/lib/holidayPay";
