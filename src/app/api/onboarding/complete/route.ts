@@ -8,6 +8,7 @@ import {
   getHolidaysForYear,
 } from "@/lib/country-policies";
 import { enableUkStatutoryLeaveTypes } from "@/lib/uk-statutory";
+import { AnalyticsEvents, trackServer } from "@/lib/analytics";
 import { sendTeamInviteEmail } from "@/lib/email-notifications";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { z } from "zod";
@@ -86,6 +87,15 @@ export async function POST(request: Request) {
 
     if (countries.includes("GB")) {
       await enableUkStatutoryLeaveTypes(orgId);
+      trackServer(
+        AnalyticsEvents.UK_STATUTORY_ENABLED,
+        { source: "onboarding" },
+        {
+          userId,
+          organizationId: orgId,
+          role: userRole,
+        }
+      );
     }
 
     // Non-UK country policies only; GB statutory types/policies come from enableUkStatutoryLeaveTypes.
@@ -210,6 +220,18 @@ export async function POST(request: Request) {
         ...(regionsEnabled !== undefined ? { regionsEnabled } : {}),
       },
     });
+
+    trackServer(
+      AnalyticsEvents.ONBOARDING_COMPLETED,
+      {
+        country_count: countries.length,
+        countries,
+        regions_enabled: regionsEnabled ?? false,
+        invite_count: invites?.length ?? 0,
+        has_gb: countries.includes("GB"),
+      },
+      { userId, organizationId: orgId, role: userRole }
+    );
 
     recordAudit({
       organizationId: orgId,

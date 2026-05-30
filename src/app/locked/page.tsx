@@ -80,10 +80,10 @@ export default async function LockedPage() {
         <p className="mt-6 text-center text-xs text-gray-400">
           Questions? Email us at{" "}
           <a
-            href="mailto:hello@coverboard.app"
+            href="mailto:support@coverboard.io"
             className="text-brand-600 hover:underline"
           >
-            hello@coverboard.app
+            support@coverboard.io
           </a>
         </p>
       </div>

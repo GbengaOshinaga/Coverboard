@@ -19,6 +19,7 @@ import {
   selectSicknessAuditMeta,
 } from "@/lib/audit";
 import type { AnyPlan } from "@/lib/plans";
+import { AnalyticsEvents, trackServer } from "@/lib/analytics";
 import {
   getDailyHolidayPayRateForUser,
 } from "@/lib/holidayPay";
@@ -150,7 +151,14 @@ export async function POST(request: Request) {
     const userId = (session.user as Record<string, unknown>).id as string;
     const leaveTypeConfig = await prisma.leaveType.findUnique({
       where: { id: leaveTypeId },
-      select: { name: true, minNoticeDays: true, requiresEvidence: true, applyProRata: true },
+      select: {
+        name: true,
+        minNoticeDays: true,
+        requiresEvidence: true,
+        applyProRata: true,
+        category: true,
+        isPaid: true,
+      },
     });
     if (!leaveTypeConfig) {
       return NextResponse.json({ error: "Leave type not found" }, { status: 404 });
@@ -506,6 +514,22 @@ export async function POST(request: Request) {
       },
       context: requestAuditContext(request),
     });
+
+    trackServer(
+      AnalyticsEvents.LEAVE_REQUEST_CREATED,
+      {
+        days_requested: daysRequested,
+        is_statutory: /SSP|Statutory/i.test(leaveRequest.leaveType.name),
+        leave_category: leaveTypeConfig.category,
+        is_paid: leaveTypeConfig.isPaid,
+      },
+      {
+        userId,
+        organizationId: orgId,
+        role: (session.user as Record<string, unknown>).role as string,
+        plan: (session.user as Record<string, unknown>).plan as string | undefined,
+      }
+    );
 
     if (notifyCapReached && sspEmployeeSnapshot) {
       const sspEndDate = new Date(endDate);

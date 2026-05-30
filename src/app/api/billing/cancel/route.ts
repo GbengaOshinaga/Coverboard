@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
 import { subscriptionAccessEndDate } from "@/lib/stripe-subscription";
+import { AnalyticsEvents, trackServer } from "@/lib/analytics";
 
 export async function POST() {
   const session = await getServerSession(authOptions);
@@ -27,6 +28,10 @@ export async function POST() {
       cancel_at_period_end: true,
     });
     const accessEnd = subscriptionAccessEndDate(sub);
+    const orgPlan = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { plan: true },
+    });
     await prisma.organization.update({
       where: { id: orgId },
       data: {
@@ -34,6 +39,16 @@ export async function POST() {
         ...(accessEnd ? { currentPeriodEnd: accessEnd } : {}),
       },
     });
+    trackServer(
+      AnalyticsEvents.SUBSCRIPTION_CANCELED,
+      { scheduled: true },
+      {
+        userId: sessionUser.id as string,
+        organizationId: orgId,
+        role: "ADMIN",
+        plan: orgPlan?.plan,
+      }
+    );
     return NextResponse.json({
       cancelAt: accessEnd,
     });

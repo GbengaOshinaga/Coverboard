@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { PRICING } from "@/config/pricing";
+import { trackClient, AnalyticsEvents } from "@/lib/analytics";
 
 type PlanKey = "starter" | "growth" | "scale" | "pro";
 
@@ -58,7 +59,12 @@ function SignupInner() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error ?? "Signup failed");
+        const errorMsg = data.error ?? "Signup failed";
+        setError(errorMsg);
+        trackClient(AnalyticsEvents.SIGNUP_FAILED, {
+          reason: errorMsg,
+          selected_plan: plan,
+        });
         setLoading(false);
         return;
       }
@@ -76,6 +82,10 @@ function SignupInner() {
       }
     } catch {
       setError("Something went wrong");
+      trackClient(AnalyticsEvents.SIGNUP_FAILED, {
+        reason: "network_error",
+        selected_plan: plan,
+      });
       setLoading(false);
     }
   }
@@ -195,6 +205,25 @@ function SignupInner() {
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? "Creating your team..." : "Start 14-day free trial"}
               </Button>
+              <p className="text-center text-xs text-gray-500">
+                By creating an account you agree to our{" "}
+                <Link
+                  href="/terms"
+                  target="_blank"
+                  className="font-medium text-brand-600 hover:underline"
+                >
+                  Terms of Service
+                </Link>{" "}
+                and{" "}
+                <Link
+                  href="/privacy"
+                  target="_blank"
+                  className="font-medium text-brand-600 hover:underline"
+                >
+                  Privacy Policy
+                </Link>
+                .
+              </p>
             </form>
             <div className="mt-4 text-center text-sm text-gray-500">
               Already have an account?{" "}

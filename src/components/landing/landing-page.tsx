@@ -74,7 +74,7 @@ function HeroSection() {
             <div className="w-3 h-3 rounded-full bg-red-400" />
             <div className="w-3 h-3 rounded-full bg-yellow-400" />
             <div className="w-3 h-3 rounded-full bg-green-400" />
-            <span className="ml-3 text-xs text-gray-400">coverboard.app/dashboard</span>
+            <span className="ml-3 text-xs text-gray-400">coverboard.io/dashboard</span>
           </div>
           <div className="p-6 md:p-8">
             <div className="grid grid-cols-3 gap-4 mb-6">
@@ -495,7 +495,7 @@ function Footer() {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-12 text-sm">
+          <div className="grid grid-cols-2 gap-12 text-sm sm:grid-cols-3">
             <div>
               <p className="font-semibold text-white mb-3">Product</p>
               <ul className="space-y-2 text-gray-400">
@@ -510,6 +510,13 @@ function Footer() {
               <ul className="space-y-2 text-gray-400">
                 <li><Link href="/login" className="hover:text-white transition-colors">Log in</Link></li>
                 <li><Link href="/signup" className="hover:text-white transition-colors">Sign up</Link></li>
+              </ul>
+            </div>
+            <div>
+              <p className="font-semibold text-white mb-3">Legal</p>
+              <ul className="space-y-2 text-gray-400">
+                <li><Link href="/terms" className="hover:text-white transition-colors">Terms of Service</Link></li>
+                <li><Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link></li>
               </ul>
             </div>
           </div>

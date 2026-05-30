@@ -9,7 +9,7 @@ export function isEmailConfigured(): boolean {
 }
 
 export function getFromAddress(): string {
-  return process.env.EMAIL_FROM ?? "Coverboard <noreply@coverboard.app>";
+  return process.env.EMAIL_FROM ?? "Coverboard <noreply@coverboard.io>";
 }
 
 export async function sendEmail({

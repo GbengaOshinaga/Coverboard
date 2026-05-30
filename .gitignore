@@ -37,3 +37,8 @@ next-env.d.ts
 # prisma
 /prisma/*.db
 /prisma/*.db-journal
+.env.local
+
+# Claude Code (local / wizard artifacts)
+.claude/
+posthog-setup-report.md

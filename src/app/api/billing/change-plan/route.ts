@@ -11,6 +11,7 @@ import {
   planKeyFromPriceId,
   type StripePlanKey,
 } from "@/config/stripePrices";
+import { AnalyticsEvents, trackServer } from "@/lib/analytics";
 
 const schema = z.object({
   planKey: z.enum(["starter", "growth", "scale", "pro"]),
@@ -95,6 +96,19 @@ export async function POST(request: Request) {
       where: { id: orgId },
       data: { stripePriceId: targetPriceId },
     });
+
+    trackServer(
+      AnalyticsEvents.PLAN_CHANGED,
+      {
+        from_plan: currentPlanKey,
+        to_plan: targetPlanKey,
+      },
+      {
+        userId: sessionUser.id as string,
+        organizationId: orgId,
+        role: "ADMIN",
+      }
+    );
 
     return NextResponse.json({
       planKey: targetPlanKey,

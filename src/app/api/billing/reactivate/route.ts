@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
 import { cancelScheduledDeletion } from "@/lib/deletionScheduler";
 import { emailDeletionCanceled } from "@/lib/billing-emails";
+import { AnalyticsEvents, trackServer } from "@/lib/analytics";
 
 export async function POST() {
   const session = await getServerSession(authOptions);
@@ -44,6 +45,21 @@ export async function POST() {
         );
       }
     }
+
+    const orgPlan = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { plan: true },
+    });
+    trackServer(
+      AnalyticsEvents.SUBSCRIPTION_REACTIVATED,
+      { deletion_canceled: wasScheduled },
+      {
+        userId: sessionUser.id as string,
+        organizationId: orgId,
+        role: "ADMIN",
+        plan: orgPlan?.plan,
+      }
+    );
 
     return NextResponse.json({ success: true, deletionCanceled: wasScheduled });
   } catch (err) {

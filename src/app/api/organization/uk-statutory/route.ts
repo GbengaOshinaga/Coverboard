@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { enableUkStatutoryLeaveTypes } from "@/lib/uk-statutory";
+import { AnalyticsEvents, trackServer } from "@/lib/analytics";
 
 export async function POST() {
   const session = await getServerSession(authOptions);
@@ -16,5 +17,15 @@ export async function POST() {
 
   const organizationId = user.organizationId as string;
   await enableUkStatutoryLeaveTypes(organizationId);
+  trackServer(
+    AnalyticsEvents.UK_STATUTORY_ENABLED,
+    { source: "settings" },
+    {
+      userId: user.id as string,
+      organizationId,
+      role: "ADMIN",
+      plan: user.plan as string | undefined,
+    }
+  );
   return NextResponse.json({ success: true });
 }

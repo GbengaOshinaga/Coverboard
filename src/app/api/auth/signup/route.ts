@@ -6,6 +6,8 @@ import { stripe } from "@/lib/stripe";
 import { STRIPE_PRICE_IDS, type StripePlanKey } from "@/config/stripePrices";
 import { ensureStripeCustomer } from "@/lib/billing-customer";
 import { sendSignupWelcomeEmail } from "@/lib/email-notifications";
+import { AnalyticsEvents, trackServer } from "@/lib/analytics";
+import { checkAuthRateLimit, getClientIp } from "@/lib/rate-limit";
 
 const signupSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -17,6 +19,9 @@ const signupSchema = z.object({
 
 export async function POST(request: Request) {
   try {
+    const rateLimit = await checkAuthRateLimit(getClientIp(request), "signup");
+    if (!rateLimit.ok) return rateLimit.response;
+
     const body = await request.json();
     const parsed = signupSchema.safeParse(body);
 
@@ -162,6 +167,20 @@ export async function POST(request: Request) {
       trialDays,
     }).catch((err) =>
       console.error("Signup welcome email failed:", err)
+    );
+
+    trackServer(
+      AnalyticsEvents.SIGNUP_COMPLETED,
+      {
+        selected_plan: selectedPlan,
+        stripe_provisioned: Boolean(stripeSubscriptionId),
+      },
+      {
+        userId: result.user.id,
+        organizationId: result.org.id,
+        role: "ADMIN",
+        plan: "TRIAL",
+      }
     );
 
     return NextResponse.json(

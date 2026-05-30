@@ -6,7 +6,7 @@
 // 3. Copy the webhook signing secret to STRIPE_WEBHOOK_SECRET in .env.local
 // 4. In production, add the webhook endpoint in
 //    Stripe Dashboard → Developers → Webhooks
-//    URL: https://yourcoverboard.app/api/webhooks/stripe
+//    URL: https://coverboard.io/api/webhooks/stripe
 //    Events to enable:
 //    - customer.subscription.trial_will_end
 //    - customer.subscription.updated

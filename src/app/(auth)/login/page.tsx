@@ -7,6 +7,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { trackClient, AnalyticsEvents } from "@/lib/analytics";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -29,8 +30,20 @@ export default function LoginPage() {
     setLoading(false);
 
     if (result?.error) {
-      setError("Invalid email or password");
+      // NextAuth passes our custom thrown error messages through as-is when
+      // they don't match the default "CredentialsSignin" constant. Use the
+      // real message when we have one (e.g. rate-limit feedback), otherwise
+      // show the safe generic.
+      const message =
+        result.error && result.error !== "CredentialsSignin"
+          ? result.error
+          : "Invalid email or password";
+      setError(message);
+      trackClient(AnalyticsEvents.LOGIN_FAILED, {
+        reason: result.error === "CredentialsSignin" ? "invalid_credentials" : result.error,
+      });
     } else {
+      trackClient(AnalyticsEvents.USER_LOGGED_IN);
       router.push("/");
       router.refresh();
     }

@@ -9,6 +9,7 @@ import { emailDeletionCanceled } from "@/lib/billing-emails";
 import { planKeyForBilling } from "@/lib/billing-plan";
 import { ensureStripeCustomer } from "@/lib/billing-customer";
 import { STRIPE_PRICE_IDS } from "@/config/stripePrices";
+import { AnalyticsEvents, trackServer } from "@/lib/analytics";
 import { z } from "zod";
 
 const schema = z.object({
@@ -126,6 +127,24 @@ export async function POST(request: Request) {
     // Invalidate the dashboard layout so the trial banner (server component)
     // re-renders with the updated cardAdded flag on the next navigation.
     revalidatePath("/", "layout");
+
+    const orgPlan = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { plan: true },
+    });
+    trackServer(
+      AnalyticsEvents.BILLING_CARD_ADDED,
+      {
+        plan_key: planKeyForBilling(org),
+        deletion_canceled: wasScheduled,
+      },
+      {
+        userId: sessionUser.id as string,
+        organizationId: orgId,
+        role: "ADMIN",
+        plan: orgPlan?.plan,
+      }
+    );
 
     return NextResponse.json({ success: true, deletionCanceled: wasScheduled });
   } catch (err: unknown) {

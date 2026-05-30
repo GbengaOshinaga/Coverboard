@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { notifyRequestStatusChange } from "@/lib/slack-notifications";
 import { emailRequestStatusChange } from "@/lib/email-notifications";
 import { recordAudit, requestAuditContext, type AuditAction } from "@/lib/audit";
+import { AnalyticsEvents, trackServer } from "@/lib/analytics";
 import {
   calculateSMPPhaseDates,
   calculateSMPPhaseRates,
@@ -158,7 +159,7 @@ export async function PATCH(
           },
         },
         leaveType: {
-          select: { id: true, name: true, color: true },
+          select: { id: true, name: true, color: true, category: true, isPaid: true },
         },
         reviewedBy: {
           select: { id: true, name: true },
@@ -247,6 +248,35 @@ export async function PATCH(
           },
           context: ctx,
         });
+        if (status === "APPROVED") {
+          trackServer(
+            AnalyticsEvents.LEAVE_REQUEST_APPROVED,
+            {
+              cover_override: coverOverride === true,
+              is_statutory: /SSP|Statutory/i.test(updated.leaveType.name),
+              leave_category: updated.leaveType.category,
+            },
+            {
+              userId,
+              organizationId: orgId,
+              role: userRole,
+            }
+          );
+        }
+        if (status === "CANCELLED") {
+          trackServer(
+            AnalyticsEvents.LEAVE_REQUEST_CANCELLED,
+            {
+              is_statutory: /SSP|Statutory/i.test(updated.leaveType.name),
+              leave_category: updated.leaveType.category,
+            },
+            {
+              userId,
+              organizationId: orgId,
+              role: userRole,
+            }
+          );
+        }
       }
       if (status === "APPROVED" && coverOverride === true) {
         recordAudit({

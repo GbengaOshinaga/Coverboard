@@ -259,10 +259,10 @@ export default function AuditPage() {
           </CardHeader>
           <CardContent>
             <a
-              href="mailto:hello@coverboard.app"
+              href="mailto:support@coverboard.io"
               className="text-sm font-medium text-brand-600 hover:text-brand-700"
             >
-              hello@coverboard.app
+              support@coverboard.io
             </a>
           </CardContent>
         </Card>

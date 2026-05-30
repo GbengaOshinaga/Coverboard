@@ -7,6 +7,7 @@ import { teamMemberSchema } from "@/lib/validations";
 import { sendTeamInviteEmail } from "@/lib/email-notifications";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { hasUkStatutoryLeaveTypes } from "@/lib/uk-statutory";
+import { AnalyticsEvents, trackServer } from "@/lib/analytics";
 import { hasFeatureForEnum } from "@/lib/planFeatures";
 
 export async function GET() {
@@ -176,6 +177,25 @@ export async function POST(request: Request) {
       email,
       tempPassword,
     }).catch((err) => console.error("Invite email error:", err));
+
+    const activeMemberCount = await prisma.user.count({
+      where: { organizationId: orgId, isActive: true },
+    });
+
+    trackServer(
+      AnalyticsEvents.TEAM_MEMBER_ADDED,
+      {
+        is_first_member: activeMemberCount === 1,
+        work_country: workCountry,
+        member_type: memberType,
+        employment_type: employmentType,
+      },
+      {
+        userId: (session.user as Record<string, unknown>).id as string,
+        organizationId: orgId,
+        role: userRole,
+      }
+    );
 
     recordAudit({
       organizationId: orgId,
