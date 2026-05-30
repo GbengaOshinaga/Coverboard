@@ -18,6 +18,7 @@ const ALLOWED_WHEN_LOCKED: RegExp[] = [
   /^\/api\/billing(\/|$)/,
   /^\/api\/account(\/|$)/,
   /^\/api\/auth(\/|$)/,
+  /^\/api\/health(\/|$)/,
   /^\/login(\/|$)/,
   /^\/signup(\/|$)/,
   /^\/logout(\/|$)/,
