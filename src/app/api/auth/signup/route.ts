@@ -7,6 +7,7 @@ import { STRIPE_PRICE_IDS, type StripePlanKey } from "@/config/stripePrices";
 import { ensureStripeCustomer } from "@/lib/billing-customer";
 import { sendSignupWelcomeEmail } from "@/lib/email-notifications";
 import { sendVerificationEmail } from "@/lib/email-verification";
+import { evaluatePasswordStrength } from "@/lib/password-strength";
 import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
 import { checkAuthRateLimit, getClientIp } from "@/lib/rate-limit";
@@ -46,6 +47,11 @@ export async function POST(request: Request) {
     }
 
     const { name, email, password, orgName, plan, billingCountry } = parsed.data;
+
+    const strength = evaluatePasswordStrength(password, [email, name, orgName]);
+    if (!strength.ok) {
+      return NextResponse.json({ error: strength.message }, { status: 400 });
+    }
 
     const existingUser = await prisma.user.findUnique({
       where: { email },
