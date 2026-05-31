@@ -5,6 +5,7 @@ import { subscriptionAccessEndDate } from "@/lib/stripe-subscription";
 
 export type PlanEnum =
   | "TRIAL"
+  | "FREE"
   | "STARTER"
   | "GROWTH"
   | "SCALE"

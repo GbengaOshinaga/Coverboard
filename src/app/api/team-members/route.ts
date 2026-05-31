@@ -9,7 +9,7 @@ import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { hasUkStatutoryLeaveTypes } from "@/lib/uk-statutory";
 import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
-import { hasFeatureForEnum } from "@/lib/planFeatures";
+import { maxAdminsForPlan, maxEmployeesForPlan } from "@/lib/plans";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -103,30 +103,42 @@ export async function POST(request: Request) {
       );
     }
 
-    if (role === "ADMIN") {
-      const [org, adminCount] = await Promise.all([
-        prisma.organization.findUnique({
-          where: { id: orgId },
-          select: { maxAdminUsers: true, plan: true },
-        }),
-        prisma.user.count({
-          where: { organizationId: orgId, role: "ADMIN" },
-        }),
-      ]);
+    const [org, adminCount, employeeCount] = await Promise.all([
+      prisma.organization.findUnique({
+        where: { id: orgId },
+        select: { plan: true },
+      }),
+      prisma.user.count({
+        where: { organizationId: orgId, role: "ADMIN" },
+      }),
+      prisma.user.count({
+        where: { organizationId: orgId, isActive: true },
+      }),
+    ]);
 
-      const unlimitedAdminsPlan = hasFeatureForEnum(org?.plan, "unlimited_admins");
-      if (
-        org &&
-        !unlimitedAdminsPlan &&
-        org.maxAdminUsers > 0 &&
-        adminCount >= org.maxAdminUsers
-      ) {
+    if (org) {
+      const maxEmployees = maxEmployeesForPlan(org.plan);
+      if (Number.isFinite(maxEmployees) && employeeCount >= maxEmployees) {
         return NextResponse.json(
           {
-            error: `Your plan allows up to ${org.maxAdminUsers} admin users. Please upgrade or change an existing admin's role first.`,
+            error: `Your plan allows up to ${maxEmployees} team members. Upgrade to add more.`,
           },
           { status: 403 }
         );
+      }
+
+      if (role === "ADMIN") {
+        const maxAdmins = maxAdminsForPlan(org.plan);
+        if (Number.isFinite(maxAdmins) && adminCount >= maxAdmins) {
+          return NextResponse.json(
+            {
+              error: `Your plan allows up to ${maxAdmins} admin user${
+                maxAdmins === 1 ? "" : "s"
+              }. Please upgrade or change an existing admin's role first.`,
+            },
+            { status: 403 }
+          );
+        }
       }
     }
 

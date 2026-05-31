@@ -53,6 +53,7 @@ enum DataResidency {
 
 enum SubscriptionPlan {
   TRIAL
+  FREE
   STARTER
   GROWTH
   SCALE

@@ -1,7 +1,24 @@
+/**
+ * Pricing tiers shown on the marketing pages and signup form.
+ *
+ * Feature lists here are MARKETING COPY — they describe the post-launch
+ * intent. Several features (turnover reporting, scheduled reports, HR KPI
+ * dashboard, custom policy builder) are not yet built. They will land
+ * before public launch; runtime feature gates in `planFeatures.ts` only
+ * cover features actually wired into the codebase today.
+ *
+ * Headcount caps and admin caps live in `src/lib/plans.ts`
+ * (PLAN_MAX_EMPLOYEES, PLAN_DEFAULT_MAX_ADMINS) and are enforced server-
+ * side. Keep the human-readable copy here in sync with those numbers.
+ */
 export type PricingTier = {
+  /** Display name. Matches the `PLAN_LABELS` value in `plans.ts`. */
   name: string;
   tagline: string;
+  /** GBP per month. £0 = free tier; no Stripe subscription is created. */
   price_monthly: number;
+  /** Human-readable headcount note: "Up to 5 employees" or "Unlimited". */
+  headcount: string;
   cta: string;
   highlighted: boolean;
   badge?: string;
@@ -17,67 +34,87 @@ export const PRICING: PricingConfig = {
   currency: "£",
   tiers: [
     {
-      name: "Starter",
-      tagline: "Core leave management",
-      price_monthly: 19,
-      cta: "Start free trial",
+      name: "Free",
+      tagline: "Try Coverboard for your small team",
+      price_monthly: 0,
+      headcount: "Up to 5 employees",
+      cta: "Start free",
       highlighted: false,
       features: [
-        "All UK statutory leave types",
-        "Employee self-service portal",
+        "Annual leave tracking",
         "Team calendar",
         "Leave requests & approvals",
         "Email notifications",
+        "1 admin user",
+      ],
+    },
+    {
+      name: "Starter",
+      tagline: "For growing UK teams",
+      price_monthly: 19,
+      headcount: "Up to 15 employees",
+      cta: "Start free trial",
+      highlighted: false,
+      features: [
+        "Everything in Free",
+        "Pro-rata for part-time",
+        "Custom carry-over rules",
+        "Bank holiday region config",
         "Up to 2 admin users",
       ],
     },
     {
       name: "Growth",
-      tagline: "Compliance & reporting",
+      tagline: "Stay compliant",
       price_monthly: 49,
+      headcount: "Unlimited employees",
       cta: "Start free trial",
       highlighted: true,
       badge: "Most popular",
       features: [
         "Everything in Starter",
+        "All UK statutory leave types",
+        "SSP tracking + fit note alerts",
+        "SMP / paternity / SPL tracker",
         "Bradford Factor reporting",
-        "Pro-rata for part-time & zero-hours",
-        "Bank holiday region config",
+        "Pro-rata for all contract types",
         "Right to work tracking",
-        "SSP & fit note tracking",
-        "Unlimited admin users",
+        "Up to 5 admin users",
       ],
     },
     {
       name: "Scale",
-      tagline: "Advanced HR operations",
+      tagline: "Understand your workforce",
       price_monthly: 99,
+      headcount: "Unlimited employees",
       cta: "Start free trial",
       highlighted: false,
       features: [
         "Everything in Growth",
-        "Parental leave tracker",
-        "KIT & SPLIT day tracking",
-        "Holiday pay earnings history",
-        "52-week average pay calculation",
-        "Custom carry-over rules",
-        "Absence analytics dashboard",
-        "UK compliance report pack",
-        "Priority response",
+        "Absence trend analysis",
+        "Turnover & retention reporting",
+        "Regional cover analytics",
+        "Custom leave policy builder",
+        "Scheduled report delivery (email)",
+        "Data export in multiple formats",
+        "HR dashboard with KPIs",
+        "Unlimited admin users",
       ],
     },
     {
       name: "Pro",
       tagline: "Enterprise-ready",
       price_monthly: 179,
+      headcount: "Unlimited employees",
       cta: "Start free trial",
       highlighted: false,
       features: [
         "Everything in Scale",
-        "Custom leave policies",
+        "Full API access",
+        "Audit log + SAR exports",
         "GDPR data residency config",
-        "Audit trail exports",
-        "Priority email response",
+        "Custom leave policies",
+        "Onboarding call",
       ],
     },
   ],

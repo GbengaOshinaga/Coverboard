@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit, recordReadAudit, requestAuditContext } from "@/lib/audit";
 import type { AnyPlan } from "@/lib/plans";
-import { hasFeatureForEnum } from "@/lib/planFeatures";
+import { maxAdminsForPlan } from "@/lib/plans";
 import {
   EMPLOYMENT_TYPES,
   normalizeEmploymentType,
@@ -135,23 +135,20 @@ export async function PATCH(
         const [org, adminCount] = await Promise.all([
           prisma.organization.findUnique({
             where: { id: targetUser.organizationId },
-            select: { maxAdminUsers: true, plan: true },
+            select: { plan: true },
           }),
           prisma.user.count({
             where: { organizationId: targetUser.organizationId, role: "ADMIN" },
           }),
         ]);
 
-        const unlimitedAdminsPlan = hasFeatureForEnum(org?.plan, "unlimited_admins");
-        if (
-          org &&
-          !unlimitedAdminsPlan &&
-          org.maxAdminUsers > 0 &&
-          adminCount >= org.maxAdminUsers
-        ) {
+        const maxAdmins = maxAdminsForPlan(org?.plan);
+        if (org && Number.isFinite(maxAdmins) && adminCount >= maxAdmins) {
           return NextResponse.json(
             {
-              error: `Your plan allows up to ${org.maxAdminUsers} admin users. Please upgrade or change an existing admin's role first.`,
+              error: `Your plan allows up to ${maxAdmins} admin user${
+                maxAdmins === 1 ? "" : "s"
+              }. Please upgrade or change an existing admin's role first.`,
             },
             { status: 403 }
           );

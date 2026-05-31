@@ -379,8 +379,11 @@ function PricingSection() {
           </p>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
           {PRICING.tiers.map((tier) => {
+            const planKey = tier.name.toLowerCase();
+            const signupHref = `/signup?plan=${planKey}`;
+            const isFree = tier.price_monthly === 0;
             return (
               <div
                 key={tier.name}
@@ -399,14 +402,23 @@ function PricingSection() {
                   <h3 className="text-lg font-semibold text-gray-900">{tier.name}</h3>
                   <p className="text-xs text-gray-500 mt-1">{tier.tagline}</p>
                   <div className="flex items-baseline gap-1 mt-3">
-                    <span className="text-4xl font-bold text-gray-900">
-                      {PRICING.currency}{tier.price_monthly}
-                    </span>
-                    <span className="text-gray-500 text-sm">/month</span>
+                    {isFree ? (
+                      <span className="text-4xl font-bold text-gray-900">Free</span>
+                    ) : (
+                      <>
+                        <span className="text-4xl font-bold text-gray-900">
+                          {PRICING.currency}{tier.price_monthly}
+                        </span>
+                        <span className="text-gray-500 text-sm">/month</span>
+                      </>
+                    )}
                   </div>
-                  <p className="mt-1 text-xs text-gray-400">
-                    Excl. VAT where applicable
-                  </p>
+                  <p className="mt-1 text-xs text-gray-500">{tier.headcount}</p>
+                  {!isFree && (
+                    <p className="mt-0.5 text-xs text-gray-400">
+                      Excl. VAT where applicable
+                    </p>
+                  )}
                 </div>
 
                 <ul className="space-y-3 mb-8 flex-1">
@@ -419,9 +431,7 @@ function PricingSection() {
                 </ul>
 
                 <Link
-                  href={
-                    "/signup"
-                  }
+                  href={signupHref}
                   className={`block text-center font-semibold py-3 rounded-xl transition-colors ${
                     tier.highlighted
                       ? "bg-brand-600 text-white hover:bg-brand-700 shadow-lg shadow-brand-600/20"
@@ -436,9 +446,8 @@ function PricingSection() {
         </div>
 
         <p className="mt-10 text-center text-sm text-gray-500">
-          All plans include a 14-day free trial. No credit card required. Every
-          plan works for any team size — choose based on the features you need,
-          not your headcount.
+          Free up to 5 employees, no card required. Paid plans include a 14-day
+          free trial — choose based on the features you need.
         </p>
       </div>
     </section>

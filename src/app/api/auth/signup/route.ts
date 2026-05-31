@@ -21,7 +21,7 @@ const signupSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   orgName: z.string().min(2, "Team name must be at least 2 characters"),
-  plan: z.enum(["starter", "growth", "scale", "pro"]).default("growth"),
+  plan: z.enum(["free", "starter", "growth", "scale", "pro"]).default("growth"),
   billingCountry: z
     .string()
     .trim()
@@ -77,6 +77,10 @@ export async function POST(request: Request) {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
+    // Free signups land on the FREE tier directly with no trial; paid-plan
+    // signups land on TRIAL and get full Pro-bundle features for 14 days.
+    const initialPlanEnum: "FREE" | "TRIAL" = plan === "free" ? "FREE" : "TRIAL";
+
     // Create org + admin user in a single transaction
     const result = await prisma.$transaction(async (tx: any) => {
       const org = await tx.organization.create({
@@ -84,7 +88,7 @@ export async function POST(request: Request) {
           name: orgName,
           slug,
           onboardingCompleted: false,
-          plan: "TRIAL",
+          plan: initialPlanEnum,
         },
       });
 
@@ -104,9 +108,19 @@ export async function POST(request: Request) {
     // Create Stripe customer + trialing subscription (no card required).
     // Fail soft: if Stripe isn't configured we still let the user in — they'll
     // be treated as on the TRIAL plan with trialEndsAt set to 14 days out.
+    //
+    // Free plan: no trial, no subscription. We still provision a Stripe
+    // customer so that the inevitable upgrade flow can attach a payment
+    // method without recreating the customer (and so VAT/tax-id state has
+    // somewhere to live if the customer adds one before upgrading).
     const trialDays = 14;
-    const selectedPlan: StripePlanKey = plan;
-    let trialEndsAt: Date = new Date(Date.now() + trialDays * 86400_000);
+    const isFreePlan = plan === "free";
+    const selectedPaidPlan: StripePlanKey | null = isFreePlan
+      ? null
+      : (plan as StripePlanKey);
+    let trialEndsAt: Date | null = isFreePlan
+      ? null
+      : new Date(Date.now() + trialDays * 86400_000);
     let stripeCustomerId: string | null = null;
     let stripeSubscriptionId: string | null = null;
 
@@ -123,61 +137,73 @@ export async function POST(request: Request) {
           email,
           country: billingCountry,
           provisioningPath: "signup",
-          metadata: { admin_user_id: result.user.id },
+          metadata: {
+            admin_user_id: result.user.id,
+            signup_plan: plan,
+          },
         });
 
-        const subscription = await stripe.subscriptions.create(
-          {
-            customer: stripeCustomerId,
-            items: [{ price: STRIPE_PRICE_IDS[selectedPlan] }],
-            trial_period_days: trialDays,
-            payment_settings: {
-              save_default_payment_method: "on_subscription",
-            },
-            trial_settings: {
-              end_behavior: {
-                missing_payment_method: "pause",
+        if (selectedPaidPlan) {
+          const subscription = await stripe.subscriptions.create(
+            {
+              customer: stripeCustomerId,
+              items: [{ price: STRIPE_PRICE_IDS[selectedPaidPlan] }],
+              trial_period_days: trialDays,
+              payment_settings: {
+                save_default_payment_method: "on_subscription",
+              },
+              trial_settings: {
+                end_behavior: {
+                  missing_payment_method: "pause",
+                },
+              },
+              // Stripe Tax: calculate VAT/GST automatically based on customer
+              // address + any tax IDs they later attach. Tax is added on top of
+              // our listed prices ("exclusive" behaviour), matching the
+              // "£X/month + VAT where applicable" copy on the pricing page.
+              automatic_tax: { enabled: true },
+              metadata: {
+                organization_id: result.org.id,
+                plan_key: selectedPaidPlan,
               },
             },
-            // Stripe Tax: calculate VAT/GST automatically based on customer
-            // address + any tax IDs they later attach. Tax is added on top of
-            // our listed prices ("exclusive" behaviour), matching the
-            // "£X/month + VAT where applicable" copy on the pricing page.
-            automatic_tax: { enabled: true },
-            metadata: {
-              organization_id: result.org.id,
-              plan_key: selectedPlan,
-            },
-          },
-          {
-            idempotencyKey: `coverboard:organization:${result.org.id}:trial-subscription`,
+            {
+              idempotencyKey: `coverboard:organization:${result.org.id}:trial-subscription`,
+            }
+          );
+          stripeSubscriptionId = subscription.id;
+          if (subscription.trial_end) {
+            trialEndsAt = new Date(subscription.trial_end * 1000);
           }
-        );
-        stripeSubscriptionId = subscription.id;
-        if (subscription.trial_end) {
-          trialEndsAt = new Date(subscription.trial_end * 1000);
-        }
 
-        await prisma.organization.update({
-          where: { id: result.org.id },
-          data: {
-            stripeSubscriptionId,
-            stripePriceId: STRIPE_PRICE_IDS[selectedPlan],
-            trialEndsAt,
-            subscriptionStatus: "trialing",
-            cardAdded: false,
-          },
-        });
+          await prisma.organization.update({
+            where: { id: result.org.id },
+            data: {
+              stripeSubscriptionId,
+              stripePriceId: STRIPE_PRICE_IDS[selectedPaidPlan],
+              trialEndsAt,
+              subscriptionStatus: "trialing",
+              cardAdded: false,
+            },
+          });
+        }
       } catch (stripeError) {
         console.error("Stripe provisioning failed at signup:", stripeError);
         // ensureStripeCustomer already persisted stripeCustomerId if it
         // succeeded, so partial failure no longer orphans a Stripe customer.
-        await prisma.organization.update({
-          where: { id: result.org.id },
-          data: { trialEndsAt, subscriptionStatus: "trialing" },
-        });
+        // We still record the trial fields for paid-plan signups so the
+        // dashboard's trial banner shows up; the customer can add a card
+        // later to repair the missing subscription.
+        if (!isFreePlan) {
+          await prisma.organization.update({
+            where: { id: result.org.id },
+            data: { trialEndsAt, subscriptionStatus: "trialing" },
+          });
+        }
       }
-    } else {
+    } else if (!isFreePlan) {
+      // No Stripe at all → treat paid-plan signups as if they're in the trial
+      // window anyway; Free signups don't need this hydration.
       await prisma.organization.update({
         where: { id: result.org.id },
         data: { trialEndsAt, subscriptionStatus: "trialing" },
@@ -208,14 +234,15 @@ export async function POST(request: Request) {
     trackServer(
       AnalyticsEvents.SIGNUP_COMPLETED,
       {
-        selected_plan: selectedPlan,
+        selected_plan: plan,
         stripe_provisioned: Boolean(stripeSubscriptionId),
+        is_free_signup: isFreePlan,
       },
       {
         userId: result.user.id,
         organizationId: result.org.id,
         role: "ADMIN",
-        plan: "TRIAL",
+        plan: initialPlanEnum,
       }
     );
 
