@@ -30,6 +30,7 @@ import {
 import { toCsv, downloadCsv } from "@/lib/csv-export";
 import { AbsenceTrendsSection } from "@/components/reports/absence-trends-section";
 import { RegionalCoverSection } from "@/components/reports/regional-cover-section";
+import { LeaveOperationsSection } from "@/components/reports/leave-operations-section";
 import {
   formatEmploymentType,
   isHoursAveragedEmploymentType,
@@ -101,6 +102,7 @@ type UKReport = {
 };
 
 type ActiveTab =
+  | "operations"
   | "analytics"
   | "bradford"
   | "absence-trends"
@@ -562,6 +564,7 @@ export default function ReportsPage() {
       requiresUk?: boolean;
       requiresAnalytics?: boolean;
     }[] = [
+      { id: "operations", label: "Operations", requiresAnalytics: true },
       { id: "analytics", label: "Analytics" },
       { id: "bradford", label: "Bradford Factor", requiresUk: true },
       {
@@ -827,6 +830,9 @@ export default function ReportsPage() {
               </CardContent>
             </Card>
           )}
+
+          {/* Leave operations dashboard (Scale+) */}
+          {activeTab === "operations" && <LeaveOperationsSection />}
 
           {/* Absence trends (Scale+) */}
           {activeTab === "absence-trends" && <AbsenceTrendsSection />}
