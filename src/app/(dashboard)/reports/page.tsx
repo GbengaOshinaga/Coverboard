@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { toCsv, downloadCsv } from "@/lib/csv-export";
 import { AbsenceTrendsSection } from "@/components/reports/absence-trends-section";
+import { RegionalCoverSection } from "@/components/reports/regional-cover-section";
 import {
   formatEmploymentType,
   isHoursAveragedEmploymentType,
@@ -103,6 +104,7 @@ type ActiveTab =
   | "analytics"
   | "bradford"
   | "absence-trends"
+  | "regional-cover"
   | "right-to-work"
   | "weekly-hours"
   | "holiday-usage"
@@ -568,6 +570,11 @@ export default function ReportsPage() {
         requiresUk: true,
         requiresAnalytics: true,
       },
+      {
+        id: "regional-cover",
+        label: "Regional cover",
+        requiresAnalytics: true,
+      },
       { id: "right-to-work", label: "Right to work", requiresUk: true },
       { id: "weekly-hours", label: "Weekly hours" },
       { id: "holiday-usage", label: "Holiday usage", requiresUk: true },
@@ -823,6 +830,9 @@ export default function ReportsPage() {
 
           {/* Absence trends (Scale+) */}
           {activeTab === "absence-trends" && <AbsenceTrendsSection />}
+
+          {/* Regional cover (Scale+) */}
+          {activeTab === "regional-cover" && <RegionalCoverSection />}
 
           {/* Right to work */}
           {activeTab === "right-to-work" && (

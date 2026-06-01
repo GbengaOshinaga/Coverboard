@@ -114,7 +114,7 @@ export const PRICING: PricingConfig = {
         "Audit log + SAR exports",
         "GDPR data residency config",
         "Custom leave policies",
-        "Onboarding call",
+        "1-hour support response (UK business hours)",
       ],
     },
   ],

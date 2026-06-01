@@ -1,7 +1,10 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
-export default function LegalLayout({ children }: { children: ReactNode }) {
+export default async function LegalLayout({ children }: { children: ReactNode }) {
+  const session = await getServerSession(authOptions);
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="border-b border-gray-200 bg-white">
@@ -22,12 +25,21 @@ export default function LegalLayout({ children }: { children: ReactNode }) {
             <Link href="/privacy" className="hover:text-gray-900">
               Privacy
             </Link>
-            <Link
-              href="/login"
-              className="rounded-md px-3 py-1.5 font-medium text-brand-600 hover:bg-brand-50"
-            >
-              Log in
-            </Link>
+            {session ? (
+              <Link
+                href="/dashboard"
+                className="rounded-md px-3 py-1.5 font-medium text-brand-600 hover:bg-brand-50"
+              >
+                Dashboard
+              </Link>
+            ) : (
+              <Link
+                href="/login"
+                className="rounded-md px-3 py-1.5 font-medium text-brand-600 hover:bg-brand-50"
+              >
+                Log in
+              </Link>
+            )}
           </nav>
         </div>
       </header>

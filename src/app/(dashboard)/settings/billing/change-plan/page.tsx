@@ -80,7 +80,7 @@ const PLANS: ReadonlyArray<{
       "Full API access",
       "Audit trail + SAR exports",
       "GDPR data residency",
-      "Onboarding call",
+      "1-hour support response (UK hours)",
     ],
   },
 ];
