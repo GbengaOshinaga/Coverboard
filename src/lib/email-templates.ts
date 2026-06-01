@@ -115,6 +115,210 @@ export function weeklyDigestEmail(data: {
   };
 }
 
+// ─── Monthly Compliance Snapshot ─────────────────────────────────────
+
+export type ComplianceSnapshotEmailInput = {
+  recipientName: string;
+  orgName: string;
+  monthLabel: string;
+  reportUrl: string;
+  activeUkEmployees: number;
+  leavesThisMonth: { total: number; sickness: number; other: number };
+  bradfordAlerts: ReadonlyArray<{ name: string; score: number }>;
+  parentalActive: number;
+  parentalReturningSoon: ReadonlyArray<{
+    name: string;
+    leaveTypeName: string;
+    endDate: Date;
+  }>;
+  rightToWorkUnverifiedCount: number;
+  rightToWorkUnverifiedSample: ReadonlyArray<{ name: string }>;
+  isAllClear: boolean;
+};
+
+export function monthlyComplianceReportEmail(
+  data: ComplianceSnapshotEmailInput
+): { subject: string; html: string } {
+  const fmt = new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+
+  const sections: string[] = [];
+
+  sections.push(`
+    <div style="margin-bottom:16px;">
+      <p style="margin:0 0 4px;font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">Workforce</p>
+      <p style="margin:0;font-size:14px;color:#111827;">
+        <strong>${data.activeUkEmployees}</strong> active UK
+        ${data.activeUkEmployees === 1 ? "employee" : "employees"} ·
+        <strong>${data.leavesThisMonth.total}</strong> leave${data.leavesThisMonth.total === 1 ? "" : "s"} this month
+        (${data.leavesThisMonth.sickness} sickness, ${data.leavesThisMonth.other} other)
+      </p>
+    </div>
+  `);
+
+  if (data.bradfordAlerts.length > 0) {
+    const rows = data.bradfordAlerts
+      .map(
+        (b) =>
+          `<li style="margin:0 0 4px;font-size:13px;color:#374151;"><strong>${b.name}</strong> &mdash; score ${b.score}</li>`
+      )
+      .join("");
+    sections.push(`
+      <div style="margin-bottom:16px;">
+        <p style="margin:0 0 4px;font-size:13px;color:#b91c1c;text-transform:uppercase;letter-spacing:0.05em;">Bradford Factor alerts</p>
+        <ul style="margin:0;padding-left:20px;">${rows}</ul>
+      </div>
+    `);
+  }
+
+  if (data.parentalActive > 0) {
+    const returningHtml =
+      data.parentalReturningSoon.length > 0
+        ? `<ul style="margin:4px 0 0;padding-left:20px;">${data.parentalReturningSoon
+            .map(
+              (p) =>
+                `<li style="margin:0 0 2px;font-size:13px;color:#374151;"><strong>${p.name}</strong> &mdash; ${p.leaveTypeName}, returning ${fmt.format(p.endDate)}</li>`
+            )
+            .join("")}</ul>`
+        : "";
+    sections.push(`
+      <div style="margin-bottom:16px;">
+        <p style="margin:0 0 4px;font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">Parental leave</p>
+        <p style="margin:0;font-size:14px;color:#111827;">
+          <strong>${data.parentalActive}</strong> active${
+            data.parentalReturningSoon.length > 0
+              ? ` &mdash; ${data.parentalReturningSoon.length} returning in the next 30 days`
+              : ""
+          }
+        </p>
+        ${returningHtml}
+      </div>
+    `);
+  }
+
+  if (data.rightToWorkUnverifiedCount > 0) {
+    const sampleNames = data.rightToWorkUnverifiedSample
+      .map((u) => u.name)
+      .join(", ");
+    const overflow =
+      data.rightToWorkUnverifiedCount - data.rightToWorkUnverifiedSample.length;
+    sections.push(`
+      <div style="margin-bottom:16px;">
+        <p style="margin:0 0 4px;font-size:13px;color:#b45309;text-transform:uppercase;letter-spacing:0.05em;">Right to work</p>
+        <p style="margin:0;font-size:14px;color:#111827;">
+          <strong>${data.rightToWorkUnverifiedCount}</strong>
+          ${data.rightToWorkUnverifiedCount === 1 ? "employee" : "employees"} unverified
+          ${sampleNames ? `&mdash; ${sampleNames}` : ""}${overflow > 0 ? ` (+${overflow} more)` : ""}
+        </p>
+      </div>
+    `);
+  }
+
+  if (data.isAllClear) {
+    sections.push(`
+      <div style="margin-bottom:16px;background-color:#ecfdf5;border-radius:6px;padding:12px;">
+        <p style="margin:0;font-size:14px;color:#065f46;">
+          Nothing flagged this month &mdash; no Bradford alerts, no unverified
+          right-to-work, no active parental leave. Quiet is good.
+        </p>
+      </div>
+    `);
+  }
+
+  return {
+    subject: `${data.monthLabel} compliance snapshot — ${data.orgName}`,
+    html: layout(`
+      <h1 style="margin:0 0 8px;font-size:20px;color:#111827;">${data.monthLabel} compliance snapshot</h1>
+      <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
+        Hi ${data.recipientName}, here&rsquo;s your monthly view of
+        ${data.orgName}&rsquo;s UK compliance position. Click through for the
+        full breakdown.
+      </p>
+      ${sections.join("\n")}
+      ${button("Open compliance report", data.reportUrl)}
+      <p style="margin:16px 0 0;font-size:12px;color:#9ca3af;line-height:1.5;">
+        Sent on the 1st of each month to admins and managers. You can adjust
+        notification preferences in your profile settings.
+      </p>
+    `),
+  };
+}
+
+// ─── Fit Note Alerts ─────────────────────────────────────────────────
+
+export type FitNoteAlertItem = {
+  userName: string;
+  leaveTypeName: string;
+  startDate: Date;
+  endDate: Date;
+  daysElapsed: number;
+};
+
+export function fitNoteAlertEmail(data: {
+  recipientName: string;
+  orgName: string;
+  items: ReadonlyArray<FitNoteAlertItem>;
+  dashboardUrl: string;
+}): { subject: string; html: string } {
+  const fmt = new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+
+  const rows = data.items
+    .map(
+      (i) => `
+      <tr style="border-bottom:1px solid #e5e7eb;">
+        <td style="padding:8px 0;font-size:14px;color:#111827;">${i.userName}</td>
+        <td style="padding:8px 0;font-size:13px;color:#6b7280;">${i.leaveTypeName}</td>
+        <td style="padding:8px 0;font-size:13px;color:#6b7280;">${fmt.format(i.startDate)} – ${fmt.format(i.endDate)}</td>
+        <td style="padding:8px 0;font-size:13px;color:#b91c1c;font-weight:500;">Day ${i.daysElapsed}</td>
+      </tr>`
+    )
+    .join("");
+
+  const count = data.items.length;
+  const headline =
+    count === 1
+      ? "1 employee owes you a fit note"
+      : `${count} employees owe you fit notes`;
+
+  return {
+    subject: `${headline} — ${data.orgName}`,
+    html: layout(`
+      <h1 style="margin:0 0 8px;font-size:20px;color:#111827;">${headline}</h1>
+      <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
+        Hi ${data.recipientName}, the following approved sickness absences
+        have run past 7 calendar days without a fit note recorded in
+        Coverboard. UK SSP rules require a Statement of Fitness for Work
+        from day 8 onwards. Without it on file, ${data.orgName} can&rsquo;t
+        evidence SSP payments to HMRC.
+      </p>
+      <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+        <thead>
+          <tr style="border-bottom:2px solid #e5e7eb;">
+            <th align="left" style="padding:8px 0;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">Employee</th>
+            <th align="left" style="padding:8px 0;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">Leave</th>
+            <th align="left" style="padding:8px 0;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">Dates</th>
+            <th align="left" style="padding:8px 0;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">Overdue</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      ${button("Open dashboard", data.dashboardUrl)}
+      <p style="margin:16px 0 0;font-size:13px;color:#9ca3af;line-height:1.5;">
+        Once you receive a fit note, mark <strong>Evidence provided</strong>
+        on the relevant leave request to clear the alert. You&rsquo;ll get a
+        fresh summary next Monday if any are still outstanding.
+      </p>
+    `),
+  };
+}
+
 // ─── Email Verification ──────────────────────────────────────────────
 
 export function emailVerificationEmail(data: {

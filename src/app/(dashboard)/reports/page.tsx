@@ -28,6 +28,7 @@ import {
   CalendarClock,
 } from "lucide-react";
 import { toCsv, downloadCsv } from "@/lib/csv-export";
+import { AbsenceTrendsSection } from "@/components/reports/absence-trends-section";
 import {
   formatEmploymentType,
   isHoursAveragedEmploymentType,
@@ -101,6 +102,7 @@ type UKReport = {
 type ActiveTab =
   | "analytics"
   | "bradford"
+  | "absence-trends"
   | "right-to-work"
   | "weekly-hours"
   | "holiday-usage"
@@ -227,6 +229,12 @@ export default function ReportsPage() {
   const user = session?.user as Record<string, unknown> | undefined;
   const userRole = user?.role as string | undefined;
   const isAdmin = userRole === "ADMIN";
+  const userPlan = user?.plan as string | undefined;
+  // Absence trends + scheduled compliance reports are Scale-tier features.
+  // Trial inherits Pro-bundle access so the tab is visible during the
+  // 14-day trial too.
+  const hasAbsenceAnalytics =
+    userPlan === "SCALE" || userPlan === "PRO" || userPlan === "TRIAL";
 
   const fetchReport = useCallback(async () => {
     setLoading(true);
@@ -550,9 +558,16 @@ export default function ReportsPage() {
       label: string;
       adminOnly?: boolean;
       requiresUk?: boolean;
+      requiresAnalytics?: boolean;
     }[] = [
       { id: "analytics", label: "Analytics" },
       { id: "bradford", label: "Bradford Factor", requiresUk: true },
+      {
+        id: "absence-trends",
+        label: "Absence trends",
+        requiresUk: true,
+        requiresAnalytics: true,
+      },
       { id: "right-to-work", label: "Right to work", requiresUk: true },
       { id: "weekly-hours", label: "Weekly hours" },
       { id: "holiday-usage", label: "Holiday usage", requiresUk: true },
@@ -568,9 +583,11 @@ export default function ReportsPage() {
     ];
     return reviewerTabs.filter(
       (t) =>
-        (!t.adminOnly || isAdmin) && (!t.requiresUk || hasUkWorkforce)
+        (!t.adminOnly || isAdmin) &&
+        (!t.requiresUk || hasUkWorkforce) &&
+        (!t.requiresAnalytics || hasAbsenceAnalytics)
     );
-  }, [isAdmin, hasUkWorkforce]);
+  }, [isAdmin, hasUkWorkforce, hasAbsenceAnalytics]);
 
   useEffect(() => {
     const ids = tabs.map((t) => t.id);
@@ -803,6 +820,9 @@ export default function ReportsPage() {
               </CardContent>
             </Card>
           )}
+
+          {/* Absence trends (Scale+) */}
+          {activeTab === "absence-trends" && <AbsenceTrendsSection />}
 
           {/* Right to work */}
           {activeTab === "right-to-work" && (

@@ -2,10 +2,11 @@
  * Pricing tiers shown on the marketing pages and signup form.
  *
  * Feature lists here are MARKETING COPY — they describe the post-launch
- * intent. Several features (turnover reporting, scheduled reports, HR KPI
- * dashboard, custom policy builder) are not yet built. They will land
- * before public launch; runtime feature gates in `planFeatures.ts` only
- * cover features actually wired into the codebase today.
+ * intent. Several features (scheduled reports, custom policy builder,
+ * leave operations dashboard, multi-format export) are not yet built.
+ * They will land before public launch; runtime feature gates in
+ * `planFeatures.ts` only cover features actually wired into the codebase
+ * today.
  *
  * Headcount caps and admin caps live in `src/lib/plans.ts`
  * (PLAN_MAX_EMPLOYEES, PLAN_DEFAULT_MAX_ADMINS) and are enforced server-
@@ -92,12 +93,11 @@ export const PRICING: PricingConfig = {
       features: [
         "Everything in Growth",
         "Absence trend analysis",
-        "Turnover & retention reporting",
         "Regional cover analytics",
         "Custom leave policy builder",
         "Scheduled report delivery (email)",
         "Data export in multiple formats",
-        "HR dashboard with KPIs",
+        "Leave operations dashboard",
         "Unlimited admin users",
       ],
     },

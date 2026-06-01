@@ -177,22 +177,17 @@ export default function PrivacyPage() {
 
       <Section title="6. Data residency">
         <p>
-          Customer Data is stored in the European Union (Republic of
-          Ireland, AWS <code>eu-west-1</code> region, via our database
-          provider Supabase). Application servers run on Vercel&rsquo;s
-          edge and serverless infrastructure within the UK and EU regions.
+          Customer Data is stored in the United Kingdom (London, AWS
+          <code> eu-west-2</code> region, via our database provider
+          Supabase). Application servers run on Vercel&rsquo;s edge and
+          serverless infrastructure within the UK and EU regions.
         </p>
         <p>
           Some sub-processors (notably Stripe, Slack and Atlassian) may
-          process data outside the UK and EU. Where they do, we rely on UK
-          International Data Transfer Agreements, EU Standard Contractual
-          Clauses or equivalent safeguards to ensure your data receives an
-          essentially equivalent level of protection.
-        </p>
-        <p>
-          Transfers between the UK and the EU are covered by the UK
-          Government&rsquo;s adequacy decision for the EU, which means data
-          can flow to and from the EU without additional safeguards.
+          process data outside the UK. Where they do, we rely on UK
+          International Data Transfer Agreements or equivalent safeguards
+          to ensure your data receives an essentially equivalent level of
+          protection.
         </p>
       </Section>
 

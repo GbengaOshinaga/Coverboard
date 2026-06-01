@@ -22,6 +22,14 @@ import {
 import { countWeekdays } from "@/lib/utils";
 import { recordReadAudit, requestAuditContext } from "@/lib/audit";
 import type { AnyPlan } from "@/lib/plans";
+import {
+  parseExportFormat,
+  toCsv,
+  toExcel,
+  EXPORT_CONTENT_TYPE,
+  exportFilename,
+  type ExportColumn,
+} from "@/lib/export-formats";
 
 function absenceSpells(requests: { startDate: Date; endDate: Date }[]): number {
   if (requests.length === 0) return 0;
@@ -268,15 +276,142 @@ export async function GET(request: Request) {
     context: requestAuditContext(request),
   });
 
-  return NextResponse.json({
-    workforce,
-    holidayUsage,
-    absenceTrigger: {
-      threshold,
+  const format = parseExportFormat(searchParams.get("format"));
+  if (format === "json") {
+    return NextResponse.json({
+      workforce,
+      holidayUsage,
+      absenceTrigger: {
+        threshold,
+        rows: bradfordReport,
+      },
+      sspLiability: sspCurrent,
+      parentalTracker: parental,
+      rightToWork: rightToWorkData,
+    });
+  }
+
+  // Tabular exports: the compliance report has 5 distinct tables. CSV
+  // serialises the Bradford table only (the most-requested by HR for
+  // tribunal evidence); Excel writes every table to its own sheet.
+  const bradfordColumns: ExportColumn<(typeof bradfordReport)[number]>[] = [
+    { key: "userId", header: "Employee ID" },
+    { key: "name", header: "Name" },
+    { key: "spells", header: "Absence spells" },
+    { key: "days", header: "Absence days" },
+    { key: "score", header: "Bradford score" },
+    { key: "flagged", header: "Flagged" },
+  ];
+
+  const filename = exportFilename(
+    "coverboard-uk-compliance",
+    format,
+    new Date()
+  );
+
+  if (format === "csv") {
+    const body = toCsv(bradfordReport, bradfordColumns);
+    return new NextResponse(body, {
+      status: 200,
+      headers: {
+        "Content-Type": EXPORT_CONTENT_TYPE.csv,
+        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+
+  // Excel — multi-sheet
+  const buffer = await toExcel([
+    {
+      name: "Bradford Factor",
+      columns: bradfordColumns,
       rows: bradfordReport,
     },
-    sspLiability: sspCurrent,
-    parentalTracker: parental,
-    rightToWork: rightToWorkData,
+    {
+      name: "Holiday usage",
+      columns: [
+        { key: "userId", header: "Employee ID" },
+        { key: "name", header: "Name" },
+        { key: "department", header: "Department" },
+        { key: "contractType", header: "Contract type" },
+        { key: "taken", header: "Days taken (YTD)" },
+      ],
+      rows: holidayUsage,
+    },
+    {
+      name: "SSP liability",
+      columns: [
+        { key: "userId", header: "Employee ID" },
+        { key: "name", header: "Name" },
+        {
+          key: (r) => {
+            const sd = (r as { startDate: Date }).startDate;
+            return sd instanceof Date ? sd.toISOString() : sd;
+          },
+          header: "Spell start",
+        },
+        {
+          key: (r) => {
+            const ed = (r as { endDate: Date }).endDate;
+            return ed instanceof Date ? ed.toISOString() : ed;
+          },
+          header: "Spell end",
+        },
+        { key: "qualifyingDaysPerWeek", header: "Qualifying days/wk" },
+        { key: "dailyRate", header: "Daily SSP rate (£)" },
+        { key: "sspDaysPaid", header: "Days paid" },
+        { key: "remainingDays", header: "Days remaining" },
+        { key: "sspLimitReached", header: "Limit reached" },
+        { key: "estimatedCostToDate", header: "Estimated cost to date (£)" },
+      ],
+      rows: sspCurrent,
+    },
+    {
+      name: "Parental leave",
+      columns: [
+        { key: "userId", header: "Employee ID" },
+        { key: "name", header: "Name" },
+        { key: "leaveType", header: "Leave type" },
+        {
+          key: (r) => {
+            const sd = (r as { startDate: Date }).startDate;
+            return sd instanceof Date ? sd.toISOString() : sd;
+          },
+          header: "Start date",
+        },
+        {
+          key: (r) => {
+            const ed = (r as { expectedReturnDate: Date }).expectedReturnDate;
+            return ed instanceof Date ? ed.toISOString() : ed;
+          },
+          header: "Expected return",
+        },
+        { key: "kitDaysUsed", header: "KIT days used" },
+        { key: "kitDaysCap", header: "KIT cap" },
+        { key: "kitDaysRemaining", header: "KIT remaining" },
+      ],
+      rows: parental,
+    },
+    {
+      name: "Right to work",
+      columns: [
+        { key: "id", header: "Employee ID" },
+        { key: "name", header: "Name" },
+        { key: "email", header: "Email" },
+        { key: "department", header: "Department" },
+        { key: "employmentType", header: "Employment type" },
+        { key: "rightToWorkVerified", header: "Verified" },
+      ],
+      rows: rightToWorkData,
+    },
+  ]);
+  return new NextResponse(new Uint8Array(buffer), {
+    status: 200,
+    headers: {
+      "Content-Type": EXPORT_CONTENT_TYPE.excel,
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Cache-Control": "no-store",
+    },
   });
 }

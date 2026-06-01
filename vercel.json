@@ -7,6 +7,14 @@
     {
       "path": "/api/cron/process-deletions",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/fit-note-alerts",
+      "schedule": "0 9 * * 1"
+    },
+    {
+      "path": "/api/cron/monthly-compliance-report",
+      "schedule": "0 9 1 * *"
     }
   ]
 }

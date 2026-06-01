@@ -15,7 +15,7 @@ import {
   Building2,
 } from "lucide-react";
 import { LandingNavbar } from "./navbar";
-import { PRICING } from "@/config/pricing";
+import { PricingSection } from "./pricing-section";
 
 function HeroSection() {
   return (
@@ -359,96 +359,6 @@ function HowItWorksSection() {
             </div>
           ))}
         </div>
-      </div>
-    </section>
-  );
-}
-
-function PricingSection() {
-  return (
-    <section id="pricing" className="py-20 md:py-28 bg-white">
-      <div className="mx-auto max-w-6xl px-6">
-        <div className="text-center max-w-2xl mx-auto mb-10">
-          <p className="text-sm font-semibold text-brand-600 mb-3">Pricing</p>
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight">
-            Plans that grow with your organisation
-          </h2>
-          <p className="mt-4 text-gray-600 text-lg">
-            Same core product — add HR depth, compliance reporting, and
-            enterprise controls when you need them. No hidden fees.
-          </p>
-        </div>
-
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
-          {PRICING.tiers.map((tier) => {
-            const planKey = tier.name.toLowerCase();
-            const signupHref = `/signup?plan=${planKey}`;
-            const isFree = tier.price_monthly === 0;
-            return (
-              <div
-                key={tier.name}
-                className={`rounded-2xl border p-6 flex flex-col ${
-                  tier.highlighted
-                    ? "border-brand-200 shadow-xl shadow-brand-100/40 ring-1 ring-brand-100 relative"
-                    : "border-gray-200"
-                }`}
-              >
-                {tier.badge && tier.highlighted && (
-                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-brand-600 text-white text-xs font-semibold px-3 py-1 rounded-full">
-                    {tier.badge}
-                  </div>
-                )}
-                <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-gray-900">{tier.name}</h3>
-                  <p className="text-xs text-gray-500 mt-1">{tier.tagline}</p>
-                  <div className="flex items-baseline gap-1 mt-3">
-                    {isFree ? (
-                      <span className="text-4xl font-bold text-gray-900">Free</span>
-                    ) : (
-                      <>
-                        <span className="text-4xl font-bold text-gray-900">
-                          {PRICING.currency}{tier.price_monthly}
-                        </span>
-                        <span className="text-gray-500 text-sm">/month</span>
-                      </>
-                    )}
-                  </div>
-                  <p className="mt-1 text-xs text-gray-500">{tier.headcount}</p>
-                  {!isFree && (
-                    <p className="mt-0.5 text-xs text-gray-400">
-                      Excl. VAT where applicable
-                    </p>
-                  )}
-                </div>
-
-                <ul className="space-y-3 mb-8 flex-1">
-                  {tier.features.map((f) => (
-                    <li key={f} className="flex items-start gap-3 text-sm text-gray-700">
-                      <Check size={16} className="text-brand-600 mt-0.5 shrink-0" />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-
-                <Link
-                  href={signupHref}
-                  className={`block text-center font-semibold py-3 rounded-xl transition-colors ${
-                    tier.highlighted
-                      ? "bg-brand-600 text-white hover:bg-brand-700 shadow-lg shadow-brand-600/20"
-                      : "border-2 border-brand-600 text-brand-600 hover:bg-brand-50"
-                  }`}
-                >
-                  {tier.cta}
-                </Link>
-              </div>
-            );
-          })}
-        </div>
-
-        <p className="mt-10 text-center text-sm text-gray-500">
-          Free up to 5 employees, no card required. Paid plans include a 14-day
-          free trial — choose based on the features you need.
-        </p>
       </div>
     </section>
   );

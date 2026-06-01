@@ -63,9 +63,10 @@ const PLANS: ReadonlyArray<{
     blurb: "Understand your workforce",
     features: [
       "Everything in Growth",
-      "Absence & turnover analytics",
+      "Absence trend analysis",
       "Custom leave policy builder",
-      "Compliance reports + priority support",
+      "Scheduled compliance reports",
+      "Leave operations dashboard",
       "Unlimited admins",
     ],
   },
