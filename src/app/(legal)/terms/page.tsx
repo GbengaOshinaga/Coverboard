@@ -11,7 +11,7 @@ export const metadata: Metadata = {
     "The agreement between you and Coverboard for using the Coverboard service.",
 };
 
-const LAST_UPDATED = "28 May 2026";
+const LAST_UPDATED = "2 June 2026";
 
 export default function TermsPage() {
   return (
@@ -60,20 +60,34 @@ export default function TermsPage() {
           team members enter, including the leave records, employment data and
           sickness notes you choose to store in the Service.
         </p>
+        <p>
+          We may require you to verify your email address before you can sign
+          in. We send a single-use verification link to the address you
+          register with; until you click it, your account is created but
+          inaccessible.
+        </p>
       </Section>
 
       <Section title="3. Subscription, trial and billing">
         <ul className="list-disc space-y-2 pl-6">
           <li>
-            New Customers receive a <strong>14-day free trial</strong> of the
-            Service with no payment card required. During the trial you have
-            access to the features included in your selected plan.
+            Coverboard offers a permanent <strong>Free plan</strong> (up to 5
+            employees and 1 administrator) with no payment method required and
+            no trial. You can upgrade to a paid plan at any time from billing
+            settings.
+          </li>
+          <li>
+            New Customers who pick a paid plan at signup receive a{" "}
+            <strong>14-day free trial</strong> with no payment card required.
+            During the trial you have access to the features included in your
+            selected plan.
           </li>
           <li>
             If you do not add a payment method before the trial ends, your
             organisation will be paused and your data is scheduled for
             permanent deletion 30 days later. You may reactivate by adding a
-            card before that 30-day window closes.
+            card before that 30-day window closes, or you may switch to the
+            Free plan from billing settings to keep your data without paying.
           </li>
           <li>
             Paid subscriptions are billed monthly in advance in pounds sterling
@@ -83,16 +97,22 @@ export default function TermsPage() {
           </li>
           <li>
             You may upgrade or downgrade your plan at any time from your
-            billing settings. Plan changes are prorated.
+            billing settings, including switching to the Free plan as an
+            alternative to cancelling. Plan changes between paid tiers are
+            prorated.
           </li>
           <li>
             You may cancel at any time. Cancellation takes effect at the end
             of your current billing period, after which your account is locked
-            and scheduled for deletion in line with section 7.
+            and scheduled for deletion in line with section 7 (unless you
+            chose to switch to Free instead).
           </li>
           <li>
-            All prices are exclusive of VAT or other applicable taxes, which
-            we will collect where required by law and itemise on your invoice.
+            All prices are exclusive of VAT or other applicable taxes. We use
+            Stripe Tax to calculate and collect VAT on your invoices based on
+            your billing address and any tax ID you provide; UK and EU B2B
+            customers can attach a verified VAT number from billing settings
+            to apply reverse-charge.
           </li>
         </ul>
       </Section>

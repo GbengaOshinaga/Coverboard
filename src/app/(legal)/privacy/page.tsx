@@ -13,7 +13,7 @@ export const metadata: Metadata = {
     "How Coverboard collects, uses, stores and shares personal data — your rights under UK GDPR.",
 };
 
-const LAST_UPDATED = "28 May 2026";
+const LAST_UPDATED = "2 June 2026";
 
 export default function PrivacyPage() {
   return (
@@ -64,9 +64,10 @@ export default function PrivacyPage() {
             organisation name, role, country of work.
           </li>
           <li>
-            <strong>Billing data</strong>: company name, plan, payment-card
-            details (held by Stripe — we never see the full card number),
-            invoice history.
+            <strong>Billing data</strong>: company name, plan, billing country,
+            tax IDs (e.g. VAT numbers, with verification status returned by
+            HMRC or VIES), payment-card details (held by Stripe — we never see
+            the full card number), and invoice history.
           </li>
           <li>
             <strong>Employee leave data</strong>: leave types, dates,
@@ -134,7 +135,14 @@ export default function PrivacyPage() {
           </li>
           <li>
             To send the optional weekly digest to admins and managers (you
-            can opt out from your profile settings).
+            can opt out from your profile settings or via the one-click
+            unsubscribe link in each digest email).
+          </li>
+          <li>
+            On the <strong>Pro plan</strong>, to record who in the Customer
+            organisation viewed which employee, sickness record, or audit log.
+            This is a transparency feature for the Customer; we do not access
+            these logs except to operate the Service.
           </li>
         </ul>
       </Section>
@@ -161,6 +169,21 @@ export default function PrivacyPage() {
             <strong>Resend</strong> — transactional email delivery.
           </li>
           <li>
+            <strong>Sentry (Functional Software, Inc.)</strong> — application
+            error tracking. Receives error payloads tagged with user and
+            organisation identifiers when something goes wrong.
+          </li>
+          <li>
+            <strong>Upstash, Inc.</strong> — Redis-backed rate-limiting
+            counters keyed by IP address (and, for signup, email) to protect
+            authentication endpoints from abuse.
+          </li>
+          <li>
+            <strong>PostHog Inc.</strong> — product analytics. Only used if
+            you click &ldquo;Accept all&rdquo; on our cookie banner; never
+            used otherwise. Receives anonymised feature-usage events.
+          </li>
+          <li>
             <strong>Slack Technologies Inc.</strong> — only when a Customer
             chooses to connect Slack for leave notifications.
           </li>
@@ -179,8 +202,9 @@ export default function PrivacyPage() {
         <p>
           Customer Data is stored in the United Kingdom (London, AWS
           <code> eu-west-2</code> region, via our database provider
-          Supabase). Application servers run on Vercel&rsquo;s edge and
-          serverless infrastructure within the UK and EU regions.
+          Supabase). Application servers run on Vercel&rsquo;s serverless
+          infrastructure, primarily within UK and EU regions, with a global
+          edge cache used only for static assets (no personal data).
         </p>
         <p>
           Some sub-processors (notably Stripe, Slack and Atlassian) may
@@ -195,7 +219,8 @@ export default function PrivacyPage() {
         <ul className="list-disc space-y-2 pl-6">
           <li>
             <strong>Active organisations</strong>: Customer Data is retained
-            for as long as your subscription is active.
+            for as long as your account is active, whether on the Free plan
+            or a paid subscription.
           </li>
           <li>
             <strong>Cancelled or expired organisations</strong>: data enters
@@ -250,7 +275,8 @@ export default function PrivacyPage() {
           these rights is via your employer (the data controller). Coverboard
           provides admins with a one-click <strong>Subject Access Request
           export</strong> from each employee&rsquo;s profile, producing a
-          machine-readable JSON file containing every record we hold about
+          machine-readable file (JSON for the per-employee SAR; CSV or Excel
+          for report-level exports) containing every record we hold about
           that employee.
         </p>
         <p>
@@ -283,8 +309,9 @@ export default function PrivacyPage() {
           We use industry-standard measures to protect personal data,
           including encrypted storage, role-based access controls, an
           append-only audit log of writes and (on the Pro plan)
-          read-side audit, secure password hashing (bcrypt), and rate
-          limiting on authentication endpoints. No system is perfectly
+          read-side audit, secure password hashing (bcrypt) with a strength
+          check at signup, email verification before first sign-in, and
+          rate limiting on authentication endpoints. No system is perfectly
           secure; you are responsible for keeping your own credentials
           confidential and reporting suspected incidents to us promptly.
         </p>
@@ -292,21 +319,38 @@ export default function PrivacyPage() {
 
       <Section title="10. Cookies">
         <p id="cookies">
-          We use a small number of cookies that are <strong>strictly
-          necessary</strong> for the Service to work — primarily an
-          authentication session cookie (set by NextAuth) and a CSRF token.
-          These do not require consent under PECR.
+          <strong>Strictly-necessary cookies</strong> (always on, no consent
+          required under PECR):
         </p>
+        <ul className="list-disc space-y-1 pl-6">
+          <li>
+            <code>next-auth.session-token</code> and{" "}
+            <code>next-auth.csrf-token</code> — set by NextAuth to keep you
+            signed in and protect form submissions. Session-scoped.
+          </li>
+          <li>
+            <code>cb_cookie_consent_v1</code> — records your cookie-banner
+            choice (granted or rejected) so we don&rsquo;t ask repeatedly.
+            First-party, 365 days.
+          </li>
+        </ul>
         <p>
-          We do not currently use analytics or advertising cookies. If we
-          add any in future, we will request your consent first via the
-          cookie banner and will list each cookie&rsquo;s purpose and
-          duration here. The banner choice is itself recorded in a
-          first-party cookie so we don&rsquo;t ask repeatedly.
+          <strong>Analytics cookies (optional, off by default)</strong> — only
+          set if you click &ldquo;Accept all&rdquo; on the cookie banner:
         </p>
+        <ul className="list-disc space-y-1 pl-6">
+          <li>
+            <code>ph_*</code> — set by PostHog to count distinct visitors,
+            measure feature usage and pageviews. We do not use PostHog for
+            advertising. First-party (served via our <code>/ingest</code>{" "}
+            reverse-proxy), up to 365 days.
+          </li>
+        </ul>
         <p>
-          You can clear cookies in your browser at any time. Doing so will
-          log you out of the Service.
+          We do not use advertising cookies. You can change your choice at
+          any time by clearing the <code>cb_cookie_consent_v1</code> cookie
+          in your browser, which will re-show the banner on your next visit.
+          Clearing cookies will also log you out of the Service.
         </p>
       </Section>
 
