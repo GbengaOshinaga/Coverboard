@@ -15,6 +15,14 @@ import { z } from "zod";
 
 const schema = z.object({
   paymentMethodId: z.string().min(1),
+  /**
+   * Optional plan-key override used by the Free → Paid upgrade flow. When a
+   * Free org adds a card AND wants to subscribe to a specific tier in the
+   * same step, the client passes the tier here. Only honoured when there's
+   * no existing Stripe subscription — for already-subscribed customers we
+   * never want to silently switch tiers as a side-effect of "Update card".
+   */
+  planKey: z.enum(["starter", "growth", "scale", "pro"]).optional(),
 });
 
 export async function POST(request: Request) {
@@ -82,10 +90,19 @@ export async function POST(request: Request) {
         automatic_tax: { enabled: true },
       });
     } else {
-      const planKey = planKeyForBilling(org);
+      // Free → Paid: caller chose a tier. Otherwise fall back to whatever
+      // tier the org last had stored (recovery path for orgs whose
+      // subscription creation failed at signup).
+      const planKey = parsed.data.planKey ?? planKeyForBilling(org);
       stripePriceId = STRIPE_PRICE_IDS[planKey];
+      // Free upgrades intentionally do NOT get another trial — they've
+      // already been using the product. We only honour an existing trial
+      // window when one is in flight (recovery flow for a paid signup
+      // whose subscription failed and is being repaired).
       const trialEnd =
-        org.trialEndsAt && org.trialEndsAt.getTime() > Date.now()
+        !parsed.data.planKey &&
+        org.trialEndsAt &&
+        org.trialEndsAt.getTime() > Date.now()
           ? Math.floor(org.trialEndsAt.getTime() / 1000)
           : undefined;
       const subscription = await stripe.subscriptions.create({
@@ -100,6 +117,7 @@ export async function POST(request: Request) {
         metadata: {
           organization_id: orgId,
           plan_key: planKey,
+          ...(parsed.data.planKey ? { upgrade_path: "free_to_paid" } : {}),
         },
       });
       stripeSubscriptionId = subscription.id;

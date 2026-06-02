@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
 import {
   BILLING_COUNTRIES,
+  DEFAULT_BILLING_COUNTRY,
   TAX_ID_TYPE_LABELS,
   suggestedTaxIdType,
 } from "@/config/billing-countries";
@@ -38,8 +39,26 @@ export function BillingTaxSection({
   const { toast } = useToast();
 
   const [countryEditing, setCountryEditing] = useState(false);
-  const [pendingCountry, setPendingCountry] = useState(billingCountry ?? "");
+  // Default pendingCountry to the existing value if there is one, otherwise
+  // GB (matches the visible default in the dropdown). Initialising to "" —
+  // as we used to — caused a silent mismatch: the browser displayed the
+  // first option (GB) but the bound state stayed "" until the user clicked
+  // a different option. Submitting unchanged then sent an empty string and
+  // tripped the API's length(2) check.
+  const [pendingCountry, setPendingCountry] = useState(
+    billingCountry ?? DEFAULT_BILLING_COUNTRY
+  );
   const [countryBusy, setCountryBusy] = useState(false);
+
+  function beginEditingCountry() {
+    setPendingCountry(billingCountry ?? DEFAULT_BILLING_COUNTRY);
+    setCountryEditing(true);
+  }
+
+  function cancelEditingCountry() {
+    setPendingCountry(billingCountry ?? DEFAULT_BILLING_COUNTRY);
+    setCountryEditing(false);
+  }
 
   // Default the new-tax-id type to whatever fits the current billing country.
   const initialType = suggestedTaxIdType(billingCountry) ?? "gb_vat";
@@ -49,6 +68,13 @@ export function BillingTaxSection({
   const [removingId, setRemovingId] = useState<string | null>(null);
 
   async function saveCountry() {
+    // Defensive: if pendingCountry is somehow blank when Save is clicked,
+    // short-circuit with a friendly client-side message rather than letting
+    // the API return its raw length-validation error.
+    if (!pendingCountry) {
+      toast("Pick a country before saving.", "error");
+      return;
+    }
     setCountryBusy(true);
     const res = await fetch("/api/billing/customer", {
       method: "PATCH",
@@ -138,10 +164,7 @@ export function BillingTaxSection({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => {
-                  setCountryEditing(false);
-                  setPendingCountry(billingCountry ?? "");
-                }}
+                onClick={cancelEditingCountry}
                 disabled={countryBusy}
               >
                 Cancel
@@ -151,7 +174,7 @@ export function BillingTaxSection({
             <div className="mt-2 flex items-center gap-3">
               <p className="text-sm text-gray-900">{currentCountryName}</p>
               <button
-                onClick={() => setCountryEditing(true)}
+                onClick={beginEditingCountry}
                 className="text-sm font-medium text-brand-600 hover:text-brand-700"
               >
                 Change

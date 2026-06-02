@@ -20,6 +20,7 @@ type BillingSummary = {
   paymentMethodBrand: string | null;
   paymentMethodLast4: string | null;
   cancelAtPeriodEnd: boolean;
+  pendingDowngradeToFree?: boolean;
   currentPeriodEnd: string | null;
   trialExpiredGraceEndsAt: string | null;
   invoices: Array<{
@@ -75,6 +76,25 @@ export default function BillingPage() {
       refresh();
     } else {
       toast("Could not cancel", "error");
+    }
+  }
+
+  async function handleDowngradeToFree() {
+    setBusy(true);
+    const res = await fetch("/api/billing/downgrade-to-free", {
+      method: "POST",
+    });
+    setBusy(false);
+    setConfirming(false);
+    if (res.ok) {
+      toast(
+        "Switching to Free. You'll keep paid access until your current period ends.",
+        "success"
+      );
+      refresh();
+    } else {
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      toast(data.error ?? "Could not switch to Free", "error");
     }
   }
 
@@ -157,18 +177,36 @@ export default function BillingPage() {
       {summary.cancelAtPeriodEnd && (
         <div className="flex flex-col gap-3 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
           <p>
-            {accessEndsLabel ? (
+            {summary.pendingDowngradeToFree ? (
+              accessEndsLabel ? (
+                <>
+                  You&rsquo;re moving to the <strong>Free</strong> tier on{" "}
+                  <strong>{accessEndsLabel}</strong>. You keep paid features
+                  until then.{" "}
+                  <span className="text-amber-900/70">
+                    Reactivate to stay on your current plan.
+                  </span>
+                </>
+              ) : (
+                <>
+                  You&rsquo;re moving to the <strong>Free</strong> tier at the
+                  end of this billing period. Reactivate to stay on your
+                  current plan.
+                </>
+              )
+            ) : accessEndsLabel ? (
               <>
                 Your plan is scheduled to cancel on{" "}
-                <strong>{accessEndsLabel}</strong>. You keep access until then.
+                <strong>{accessEndsLabel}</strong>. You keep access until then.{" "}
+                Reactivate anytime to keep billing and avoid data deletion.
               </>
             ) : (
               <>
                 Your subscription is scheduled to cancel at the end of the
-                current period. You keep access until then.
+                current period. You keep access until then. Reactivate
+                anytime to keep billing and avoid data deletion.
               </>
-            )}{" "}
-            Reactivate anytime to keep billing and avoid data deletion.
+            )}
           </p>
           <Button
             size="sm"
@@ -322,30 +360,68 @@ export default function BillingPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={confirming} onClose={() => setConfirming(false)} title="Cancel subscription">
+      <Dialog
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        title="Cancel subscription"
+        className="max-w-lg"
+      >
         <p className="text-sm text-gray-700">
-          Your access will continue until{" "}
-          <strong>{periodEnd ?? "your current period end"}</strong>, then your
-          account will be locked.
+          Before you go — there are two ways to stop paying. Pick whichever
+          fits.
         </p>
-        <p className="mt-3 text-sm text-red-700">
-          <strong>Important:</strong> All your data will be permanently deleted
-          30 days after that date unless you reactivate.
-        </p>
-        <div className="mt-4 flex justify-end gap-2">
+
+        <div className="mt-4 space-y-3">
+          <div className="rounded-md border border-brand-200 bg-brand-50 p-4">
+            <p className="text-sm font-semibold text-brand-900">
+              Switch to the Free tier
+            </p>
+            <p className="mt-1 text-xs text-brand-900/80">
+              Keep your account, your team, and your data — for free, up to 5
+              employees. You&rsquo;ll keep your current paid features until{" "}
+              <strong>{periodEnd ?? "the end of this period"}</strong>, then
+              automatically move to Free. No refund for time already paid;
+              nothing else charged.
+            </p>
+            <Button
+              onClick={handleDowngradeToFree}
+              disabled={busy}
+              size="sm"
+              className="mt-3"
+            >
+              Switch to Free
+            </Button>
+          </div>
+
+          <div className="rounded-md border border-red-200 bg-red-50 p-4">
+            <p className="text-sm font-semibold text-red-900">
+              Cancel everything
+            </p>
+            <p className="mt-1 text-xs text-red-900/80">
+              Access ends on{" "}
+              <strong>{periodEnd ?? "your current period end"}</strong>, then
+              your account is locked. <strong>All your data is
+              permanently deleted 30 days after that</strong> unless you
+              reactivate.
+            </p>
+            <Button
+              onClick={handleCancel}
+              disabled={busy}
+              size="sm"
+              className="mt-3 bg-red-600 hover:bg-red-700"
+            >
+              Cancel and delete
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-4 flex justify-end">
           <button
             onClick={() => setConfirming(false)}
             className="rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             Keep my plan
           </button>
-          <Button
-            onClick={handleCancel}
-            disabled={busy}
-            className="bg-red-600 hover:bg-red-700"
-          >
-            Cancel subscription
-          </Button>
         </div>
       </Dialog>
     </div>

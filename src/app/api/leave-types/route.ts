@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { leaveTypeSchema } from "@/lib/validations";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
+import { hasFeatureForEnum } from "@/lib/planFeatures";
+import type { AnyPlan } from "@/lib/plans";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -27,9 +29,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const userRole = (session.user as Record<string, unknown>).role as string;
+  const sessionUser = session.user as Record<string, unknown>;
+  const userRole = sessionUser.role as string;
   if (userRole !== "ADMIN") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // Creating custom leave types is a Scale-tier feature. Lower tiers can
+  // still edit the seeded defaults (annual leave, SSP, etc) via PATCH —
+  // only NEW types are gated.
+  const plan = sessionUser.plan as AnyPlan | undefined;
+  if (!hasFeatureForEnum(plan ?? null, "custom_leave_policies")) {
+    return NextResponse.json(
+      {
+        error:
+          "Custom leave types are a Scale-tier feature. Upgrade your plan to create your own.",
+      },
+      { status: 403 }
+    );
   }
 
   try {
@@ -43,11 +60,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const orgId = (session.user as Record<string, unknown>).organizationId as string;
+    const orgId = sessionUser.organizationId as string;
 
     const leaveType = await prisma.leaveType.create({
       data: {
         ...parsed.data,
+        // Zod's .nullable().optional().toUpperCase() can leave us with an
+        // empty string or undefined; normalise to null for the DB.
+        countryCode: parsed.data.countryCode || null,
         organizationId: orgId,
       },
     });

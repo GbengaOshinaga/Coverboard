@@ -8,10 +8,10 @@ import { isValidBillingCountry } from "@/config/billing-countries";
 
 const schema = z.object({
   country: z
-    .string()
+    .string({ required_error: "Please pick a country" })
     .trim()
     .toUpperCase()
-    .length(2)
+    .length(2, "Please pick a country")
     .refine(isValidBillingCountry, "Pick a supported billing country"),
 });
 

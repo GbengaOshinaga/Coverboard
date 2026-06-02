@@ -127,8 +127,15 @@ export default function ChangePlanPage() {
     [summary]
   );
 
+  // Free users see the same grid but every "Switch to X" routes to the
+  // add-payment page with the chosen plan preselected — they need to add
+  // a card AND pick a tier in one step, which the change-plan API can't do.
+  const isFreePlan = summary?.plan === "FREE";
+
   const blockingReason: string | null = useMemo(() => {
     if (!summary) return null;
+    // Free → Paid is a different flow, not a block. Handled below.
+    if (isFreePlan) return null;
     if (!summary.cardAdded) {
       return "Add a payment method before changing plan.";
     }
@@ -140,7 +147,18 @@ export default function ChangePlanPage() {
       return "Your subscription is not in a state that allows plan changes.";
     }
     return null;
-  }, [summary]);
+  }, [summary, isFreePlan]);
+
+  function startPlanChange(planKey: PlanKey) {
+    if (isFreePlan) {
+      // Free user upgrading — they need to pick a tier AND add a card,
+      // which the change-plan endpoint can't do. Hand off to add-payment
+      // with the chosen plan as a query param.
+      router.push(`/settings/billing/add-payment?plan=${planKey}`);
+      return;
+    }
+    setPendingPlan(planKey);
+  }
 
   const isTrialing = summary?.subscriptionStatus === "trialing";
   const periodEnd = summary?.currentPeriodEnd
@@ -266,12 +284,16 @@ export default function ChangePlanPage() {
                   ))}
                 </ul>
                 <Button
-                  onClick={() => setPendingPlan(plan.key)}
+                  onClick={() => startPlanChange(plan.key)}
                   disabled={isCurrent || Boolean(blockingReason)}
                   className="mt-auto w-full shrink-0"
                   variant={isCurrent ? "outline" : "default"}
                 >
-                  {isCurrent ? "Current plan" : `Switch to ${plan.name}`}
+                  {isCurrent
+                    ? "Current plan"
+                    : isFreePlan
+                    ? `Upgrade to ${plan.name}`
+                    : `Switch to ${plan.name}`}
                 </Button>
               </CardContent>
             </Card>
@@ -280,8 +302,9 @@ export default function ChangePlanPage() {
       </div>
 
       <p className="text-xs text-gray-500">
-        Plan changes are prorated. Any unused time on your current plan is credited
-        toward the new plan on your next invoice.
+        {isFreePlan
+          ? "You'll be asked for a card on the next step. Your first invoice is the prorated remainder of the current month; no trial."
+          : "Plan changes are prorated. Any unused time on your current plan is credited toward the new plan on your next invoice."}
       </p>
 
       <Dialog

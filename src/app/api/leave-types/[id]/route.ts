@@ -3,17 +3,12 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
-import { z } from "zod";
+import { leaveTypeUpdateSchema } from "@/lib/validations";
 
-const updateSchema = z.object({
-  name: z.string().min(1).optional(),
-  color: z
-    .string()
-    .regex(/^#[0-9a-fA-F]{6}$/, "Must be a valid hex color")
-    .optional(),
-  isPaid: z.boolean().optional(),
-  defaultDays: z.number().int().min(0).max(365).optional(),
-});
+// Editing existing leave types is admin-gated but NOT plan-gated — even a
+// Free org can rename "Annual Leave" or tweak its default days. Creating
+// new types (POST /api/leave-types) is what the Scale plan gates.
+const updateSchema = leaveTypeUpdateSchema;
 
 async function requireAdmin() {
   const session = await getServerSession(authOptions);
@@ -56,9 +51,15 @@ export async function PATCH(
     return NextResponse.json({ error: "Leave type not found" }, { status: 404 });
   }
 
+  // Empty-string countryCode is "clear the restriction" — normalise to null.
+  const data: Record<string, unknown> = { ...parsed.data };
+  if ("countryCode" in parsed.data && !parsed.data.countryCode) {
+    data.countryCode = null;
+  }
+
   const updated = await prisma.leaveType.update({
     where: { id },
-    data: parsed.data,
+    data,
   });
 
   recordAudit({

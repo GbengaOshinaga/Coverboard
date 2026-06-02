@@ -42,24 +42,26 @@ export async function GET() {
   }
 
   let currentPeriodEnd = org.currentPeriodEnd;
-  if (
-    stripe &&
-    org.stripeSubscriptionId &&
-    org.cancelAtPeriodEnd &&
-    !currentPeriodEnd
-  ) {
+  // Whether the pending cancellation is actually a downgrade-to-Free (set
+  // via `/api/billing/downgrade-to-free`) rather than a hard cancel. The
+  // distinction matters in the UI — hard cancel triggers 30-day deletion;
+  // a downgrade simply moves the org to FREE at period end.
+  let pendingDowngradeToFree = false;
+  if (stripe && org.stripeSubscriptionId && org.cancelAtPeriodEnd) {
     try {
       const sub = await stripe.subscriptions.retrieve(org.stripeSubscriptionId);
       const accessEnd = subscriptionAccessEndDate(sub);
-      if (accessEnd) {
+      if (accessEnd && !currentPeriodEnd) {
         currentPeriodEnd = accessEnd;
         await prisma.organization.update({
           where: { id: orgId },
           data: { currentPeriodEnd: accessEnd },
         });
       }
+      pendingDowngradeToFree =
+        (sub.metadata?.downgrade_target ?? "").toLowerCase() === "free";
     } catch (err) {
-      console.error("Failed to hydrate subscription period end:", err);
+      console.error("Failed to hydrate subscription state:", err);
     }
   }
 
@@ -150,6 +152,7 @@ export async function GET() {
     paymentMethodBrand,
     paymentMethodLast4,
     cancelAtPeriodEnd: org.cancelAtPeriodEnd,
+    pendingDowngradeToFree,
     currentPeriodEnd,
     deletionScheduledFor: org.deletionScheduledFor,
     deletionReason: org.deletionReason,

@@ -50,11 +50,43 @@ export const teamMemberSchema = z
 
 export type TeamMemberInput = z.infer<typeof teamMemberSchema>;
 
+/**
+ * Leave type configuration. Maps directly to Prisma `LeaveType` columns.
+ *
+ * `name`/`color`/`isPaid`/`defaultDays` are the "basics" any tier can edit.
+ * The remaining fields (`category`, `requiresEvidence`, `minNoticeDays`,
+ * `applyProRata`, `countryCode`) are the Scale-tier "custom leave policy
+ * builder" surface. They're all optional here so partial updates work; the
+ * route layer is what gates *creation* of leave types on Scale+.
+ */
 export const leaveTypeSchema = z.object({
   name: z.string().min(1, "Name is required"),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Must be a valid hex color"),
   isPaid: z.boolean(),
   defaultDays: z.number().int().min(1, "Must be at least 1 day"),
+  category: z.enum(["PAID", "UNPAID", "STATUTORY"]).optional(),
+  requiresEvidence: z.boolean().optional(),
+  minNoticeDays: z
+    .number()
+    .int()
+    .min(0, "Notice days cannot be negative")
+    .max(365, "Notice days cannot exceed 365")
+    .optional(),
+  applyProRata: z.boolean().optional(),
+  countryCode: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .length(2, "Country code must be a 2-letter ISO code")
+    .nullable()
+    .optional(),
 });
 
 export type LeaveTypeInput = z.infer<typeof leaveTypeSchema>;
+
+/**
+ * Partial update schema — every field optional. Used by `PATCH
+ * /api/leave-types/[id]`. Reuses the same field validations.
+ */
+export const leaveTypeUpdateSchema = leaveTypeSchema.partial();
+export type LeaveTypeUpdateInput = z.infer<typeof leaveTypeUpdateSchema>;

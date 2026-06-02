@@ -24,6 +24,7 @@ export type OrgRecord = {
 
 export type OrgUpdate = {
   subscriptionStatus?: string;
+  stripeSubscriptionId?: string | null;
   stripePriceId?: string | null;
   plan?: PlanEnum;
   cancelAtPeriodEnd?: boolean;
@@ -106,6 +107,32 @@ export async function handleSubscriptionDeleted(
 ): Promise<void> {
   const org = await deps.findOrgByCustomerId(sub.customer as string);
   if (!org) return;
+
+  // Two distinct cancellation flows feed into this handler:
+  //
+  //   1) Customer-initiated DOWNGRADE to the Free tier. The
+  //      `/api/billing/downgrade-to-free` endpoint cancels the subscription
+  //      at period end with `metadata.downgrade_target = "free"`. When the
+  //      period actually expires we move the org to FREE, NOT LOCKED, and
+  //      skip scheduling deletion — the customer keeps using Coverboard on
+  //      the free tier.
+  //
+  //   2) Plain cancellation (or hard failure). Plan drops to LOCKED and a
+  //      30-day deletion is scheduled, as before.
+  const downgradeTarget = (sub.metadata?.downgrade_target ?? "").toLowerCase();
+
+  if (downgradeTarget === "free") {
+    await deps.updateOrganization(org.id, {
+      subscriptionStatus: "canceled",
+      plan: "FREE",
+      cancelAtPeriodEnd: false,
+      stripeSubscriptionId: null,
+      stripePriceId: null,
+      trialEndsAt: null,
+      currentPeriodEnd: null,
+    });
+    return;
+  }
 
   await deps.updateOrganization(org.id, {
     subscriptionStatus: "canceled",

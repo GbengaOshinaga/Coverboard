@@ -83,11 +83,19 @@ export function weeklyDigestEmail(data: {
   outNextWeek: DigestAbsence[];
   pendingCount: number;
   dashboardUrl: string;
+  /** Per-recipient signed unsubscribe URL. PECR Reg 22 + Gmail bulk-sender. */
+  unsubscribeUrl: string;
+  /** Optional link to in-app preferences for users who want to log in. */
+  preferencesUrl?: string;
 }): { subject: string; html: string } {
   const pendingNote = data.pendingCount > 0
     ? `<div style="background-color:#fef3c7;border-radius:6px;padding:12px 16px;margin-bottom:20px;">
         <p style="margin:0;font-size:13px;color:#92400e;font-weight:600;">${data.pendingCount} pending request${data.pendingCount !== 1 ? "s" : ""} awaiting review</p>
       </div>`
+    : "";
+
+  const preferencesLink = data.preferencesUrl
+    ? ` · <a href="${data.preferencesUrl}" style="color:#9ca3af;text-decoration:underline;">manage email preferences</a>`
     : "";
 
   return {
@@ -111,6 +119,12 @@ export function weeklyDigestEmail(data: {
       </div>
 
       ${button("Open dashboard", data.dashboardUrl)}
+
+      <p style="margin:24px 0 0;padding-top:16px;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af;line-height:1.5;">
+        You&rsquo;re receiving this because you&rsquo;re an admin or manager
+        at ${data.orgName}.
+        <a href="${data.unsubscribeUrl}" style="color:#9ca3af;text-decoration:underline;">Unsubscribe from the weekly digest</a>${preferencesLink}.
+      </p>
     `),
   };
 }

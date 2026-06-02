@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
+import Link from "next/link";
 import {
   Card,
   CardContent,
@@ -225,6 +226,7 @@ export default function AuditPage() {
   }
 
   const planBlocked = denied || !hasAccess;
+  const upgradeBlocked = !hasAccess;
 
   return (
     <div className="space-y-6">
@@ -250,20 +252,30 @@ export default function AuditPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Lock className="h-5 w-5 text-amber-600" />
-              Pro plan required
+              {upgradeBlocked ? "Pro plan required" : "Access unavailable"}
             </CardTitle>
             <CardDescription>
-              Audit trail viewer and CSV exports are part of the Pro plan.
-              Contact us to upgrade.
+              {upgradeBlocked
+                ? "Audit trail viewer and CSV exports are part of the Pro plan. Upgrade anytime from Billing."
+                : "Audit trail is currently unavailable. Please contact support if this continues."}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <a
-              href="mailto:support@coverboard.io"
-              className="text-sm font-medium text-brand-600 hover:text-brand-700"
-            >
-              support@coverboard.io
-            </a>
+            {upgradeBlocked ? (
+              <Link
+                href="/settings/billing/change-plan"
+                className="inline-flex rounded-md bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700"
+              >
+                Upgrade plan
+              </Link>
+            ) : (
+              <a
+                href="mailto:support@coverboard.io"
+                className="text-sm font-medium text-brand-600 hover:text-brand-700"
+              >
+                support@coverboard.io
+              </a>
+            )}
           </CardContent>
         </Card>
       ) : (

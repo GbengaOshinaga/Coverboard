@@ -5,14 +5,22 @@ import { prisma } from "@/lib/prisma";
 import {
   PLAN_DISPLAY_NAME,
   PLAN_MONTHLY_PRICE_GBP,
+  type StripePlanKey,
 } from "@/config/stripePrices";
 import { planKeyForBilling } from "@/lib/billing-plan";
 import { AddPaymentForm } from "./add-payment-form";
 
+const UPGRADE_PLAN_KEYS: StripePlanKey[] = [
+  "starter",
+  "growth",
+  "scale",
+  "pro",
+];
+
 export default async function AddPaymentPage({
   searchParams,
 }: {
-  searchParams: Promise<{ update?: string }>;
+  searchParams: Promise<{ update?: string; plan?: string }>;
 }) {
   const session = await getServerSession(authOptions);
   if (!session?.user) redirect("/login");
@@ -20,7 +28,7 @@ export default async function AddPaymentPage({
   const sessionUser = session.user as Record<string, unknown>;
   if (sessionUser.role !== "ADMIN") redirect("/dashboard");
 
-  const { update } = await searchParams;
+  const { update, plan: planQuery } = await searchParams;
   const updateMode = update === "1" || update === "true";
 
   const orgId = sessionUser.organizationId as string;
@@ -37,9 +45,21 @@ export default async function AddPaymentPage({
 
   if (!org) redirect("/dashboard");
 
-  const planKey = planKeyForBilling(org);
-  const planName = PLAN_DISPLAY_NAME[planKey];
-  const planPrice = PLAN_MONTHLY_PRICE_GBP[planKey];
+  // Free → Paid upgrade: the change-plan page passes ?plan=<tier>. Validate
+  // it strictly — if it's missing, unknown, or the org isn't on FREE, fall
+  // back to the standard add-payment flow.
+  const upgradeToPlanKey: StripePlanKey | null =
+    org.plan === "FREE" &&
+    typeof planQuery === "string" &&
+    UPGRADE_PLAN_KEYS.includes(planQuery.toLowerCase() as StripePlanKey)
+      ? (planQuery.toLowerCase() as StripePlanKey)
+      : null;
+
+  // Display: upgrade mode shows the chosen tier; otherwise show whatever
+  // the org has stored (or the fallback default).
+  const displayPlanKey = upgradeToPlanKey ?? planKeyForBilling(org);
+  const planName = PLAN_DISPLAY_NAME[displayPlanKey];
+  const planPrice = PLAN_MONTHLY_PRICE_GBP[displayPlanKey];
 
   const hasActiveTrial =
     org.subscriptionStatus === "trialing" &&
@@ -64,6 +84,7 @@ export default async function AddPaymentPage({
         trialEndFormatted={trialEndFormatted}
         alreadyAdded={org.cardAdded}
         updateMode={updateMode}
+        upgradeToPlanKey={upgradeToPlanKey}
       />
     </div>
   );

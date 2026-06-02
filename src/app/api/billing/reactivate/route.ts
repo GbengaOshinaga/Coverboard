@@ -26,12 +26,25 @@ export async function POST() {
   }
 
   try {
+    // If the customer previously chose "Switch to Free" we tagged the
+    // subscription with `metadata.downgrade_target = "free"`. Reactivating
+    // means they changed their mind — clear that flag so a future plain
+    // cancellation doesn't accidentally take the downgrade-to-free branch
+    // in the webhook handler.
+    const existing = await stripe.subscriptions.retrieve(
+      org.stripeSubscriptionId
+    );
+    const metadata = { ...(existing.metadata ?? {}) } as Record<string, string>;
+    const hadDowngradeFlag = "downgrade_target" in metadata;
+    delete metadata.downgrade_target;
+
     await stripe.subscriptions.update(org.stripeSubscriptionId, {
       cancel_at_period_end: false,
+      ...(hadDowngradeFlag ? { metadata } : {}),
     });
     await prisma.organization.update({
       where: { id: orgId },
-      data: { cancelAtPeriodEnd: false },
+      data: { cancelAtPeriodEnd: false, subscriptionStatus: "active" },
     });
 
     const { wasScheduled } = await cancelScheduledDeletion({

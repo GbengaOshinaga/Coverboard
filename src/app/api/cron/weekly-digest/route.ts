@@ -4,6 +4,7 @@ import { sendEmail } from "@/lib/email";
 import { weeklyDigestEmail } from "@/lib/email-templates";
 import { verifyCronAuth } from "@/lib/cron-auth";
 import { getAppBaseUrl } from "@/lib/app-url";
+import { mintUnsubscribeToken } from "@/lib/email-unsubscribe";
 
 function startOfWeek(date: Date): Date {
   const d = new Date(date);
@@ -91,7 +92,7 @@ export async function POST(request: Request) {
             role: { in: ["ADMIN", "MANAGER"] },
             digestOptOut: false,
           },
-          select: { name: true, email: true },
+          select: { id: true, name: true, email: true },
         }),
       ]);
 
@@ -113,7 +114,35 @@ export async function POST(request: Request) {
         endDate: r.endDate,
       }));
 
+      const baseUrl = getAppBaseUrl();
+      const unsubscribeSecret = process.env.NEXTAUTH_SECRET;
+
       for (const recipient of recipients) {
+        // Mint a per-recipient unsubscribe token. If NEXTAUTH_SECRET is
+        // missing we still send the email — without the unsubscribe link
+        // it's slightly worse for deliverability but the rest of the
+        // digest is still useful. Log loudly so the misconfiguration is
+        // visible.
+        let unsubscribeUrl = `${baseUrl}/settings/profile`;
+        let listUnsubscribeHeaders: Record<string, string> | undefined;
+        if (unsubscribeSecret) {
+          const token = mintUnsubscribeToken(
+            { userId: recipient.id, kind: "weekly_digest" },
+            unsubscribeSecret
+          );
+          unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?token=${encodeURIComponent(token)}`;
+          listUnsubscribeHeaders = {
+            // RFC 2369 + RFC 8058. Both header values together signal
+            // Gmail / Outlook to show a one-click unsubscribe button.
+            "List-Unsubscribe": `<${unsubscribeUrl}>`,
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+          };
+        } else {
+          console.error(
+            "NEXTAUTH_SECRET is not set — sending weekly digest without a signed unsubscribe link. Set NEXTAUTH_SECRET to fix."
+          );
+        }
+
         const { subject, html } = weeklyDigestEmail({
           recipientName: recipient.name,
           orgName: org.name,
@@ -121,10 +150,17 @@ export async function POST(request: Request) {
           outThisWeek: thisWeekAbsences,
           outNextWeek: nextWeekAbsences,
           pendingCount: pendingRequests,
-          dashboardUrl: `${getAppBaseUrl()}/dashboard`,
+          dashboardUrl: `${baseUrl}/dashboard`,
+          unsubscribeUrl,
+          preferencesUrl: `${baseUrl}/settings/profile`,
         });
 
-        sendEmail({ to: recipient.email, subject, html }).catch((err) =>
+        sendEmail({
+          to: recipient.email,
+          subject,
+          html,
+          headers: listUnsubscribeHeaders,
+        }).catch((err) =>
           console.error(`Digest email error for ${recipient.email}:`, err)
         );
         totalSent++;

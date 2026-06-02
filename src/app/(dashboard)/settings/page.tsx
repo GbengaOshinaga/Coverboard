@@ -15,12 +15,19 @@ import { Plus, MessageSquare, CheckCircle, XCircle, User, ChevronRight, SquareKa
 import { EarningsCoveragePanel } from "@/components/settings/earnings-coverage-panel";
 import { Select } from "@/components/ui/select";
 
+type LeaveCategory = "PAID" | "UNPAID" | "STATUTORY";
+
 type LeaveType = {
   id: string;
   name: string;
   color: string;
   isPaid: boolean;
   defaultDays: number;
+  category: LeaveCategory;
+  requiresEvidence: boolean;
+  minNoticeDays: number;
+  applyProRata: boolean;
+  countryCode: string | null;
 };
 
 type SlackStatus = {
@@ -98,6 +105,11 @@ export default function SettingsPage() {
   const [newColor, setNewColor] = useState("#6366f1");
   const [newDays, setNewDays] = useState("20");
   const [newIsPaid, setNewIsPaid] = useState(true);
+  const [newCategory, setNewCategory] = useState<LeaveCategory>("PAID");
+  const [newRequiresEvidence, setNewRequiresEvidence] = useState(false);
+  const [newMinNoticeDays, setNewMinNoticeDays] = useState("0");
+  const [newApplyProRata, setNewApplyProRata] = useState(false);
+  const [newCountryCode, setNewCountryCode] = useState("");
   const [saving, setSaving] = useState(false);
   const [slackStatus, setSlackStatus] = useState<SlackStatus | null>(null);
   const [jiraStatus, setJiraStatus] = useState<JiraStatus | null>(null);
@@ -114,6 +126,11 @@ export default function SettingsPage() {
   const [editColor, setEditColor] = useState("#6366f1");
   const [editDays, setEditDays] = useState("20");
   const [editIsPaid, setEditIsPaid] = useState(true);
+  const [editCategory, setEditCategory] = useState<LeaveCategory>("PAID");
+  const [editRequiresEvidence, setEditRequiresEvidence] = useState(false);
+  const [editMinNoticeDays, setEditMinNoticeDays] = useState("0");
+  const [editApplyProRata, setEditApplyProRata] = useState(false);
+  const [editCountryCode, setEditCountryCode] = useState("");
   const [editSaving, setEditSaving] = useState(false);
 
   const [earningsCoverage, setEarningsCoverage] = useState<EarningsCoverage[] | null>(null);
@@ -141,6 +158,11 @@ export default function SettingsPage() {
   const canManage =
     sessionStatus === "authenticated" &&
     (userRole === "ADMIN" || userRole === "MANAGER");
+  const userPlan = user?.plan as string | undefined;
+  // Custom leave type creation is gated on Scale+. Editing existing types
+  // is universally allowed for admins. Trial inherits Pro-bundle access.
+  const canCreateCustomLeaveType =
+    userPlan === "SCALE" || userPlan === "PRO" || userPlan === "TRIAL";
 
   const needsUkStatutorySetup = useMemo(
     () =>
@@ -343,6 +365,11 @@ export default function SettingsPage() {
     setEditColor(lt.color);
     setEditDays(String(lt.defaultDays));
     setEditIsPaid(lt.isPaid);
+    setEditCategory(lt.category);
+    setEditRequiresEvidence(lt.requiresEvidence);
+    setEditMinNoticeDays(String(lt.minNoticeDays));
+    setEditApplyProRata(lt.applyProRata);
+    setEditCountryCode(lt.countryCode ?? "");
   }
 
   async function handleEditLeaveType(e: React.FormEvent) {
@@ -357,6 +384,11 @@ export default function SettingsPage() {
         color: editColor,
         isPaid: editIsPaid,
         defaultDays: parseInt(editDays, 10),
+        category: editCategory,
+        requiresEvidence: editRequiresEvidence,
+        minNoticeDays: parseInt(editMinNoticeDays, 10) || 0,
+        applyProRata: editApplyProRata,
+        countryCode: editCountryCode.trim() || null,
       }),
     });
     if (res.ok) {
@@ -469,6 +501,11 @@ export default function SettingsPage() {
         color: newColor,
         isPaid: newIsPaid,
         defaultDays: parseInt(newDays),
+        category: newCategory,
+        requiresEvidence: newRequiresEvidence,
+        minNoticeDays: parseInt(newMinNoticeDays, 10) || 0,
+        applyProRata: newApplyProRata,
+        countryCode: newCountryCode.trim() || null,
       }),
     });
 
@@ -479,9 +516,15 @@ export default function SettingsPage() {
       setNewColor("#6366f1");
       setNewDays("20");
       setNewIsPaid(true);
+      setNewCategory("PAID");
+      setNewRequiresEvidence(false);
+      setNewMinNoticeDays("0");
+      setNewApplyProRata(false);
+      setNewCountryCode("");
       fetchLeaveTypes();
     } else {
-      toast("Failed to add leave type", "error");
+      const data = await res.json().catch(() => null);
+      toast(data?.error ?? "Failed to add leave type", "error");
     }
 
     setSaving(false);
@@ -838,11 +881,30 @@ export default function SettingsPage() {
               size="sm"
               className="shrink-0 sm:mt-0.5"
               onClick={() => setShowAdd(true)}
+              disabled={!canCreateCustomLeaveType}
+              title={
+                canCreateCustomLeaveType
+                  ? undefined
+                  : "Custom leave types are a Scale-tier feature"
+              }
             >
               <Plus className="mr-1 h-3.5 w-3.5" />
               Add type
             </Button>
           </div>
+          {!canCreateCustomLeaveType && (
+            <p className="mt-2 text-xs text-gray-500">
+              Editing the leave types below is available on every plan.
+              Creating new custom types is a{" "}
+              <Link
+                href="/settings/billing/change-plan"
+                className="font-medium text-brand-600 hover:text-brand-700"
+              >
+                Scale-plan feature
+              </Link>
+              .
+            </p>
+          )}
         </CardHeader>
         <CardContent>
           {needsUkStatutorySetup && (
@@ -1387,6 +1449,68 @@ export default function SettingsPage() {
             />
             Paid leave
           </label>
+
+          <div className="space-y-3 rounded-md border border-gray-100 bg-gray-50 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              Policy rules
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Category
+                </label>
+                <select
+                  value={newCategory}
+                  onChange={(e) =>
+                    setNewCategory(e.target.value as LeaveCategory)
+                  }
+                  className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  <option value="PAID">Paid</option>
+                  <option value="UNPAID">Unpaid</option>
+                  <option value="STATUTORY">Statutory</option>
+                </select>
+              </div>
+              <Input
+                id="ltMinNotice"
+                label="Min notice (days)"
+                type="number"
+                min="0"
+                max="365"
+                value={newMinNoticeDays}
+                onChange={(e) => setNewMinNoticeDays(e.target.value)}
+              />
+            </div>
+            <Input
+              id="ltCountryCode"
+              label="Restrict to country (ISO 2-letter, optional)"
+              value={newCountryCode}
+              onChange={(e) => setNewCountryCode(e.target.value)}
+              placeholder="e.g. GB — leave blank for all countries"
+              maxLength={2}
+            />
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={newRequiresEvidence}
+                  onChange={(e) => setNewRequiresEvidence(e.target.checked)}
+                  className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                />
+                Requires evidence (fit note, certificate, etc.)
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={newApplyProRata}
+                  onChange={(e) => setNewApplyProRata(e.target.checked)}
+                  className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                />
+                Pro-rate for part-time and variable-hours
+              </label>
+            </div>
+          </div>
+
           <div className="flex items-center gap-3 pt-2">
             <Button type="submit" disabled={saving}>
               {saving ? "Adding..." : "Add leave type"}
@@ -1450,6 +1574,68 @@ export default function SettingsPage() {
             />
             Paid leave
           </label>
+
+          <div className="space-y-3 rounded-md border border-gray-100 bg-gray-50 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              Policy rules
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Category
+                </label>
+                <select
+                  value={editCategory}
+                  onChange={(e) =>
+                    setEditCategory(e.target.value as LeaveCategory)
+                  }
+                  className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  <option value="PAID">Paid</option>
+                  <option value="UNPAID">Unpaid</option>
+                  <option value="STATUTORY">Statutory</option>
+                </select>
+              </div>
+              <Input
+                id="editLtMinNotice"
+                label="Min notice (days)"
+                type="number"
+                min="0"
+                max="365"
+                value={editMinNoticeDays}
+                onChange={(e) => setEditMinNoticeDays(e.target.value)}
+              />
+            </div>
+            <Input
+              id="editLtCountryCode"
+              label="Restrict to country (ISO 2-letter, optional)"
+              value={editCountryCode}
+              onChange={(e) => setEditCountryCode(e.target.value)}
+              placeholder="e.g. GB — leave blank for all countries"
+              maxLength={2}
+            />
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={editRequiresEvidence}
+                  onChange={(e) => setEditRequiresEvidence(e.target.checked)}
+                  className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                />
+                Requires evidence (fit note, certificate, etc.)
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={editApplyProRata}
+                  onChange={(e) => setEditApplyProRata(e.target.checked)}
+                  className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                />
+                Pro-rate for part-time and variable-hours
+              </label>
+            </div>
+          </div>
+
           <div className="flex items-center gap-3 pt-2">
             <Button type="submit" disabled={editSaving}>
               {editSaving ? "Saving..." : "Save changes"}

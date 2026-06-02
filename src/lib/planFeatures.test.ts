@@ -65,10 +65,16 @@ test("scale plan adds workforce-analytics tier on top of growth", () => {
   assert.equal(hasFeature("scale", "priority_support"), true);
 });
 
+test("scale plan adds the custom-leave-policies builder gate", () => {
+  // Moved from Pro to Scale 2026-06-02 — the builder is a Scale feature
+  // per the pricing page copy.
+  assert.equal(hasFeature("scale", "custom_leave_policies"), true);
+});
+
 test("scale plan does NOT get pro-only features", () => {
   assert.equal(hasFeature("scale", "api_access"), false);
   assert.equal(hasFeature("scale", "audit_exports"), false);
-  assert.equal(hasFeature("scale", "custom_leave_policies"), false);
+  assert.equal(hasFeature("scale", "gdpr_data_residency"), false);
 });
 
 test("pro plan includes everything", () => {

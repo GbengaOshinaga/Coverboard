@@ -254,6 +254,73 @@ test("subscription.deleted → locks plan, schedules deletion, sends both emails
   assert.deepEqual(emailNames, ["deletionScheduled", "subscriptionCanceled"]);
 });
 
+test("subscription.deleted with downgrade_target=free → moves org to FREE, clears Stripe IDs, no deletion", async () => {
+  const { deps, updates, emails, calls } = makeDeps(
+    makeOrg({ plan: "GROWTH" })
+  );
+  await dispatchStripeEvent(
+    subscriptionEvent("customer.subscription.deleted", {
+      customer: "cus_1",
+      metadata: { downgrade_target: "free" },
+    } as unknown as Partial<Stripe.Subscription> & { customer: string }),
+    deps
+  );
+  assert.equal(updates[0]!.plan, "FREE");
+  assert.equal(updates[0]!.subscriptionStatus, "canceled");
+  assert.equal(updates[0]!.stripeSubscriptionId, null);
+  assert.equal(updates[0]!.stripePriceId, null);
+  // Critical: no scheduleDeletion call, no "your subscription is canceled" email.
+  assert.equal(
+    calls.filter((c) => c.name === "scheduleDeletion").length,
+    0,
+    "downgrading must NOT schedule deletion"
+  );
+  assert.equal(
+    emails.length,
+    0,
+    "downgrading must NOT email the cancellation notice"
+  );
+});
+
+test("subscription.deleted with downgrade_target value other than 'free' falls through to the plain cancel path", async () => {
+  // Defensive: someone (maybe a future tier) sets metadata.downgrade_target
+  // to some unknown value. The handler should NOT silently move to FREE —
+  // it should take the safe cancel path.
+  const { deps, updates, calls } = makeDeps(makeOrg({ plan: "GROWTH" }));
+  await dispatchStripeEvent(
+    subscriptionEvent("customer.subscription.deleted", {
+      customer: "cus_1",
+      metadata: { downgrade_target: "mystery_tier" },
+    } as unknown as Partial<Stripe.Subscription> & { customer: string }),
+    deps
+  );
+  assert.equal(updates[0]!.plan, "LOCKED");
+  assert.equal(
+    calls.filter((c) => c.name === "scheduleDeletion").length,
+    1
+  );
+});
+
+test("downgrade_target=FREE (uppercase) is normalised — defensive matching", () => {
+  // The handler lowercases the metadata value, so an admin manually setting
+  // the tag in Stripe Dashboard with uppercase still works.
+  return (async () => {
+    const { deps, updates, calls } = makeDeps(makeOrg({ plan: "PRO" }));
+    await dispatchStripeEvent(
+      subscriptionEvent("customer.subscription.deleted", {
+        customer: "cus_1",
+        metadata: { downgrade_target: "FREE" },
+      } as unknown as Partial<Stripe.Subscription> & { customer: string }),
+      deps
+    );
+    assert.equal(updates[0]!.plan, "FREE");
+    assert.equal(
+      calls.filter((c) => c.name === "scheduleDeletion").length,
+      0
+    );
+  })();
+});
+
 // ---------- customer.subscription.paused ----------
 
 test("subscription.paused → status=paused, plan=LOCKED, grace period set, account_paused email", async () => {
