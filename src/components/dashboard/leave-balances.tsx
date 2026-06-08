@@ -95,7 +95,7 @@ export function LeaveBalances({ balances }: { balances: LeaveBalance[] }) {
                 </div>
 
                 {/* Details row */}
-                <div className="mt-1 flex gap-3 text-[11px] text-gray-400">
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-400">
                   <span>{balance.used} used</span>
                   {balance.pending > 0 && (
                     <span>{balance.pending} pending</span>

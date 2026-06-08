@@ -20,21 +20,23 @@ function PricingCard({
 
   return (
     <div
-      className={`relative flex h-full min-h-0 flex-col rounded-2xl border bg-white p-5 sm:p-6 ${
+      className={`flex h-full flex-col rounded-2xl border bg-white p-5 sm:p-6 ${
         tier.highlighted
-          ? "border-brand-300 shadow-xl shadow-brand-100/50 ring-2 ring-brand-500/20"
+          ? "border-brand-300 shadow-lg shadow-brand-100/40 ring-2 ring-brand-500/15"
           : "border-gray-200 shadow-sm"
-      } ${tier.highlighted && !compact ? "xl:py-7" : ""}`}
+      }`}
     >
-      {tier.badge && tier.highlighted && (
-        <div className="absolute -top-3 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-brand-600 px-3 py-1 text-xs font-semibold text-white">
+      {tier.badge && tier.highlighted ? (
+        <span className="mb-3 inline-flex w-fit rounded-full bg-brand-600 px-3 py-1 text-xs font-semibold text-white">
           {tier.badge}
-        </div>
-      )}
+        </span>
+      ) : !compact ? (
+        <span className="mb-3 block h-[26px]" aria-hidden />
+      ) : null}
 
-      <div className={tier.highlighted ? "pt-2" : ""}>
+      <div>
         <h3 className="text-lg font-semibold text-gray-900">{tier.name}</h3>
-        <p className="mt-0.5 text-xs text-gray-500 leading-snug">{tier.tagline}</p>
+        <p className="mt-1 text-xs leading-snug text-gray-500">{tier.tagline}</p>
 
         <div className="mt-4 flex items-baseline gap-1">
           {isFree ? (
@@ -89,11 +91,8 @@ function PricingCard({
 }
 
 export function PricingSection() {
-  const highlightIndex = PRICING.tiers.findIndex((t) => t.highlighted);
-  const beforeHighlight = PRICING.tiers.slice(0, Math.max(0, highlightIndex));
-  const highlighted =
-    highlightIndex >= 0 ? PRICING.tiers[highlightIndex] : undefined;
-  const afterHighlight = PRICING.tiers.slice(highlightIndex + 1);
+  const topRow = PRICING.tiers.slice(0, 3);
+  const bottomRow = PRICING.tiers.slice(3);
 
   return (
     <section id="pricing" className="bg-white py-20 md:py-28">
@@ -109,20 +108,20 @@ export function PricingSection() {
           </p>
         </div>
 
-        {/* Mobile & tablet: horizontal scroll */}
-        <div className="xl:hidden">
-          <p className="mb-3 text-center text-xs text-gray-500 sm:hidden">
+        {/* Phone & small tablet: swipeable cards */}
+        <div className="lg:hidden">
+          <p className="mb-4 text-center text-xs text-gray-500">
             Swipe to compare all plans
           </p>
           <div
-            className="-mx-6 flex snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-contain px-6 pb-4 [scrollbar-width:thin]"
+            className="-mx-6 flex snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-contain px-6 pb-2 pt-1 [scrollbar-width:thin]"
             role="region"
             aria-label="Pricing plans"
           >
             {PRICING.tiers.map((tier) => (
               <div
                 key={tier.name}
-                className="w-[min(100%,280px)] shrink-0 snap-center sm:w-[300px]"
+                className="w-[min(88vw,300px)] shrink-0 snap-center sm:w-[300px]"
               >
                 <PricingCard tier={tier} compact />
               </div>
@@ -130,37 +129,18 @@ export function PricingSection() {
           </div>
         </div>
 
-        {/* Large screens: featured centre + flanking tiers */}
-        <div className="hidden xl:block">
-          <div className="grid grid-cols-6 items-stretch gap-4">
-            {beforeHighlight.map((tier) => (
-              <div key={tier.name} className="col-span-1">
-                <PricingCard tier={tier} />
-              </div>
-            ))}
-            {highlighted && (
-              <div className="col-span-2">
-                <PricingCard tier={highlighted} />
-              </div>
-            )}
-            {afterHighlight.map((tier) => (
-              <div key={tier.name} className="col-span-1">
-                <PricingCard tier={tier} />
-              </div>
+        {/* Desktop: 3 + 2 grid */}
+        <div className="mx-auto hidden max-w-5xl lg:block">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+            {topRow.map((tier) => (
+              <PricingCard key={tier.name} tier={tier} />
             ))}
           </div>
-        </div>
-
-        {/* Medium-large: 3 + 2 centred rows */}
-        <div className="hidden lg:grid xl:hidden lg:grid-cols-3 lg:gap-5 lg:max-w-5xl lg:mx-auto">
-          {PRICING.tiers.slice(0, 3).map((tier) => (
-            <PricingCard key={tier.name} tier={tier} />
-          ))}
-        </div>
-        <div className="mt-5 hidden lg:grid xl:hidden lg:grid-cols-2 lg:gap-5 lg:max-w-3xl lg:mx-auto">
-          {PRICING.tiers.slice(3).map((tier) => (
-            <PricingCard key={tier.name} tier={tier} />
-          ))}
+          <div className="mx-auto mt-5 grid max-w-3xl grid-cols-1 gap-5 md:grid-cols-2">
+            {bottomRow.map((tier) => (
+              <PricingCard key={tier.name} tier={tier} />
+            ))}
+          </div>
         </div>
 
         <p className="mt-10 text-center text-sm text-gray-500">

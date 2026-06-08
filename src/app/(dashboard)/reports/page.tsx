@@ -6,6 +6,7 @@ import {
   Card,
   CardContent,
   CardHeader,
+  CardHeaderIntro,
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
@@ -195,11 +196,30 @@ type RolloverPreviewRow = {
 
 export default function ReportsPage() {
   const { data: session } = useSession();
+
+  // Plan/role flags are derived from the session and used both to choose the
+  // initial tab below and to filter the visible tab list later. Declared
+  // here (above any useState) so the lazy-initializer for activeTab can
+  // read them without hitting the temporal dead zone.
+  const user = session?.user as Record<string, unknown> | undefined;
+  const userRole = user?.role as string | undefined;
+  const isAdmin = userRole === "ADMIN";
+  const userPlan = user?.plan as string | undefined;
+  // Absence trends + scheduled compliance reports are Scale-tier features.
+  // Trial inherits Pro-bundle access so the tab is visible during the
+  // 14-day trial too.
+  const hasAbsenceAnalytics =
+    userPlan === "SCALE" || userPlan === "PRO" || userPlan === "TRIAL";
+
   const [report, setReport] = useState<UKReport | null>(null);
   const [hasUkWorkforce, setHasUkWorkforce] = useState(true);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<ActiveTab>("analytics");
+  // Land on Operations when the user's plan unlocks it (Scale+); fall back
+  // to Analytics for lower tiers where Operations is filtered out.
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() =>
+    hasAbsenceAnalytics ? "operations" : "analytics"
+  );
   const [threshold, setThreshold] = useState(200);
 
   const [variableUsers, setVariableUsers] = useState<VariableHoursUser[]>([]);
@@ -229,16 +249,6 @@ export default function ReportsPage() {
   const [rolloverProcessing, setRolloverProcessing] = useState(false);
 
   const { toast } = useToast();
-
-  const user = session?.user as Record<string, unknown> | undefined;
-  const userRole = user?.role as string | undefined;
-  const isAdmin = userRole === "ADMIN";
-  const userPlan = user?.plan as string | undefined;
-  // Absence trends + scheduled compliance reports are Scale-tier features.
-  // Trial inherits Pro-bundle access so the tab is visible during the
-  // 14-day trial too.
-  const hasAbsenceAnalytics =
-    userPlan === "SCALE" || userPlan === "PRO" || userPlan === "TRIAL";
 
   const fetchReport = useCallback(async () => {
     setLoading(true);
@@ -273,9 +283,9 @@ export default function ReportsPage() {
         activeTab
       )
     ) {
-      setActiveTab("analytics");
+      setActiveTab(hasAbsenceAnalytics ? "operations" : "analytics");
     }
-  }, [hasUkWorkforce, activeTab]);
+  }, [hasUkWorkforce, hasAbsenceAnalytics, activeTab]);
 
   useEffect(() => {
     async function fetchAnalytics() {
@@ -624,11 +634,11 @@ export default function ReportsPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
+        <div className="space-y-2">
           <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">
             Reports
           </h1>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm leading-relaxed text-gray-500">
             Workforce analytics
             {hasUkWorkforce
               ? " and UK compliance reporting"
@@ -743,7 +753,7 @@ export default function ReportsPage() {
             <Card>
               <CardHeader>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                  <div>
+                  <CardHeaderIntro>
                     <CardTitle>Bradford Factor scores</CardTitle>
                     <CardDescription>
                       S&sup2; &times; D — higher scores indicate frequent
@@ -751,9 +761,9 @@ export default function ReportsPage() {
                       and total sick days (D) over the last 12 months.
                     </CardDescription>
                     {ukOnlyNote && (
-                      <p className="mt-2 text-xs text-gray-500">{ukOnlyNote}</p>
+                      <p className="text-xs text-gray-500">{ukOnlyNote}</p>
                     )}
-                  </div>
+                  </CardHeaderIntro>
                   <div className="flex items-end gap-2">
                     <Input
                       id="threshold"
@@ -845,7 +855,7 @@ export default function ReportsPage() {
             <Card>
               <CardHeader>
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <CardHeaderIntro>
                     <CardTitle>Right to work verification</CardTitle>
                     <CardDescription>
                       Compliance status for all UK employees. Unverified
@@ -859,9 +869,9 @@ export default function ReportsPage() {
                         : ""}
                     </CardDescription>
                     {ukOnlyNote && (
-                      <p className="mt-2 text-xs text-gray-500">{ukOnlyNote}</p>
+                      <p className="text-xs text-gray-500">{ukOnlyNote}</p>
                     )}
-                  </div>
+                  </CardHeaderIntro>
                   <Button
                     size="sm"
                     variant="outline"
@@ -926,14 +936,14 @@ export default function ReportsPage() {
             <Card>
               <CardHeader>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                  <div>
+                  <CardHeaderIntro>
                     <CardTitle>Variable and zero-hours tracking</CardTitle>
                     <CardDescription>
                       Record weekly hours for variable-hours and zero-hours
                       employees. The last 52 weeks are used to calculate their
                       FTE ratio and pro-rated annual leave entitlement.
                     </CardDescription>
-                  </div>
+                  </CardHeaderIntro>
                   {selectedUser && (
                     <Button size="sm" onClick={() => setShowAddHours(true)}>
                       <Plus className="mr-1 h-3.5 w-3.5" />
@@ -1034,15 +1044,15 @@ export default function ReportsPage() {
             <Card>
               <CardHeader>
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <CardHeaderIntro>
                     <CardTitle>Holiday usage</CardTitle>
                     <CardDescription>
                       Annual leave days taken per UK employee this year.
                     </CardDescription>
                     {ukOnlyNote && (
-                      <p className="mt-2 text-xs text-gray-500">{ukOnlyNote}</p>
+                      <p className="text-xs text-gray-500">{ukOnlyNote}</p>
                     )}
-                  </div>
+                  </CardHeaderIntro>
                   <Button
                     size="sm"
                     variant="outline"
@@ -1101,16 +1111,16 @@ export default function ReportsPage() {
             <Card>
               <CardHeader>
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <CardHeaderIntro>
                     <CardTitle>SSP liability</CardTitle>
                     <CardDescription>
                       Employees currently on Statutory Sick Pay with estimated
                       costs.
                     </CardDescription>
                     {ukOnlyNote && (
-                      <p className="mt-2 text-xs text-gray-500">{ukOnlyNote}</p>
+                      <p className="text-xs text-gray-500">{ukOnlyNote}</p>
                     )}
-                  </div>
+                  </CardHeaderIntro>
                   <Button
                     size="sm"
                     variant="outline"
@@ -1173,16 +1183,16 @@ export default function ReportsPage() {
             <Card>
               <CardHeader>
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <CardHeaderIntro>
                     <CardTitle>Parental leave tracker</CardTitle>
                     <CardDescription>
                       Active statutory parental leave with KIT (Keeping In
                       Touch) day usage. Click a KIT cell to edit.
                     </CardDescription>
                     {ukOnlyNote && (
-                      <p className="mt-2 text-xs text-gray-500">{ukOnlyNote}</p>
+                      <p className="text-xs text-gray-500">{ukOnlyNote}</p>
                     )}
-                  </div>
+                  </CardHeaderIntro>
                   <Button
                     size="sm"
                     variant="outline"
@@ -1541,7 +1551,7 @@ export default function ReportsPage() {
             <Card>
               <CardHeader>
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <CardHeaderIntro>
                     <CardTitle>Payroll export</CardTitle>
                     <CardDescription>
                       Approved leave in a date range with the legally
@@ -1553,7 +1563,7 @@ export default function ReportsPage() {
                       <code>recalculated</code> when computed now for
                       annual leave requests lacking a stored rate.
                     </CardDescription>
-                  </div>
+                  </CardHeaderIntro>
                   <Button
                     size="sm"
                     variant="outline"

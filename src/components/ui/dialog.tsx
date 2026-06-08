@@ -46,7 +46,9 @@ export function Dialog({
       <div className="fixed inset-0 bg-black/50" />
       <div
         className={cn(
-          "relative z-50 mx-4 w-full max-w-lg rounded-lg bg-white p-4 shadow-xl sm:mx-auto sm:p-6",
+          // Cap height to viewport and let the body scroll so tall dialogs
+          // (e.g. the member form) don't overflow off-screen on phones.
+          "relative z-50 mx-4 flex max-h-[90vh] w-full max-w-lg flex-col overflow-y-auto rounded-lg bg-white p-4 shadow-xl sm:mx-auto sm:p-6",
           className
         )}
       >

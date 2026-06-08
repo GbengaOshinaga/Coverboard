@@ -115,7 +115,7 @@ export function MemberCard({
       </div>
 
       {(showViewLink || onEdit || onAssignRegion) && (
-        <div className="flex flex-col gap-1.5">
+        <div className="flex shrink-0 flex-col gap-1.5">
           {showViewLink && (
             <Link
               href={`/team/${member.id}`}

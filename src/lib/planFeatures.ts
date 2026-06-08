@@ -61,8 +61,6 @@ const SCALE_FEATURES = [
 
 const PRO_FEATURES = [
   ...SCALE_FEATURES,
-  "gdpr_data_residency",
-  "api_access",
   "audit_exports",
 ] as const;
 

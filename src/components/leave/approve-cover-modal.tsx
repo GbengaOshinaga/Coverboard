@@ -81,7 +81,7 @@ export function ApproveCoverModal({
           Approving anyway will record a cover override against this request.
           The action is logged in your audit history.
         </p>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <Button
             type="button"
             onClick={onConfirm}

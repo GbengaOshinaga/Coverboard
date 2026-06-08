@@ -168,20 +168,30 @@ export async function PATCH(
       },
     });
 
-    // ── Bradford Factor recalculation on SSP approval ─────────────────
-    if (status === "APPROVED" && /SSP/i.test(leaveRequest.leaveType.name)) {
+    // ── Bradford Factor recalculation on any sickness status change ───
+    // Recompute whenever a sickness/SSP request changes status — not just
+    // on APPROVED — so downgrades (APPROVED → REJECTED/CANCELLED) also
+    // clear stale score contributions. The query itself filters to
+    // APPROVED rows, so the recount stays correct.
+    if (
+      status !== undefined &&
+      /SSP|Sick/i.test(leaveRequest.leaveType.name)
+    ) {
       prisma.leaveRequest
         .findMany({
           where: {
             userId: leaveRequest.userId,
-            leaveType: { name: { contains: "SSP" } },
+            OR: [
+              { leaveType: { name: { contains: "SSP" } } },
+              { leaveType: { name: { contains: "Sick" } } },
+            ],
             status: "APPROVED",
           },
           select: { startDate: true, endDate: true },
         })
-        .then((sspRequests) => {
-          const spells = sspRequests.length;
-          const days = sspRequests.reduce(
+        .then((sickRequests) => {
+          const spells = sickRequests.length;
+          const days = sickRequests.reduce(
             (sum, r) => sum + countWeekdays(r.startDate, r.endDate),
             0
           );

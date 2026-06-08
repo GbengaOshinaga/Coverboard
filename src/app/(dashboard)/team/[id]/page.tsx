@@ -25,6 +25,8 @@ import { Dialog } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 import { COUNTRY_NAMES } from "@/lib/utils";
 import { formatEmploymentType } from "@/lib/employment-types";
+import { ActivityLog } from "@/components/team/activity-log";
+import { hasAuditTrail, type AnyPlan } from "@/lib/plans";
 import {
   parseEarningsCsv,
   findIntraFileDuplicates,
@@ -623,9 +625,16 @@ export default function EmployeeProfilePage({
   const sessionUserId = (session?.user as Record<string, unknown> | undefined)?.id as
     | string
     | undefined;
+  const userPlan = (session?.user as Record<string, unknown> | undefined)?.plan as
+    | AnyPlan
+    | undefined;
   const canManage = userRole === "ADMIN" || userRole === "MANAGER";
   const isAdmin = userRole === "ADMIN";
+  // Activity log surfaces the read-side audit trail on a per-member basis;
+  // backed by the same Pro-plan gate as the org-wide audit trail.
+  const canSeeActivity = isAdmin && hasAuditTrail(userPlan);
 
+  const [activeTab, setActiveTab] = useState<"overview" | "activity">("overview");
   const [member, setMember] = useState<Member | null>(null);
   const [stats, setStats] = useState<EarningsStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -691,6 +700,44 @@ export default function EmployeeProfilePage({
         </div>
       </div>
 
+      {/* Tab strip — Activity log is Pro-plan + admin only */}
+      {canSeeActivity && (
+        <div
+          role="tablist"
+          aria-label="Employee profile sections"
+          className="flex gap-1 border-b border-gray-200"
+        >
+          {(
+            [
+              { id: "overview" as const, label: "Overview" },
+              { id: "activity" as const, label: "Activity log" },
+            ]
+          ).map((tab) => {
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                role="tab"
+                aria-selected={active}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-3 py-2 text-sm font-medium transition-colors ${
+                  active
+                    ? "border-b-2 border-brand-600 text-brand-700"
+                    : "border-b-2 border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {activeTab === "activity" && canSeeActivity && (
+        <ActivityLog memberId={memberId} />
+      )}
+
+      {activeTab === "overview" && (<>
       {/* Member overview */}
       <Card>
         <CardContent className="pt-6">
@@ -989,6 +1036,7 @@ export default function EmployeeProfilePage({
         </CardContent>
       </Card>
       )}
+      </>)}
     </div>
   );
 }

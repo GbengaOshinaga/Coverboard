@@ -72,9 +72,7 @@ test("scale plan adds the custom-leave-policies builder gate", () => {
 });
 
 test("scale plan does NOT get pro-only features", () => {
-  assert.equal(hasFeature("scale", "api_access"), false);
   assert.equal(hasFeature("scale", "audit_exports"), false);
-  assert.equal(hasFeature("scale", "gdpr_data_residency"), false);
 });
 
 test("pro plan includes everything", () => {
@@ -82,7 +80,7 @@ test("pro plan includes everything", () => {
   assert.equal(hasFeature("pro", "bradford_factor"), true);
   assert.equal(hasFeature("pro", "earnings_history"), true);
   assert.equal(hasFeature("pro", "compliance_reports"), true);
-  assert.equal(hasFeature("pro", "api_access"), true);
+  assert.equal(hasFeature("pro", "audit_exports"), true);
   assert.equal(hasFeature("pro", "custom_leave_policies"), true);
   assert.equal(hasFeature("pro", "audit_exports"), true);
 });
@@ -96,7 +94,7 @@ test("trial plan gets the full Pro feature set", () => {
 test("locked plan has zero features", () => {
   assert.equal(hasFeature("locked", "annual_leave"), false);
   assert.equal(hasFeature("locked", "bradford_factor"), false);
-  assert.equal(hasFeature("locked", "api_access"), false);
+  assert.equal(hasFeature("locked", "audit_exports"), false);
 });
 
 // ---------- hasFeature: edge cases ----------
@@ -117,21 +115,21 @@ test("unknown feature returns false even on pro", () => {
 // ---------- hasFeatureForEnum: Prisma enum mapping ----------
 
 test("hasFeatureForEnum maps uppercase enum values", () => {
-  assert.equal(hasFeatureForEnum("PRO", "api_access"), true);
+  assert.equal(hasFeatureForEnum("PRO", "audit_exports"), true);
   assert.equal(hasFeatureForEnum("FREE", "annual_leave"), true);
   assert.equal(hasFeatureForEnum("FREE", "pro_rata"), false);
   assert.equal(hasFeatureForEnum("STARTER", "pro_rata"), true);
-  assert.equal(hasFeatureForEnum("STARTER", "api_access"), false);
+  assert.equal(hasFeatureForEnum("STARTER", "audit_exports"), false);
 });
 
 test("hasFeatureForEnum TRIAL behaves like pro (full access)", () => {
-  assert.equal(hasFeatureForEnum("TRIAL", "api_access"), true);
+  assert.equal(hasFeatureForEnum("TRIAL", "audit_exports"), true);
   assert.equal(hasFeatureForEnum("TRIAL", "earnings_history"), true);
 });
 
 test("hasFeatureForEnum LOCKED has no features", () => {
   assert.equal(hasFeatureForEnum("LOCKED", "annual_leave"), false);
-  assert.equal(hasFeatureForEnum("LOCKED", "api_access"), false);
+  assert.equal(hasFeatureForEnum("LOCKED", "audit_exports"), false);
 });
 
 // ---------- minimumPlanFor ----------
@@ -141,7 +139,7 @@ test("minimumPlanFor returns the lowest tier that includes a feature", () => {
   assert.equal(minimumPlanFor("pro_rata"), "starter");
   assert.equal(minimumPlanFor("bradford_factor"), "growth");
   assert.equal(minimumPlanFor("compliance_reports"), "scale");
-  assert.equal(minimumPlanFor("api_access"), "pro");
+  assert.equal(minimumPlanFor("audit_exports"), "pro");
 });
 
 test("minimumPlanFor returns null for unknown features", () => {

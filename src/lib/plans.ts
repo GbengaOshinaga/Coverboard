@@ -130,13 +130,6 @@ export function hasSlaSupport(
   return planAtLeast(normalizeForFeatureGate(plan), "PRO");
 }
 
-/** Whether the plan unlocks external API access. */
-export function hasApiAccess(
-  plan: AnyPlan | null | undefined
-): boolean {
-  return planAtLeast(normalizeForFeatureGate(plan), "PRO");
-}
-
 /** Whether the plan unlocks the audit trail viewer & export. */
 export function hasAuditTrail(
   plan: AnyPlan | null | undefined

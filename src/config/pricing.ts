@@ -110,10 +110,8 @@ export const PRICING: PricingConfig = {
       highlighted: false,
       features: [
         "Everything in Scale",
-        "Full API access",
+        "Activity log — see who viewed each profile, sickness note, and report",
         "Audit log + SAR exports",
-        "GDPR data residency config",
-        "Custom leave policies",
         "1-hour support response (UK business hours)",
       ],
     },

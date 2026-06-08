@@ -138,7 +138,7 @@ export function MemberForm({
         required
       />
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Select
           id="memberRole"
           label="Role"
@@ -171,7 +171,7 @@ export function MemberForm({
         onChange={(e) => setWorkCountry(e.target.value)}
       />
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Select
           id="employmentType"
           label="Employment"
@@ -195,7 +195,7 @@ export function MemberForm({
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Input
           id="fteRatio"
           label="FTE ratio"
@@ -227,7 +227,7 @@ export function MemberForm({
         onChange={(e) => setRightToWorkVerified(e.target.value)}
       />
 
-      <div className="flex items-center gap-3 pt-2">
+      <div className="flex flex-wrap items-center gap-2 pt-2 sm:gap-3">
         <Button type="submit" disabled={loading}>
           {loading
             ? isEdit

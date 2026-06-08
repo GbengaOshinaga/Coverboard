@@ -77,9 +77,8 @@ const PLANS: ReadonlyArray<{
     blurb: "Enterprise-ready",
     features: [
       "Everything in Scale",
-      "Full API access",
+      "Activity log — see who viewed each profile, sickness note, and report",
       "Audit trail + SAR exports",
-      "GDPR data residency",
       "1-hour support response (UK hours)",
     ],
   },

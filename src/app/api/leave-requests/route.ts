@@ -297,6 +297,10 @@ export async function POST(request: Request) {
     // leave request — the absence is still a fact — but the monetary
     // side is gated on statutory eligibility.
     const isSspLeave = leaveTypeConfig.name.includes("SSP");
+    // Bradford Factor covers any sickness-type leave, not just SSP-eligible
+    // statutory absence. We track this separately so we can keep the SSP
+    // payment branch narrow while still scoring all sickness absence.
+    const isSicknessLeave = isSspLeave || leaveTypeConfig.name.includes("Sick");
     let sspInfo:
       | {
           eligible: boolean;
@@ -447,20 +451,27 @@ export async function POST(request: Request) {
     });
 
     // ── Bradford Factor recalculation ─────────────────────────────────
-    // Recompute on every SSP/sickness event so reports always reflect live data.
-    if (isSspLeave) {
+    // Bradford measures *taken* absence, so only APPROVED requests count.
+    // A freshly-created request defaults to PENDING and will roll into the
+    // stored score when it's approved (handled in the [id] PATCH route).
+    // We still recompute on create so any prior APPROVED rows for this user
+    // stay consistent (e.g. cleaning up an orphaned stored value).
+    if (isSicknessLeave) {
       prisma.leaveRequest
         .findMany({
           where: {
             userId,
-            leaveType: { name: { contains: "SSP" } },
-            status: { in: ["APPROVED", "PENDING"] },
+            OR: [
+              { leaveType: { name: { contains: "SSP" } } },
+              { leaveType: { name: { contains: "Sick" } } },
+            ],
+            status: "APPROVED",
           },
           select: { startDate: true, endDate: true },
         })
-        .then((sspRequests) => {
-          const spells = sspRequests.length;
-          const days = sspRequests.reduce(
+        .then((sickRequests) => {
+          const spells = sickRequests.length;
+          const days = sickRequests.reduce(
             (sum, r) => sum + countWeekdays(r.startDate, r.endDate),
             0
           );

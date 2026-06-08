@@ -186,10 +186,9 @@ const scaleHighlights = [
 ];
 
 const proHighlights = [
-  "Custom leave policies tailored to your organisation",
-  "GDPR data residency configuration",
+  "Activity log — see who viewed each profile, sickness note, and report",
   "Audit trail exports for governance and investigations",
-  "Priority email response — everything in Scale included",
+  "1-hour priority email response — everything in Scale included",
 ];
 
 function ScaleAndProSection() {
@@ -210,7 +209,7 @@ function ScaleAndProSection() {
             operations depth — statutory tracking, payroll-ready figures, and
             reporting your finance team can rely on.{" "}
             <span className="font-medium text-gray-800">Pro</span> layers on
-            policy control, residency, and exportable audit history for
+            tamper-evident activity logs and exportable audit history for
             organisations that answer to regulators, boards, or insurers.
           </p>
         </div>
@@ -249,9 +248,9 @@ function ScaleAndProSection() {
             </p>
             <p className="mt-1 text-sm text-gray-500">Enterprise-ready</p>
             <p className="mt-4 text-sm text-gray-700 leading-relaxed">
-              For employers who need configurable policies, data residency
-              choices, and a tamper-evident activity trail alongside the same
-              leave engine your managers already use.
+              For employers who need a tamper-evident activity trail, SAR
+              exports, and SLA-backed support alongside the same leave
+              engine your managers already use.
             </p>
             <ul className="mt-6 space-y-3">
               {proHighlights.map((item) => (
@@ -444,8 +443,15 @@ function Footer() {
           </div>
         </div>
 
-        <div className="mt-12 pt-8 border-t border-gray-800 text-center text-sm text-gray-500">
-          &copy; {new Date().getFullYear()} Coverboard. All rights reserved.
+        <div className="mt-12 pt-8 border-t border-gray-800 text-center text-sm text-gray-500 space-y-2">
+          <p>
+            UK-resident data &mdash; stored in London on AWS{" "}
+            <code className="font-mono text-xs">eu-west-2</code> via Supabase.
+            Compliant with the UK GDPR.
+          </p>
+          <p>
+            &copy; {new Date().getFullYear()} Coverboard. All rights reserved.
+          </p>
         </div>
       </div>
     </footer>

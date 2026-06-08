@@ -22,7 +22,7 @@ export function CardHeader({
 }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("flex flex-col space-y-1.5 p-6", className)}
+      className={cn("flex flex-col space-y-2.5 p-6", className)}
       {...props}
     />
   );
@@ -35,7 +35,7 @@ export function CardTitle({
   return (
     <h3
       className={cn(
-        "text-lg font-semibold leading-none tracking-tight",
+        "text-lg font-semibold leading-snug tracking-tight",
         className
       )}
       {...props}
@@ -49,10 +49,18 @@ export function CardDescription({
 }: HTMLAttributes<HTMLParagraphElement>) {
   return (
     <p
-      className={cn("text-sm text-gray-500", className)}
+      className={cn("text-sm leading-relaxed text-gray-500", className)}
       {...props}
     />
   );
+}
+
+/** Wraps a title + description pair inside CardHeader when using a flex row layout. */
+export function CardHeaderIntro({
+  className,
+  ...props
+}: HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn("min-w-0 space-y-2.5", className)} {...props} />;
 }
 
 export function CardContent({
