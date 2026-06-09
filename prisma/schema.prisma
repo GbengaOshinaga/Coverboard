@@ -91,6 +91,10 @@ model Organization {
   deletionScheduledFor    DateTime?
   deletionConfirmedAt     DateTime?
   deletionReason          String?
+  // Timestamp of the one-off founder outreach email. Used to (a) gate the
+  // limited-volume outreach (first N orgs only) and (b) prevent
+  // double-sends on re-verification.
+  founderEmailSentAt      DateTime?
   createdAt               DateTime          @default(now())
   updatedAt               DateTime          @updatedAt
 

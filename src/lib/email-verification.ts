@@ -23,6 +23,7 @@ import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email";
 import { emailVerificationEmail } from "@/lib/email-templates";
 import { getAppBaseUrl } from "@/lib/app-url";
+import { maybeSendFounderEmail } from "@/lib/founder-outreach";
 
 export const EMAIL_VERIFICATION_EXPIRES_HOURS = 24;
 
@@ -116,6 +117,11 @@ export async function consumeVerificationToken(
       data: { usedAt: new Date() },
     }),
   ]);
+
+  // Fire-and-forget: send the founder outreach email if this is the first
+  // admin of a new org and we're still under the configured cap. The
+  // helper is internally guarded against ineligible cases.
+  void maybeSendFounderEmail(tokenRow.userId);
 
   return { ok: true, userId: tokenRow.userId, alreadyVerified: false };
 }

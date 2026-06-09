@@ -17,6 +17,8 @@ export async function sendEmail({
   subject,
   html,
   headers,
+  from,
+  replyTo,
 }: {
   to: string;
   subject: string;
@@ -29,6 +31,18 @@ export async function sendEmail({
    * senders sending more than 5,000 messages/day.
    */
   headers?: Record<string, string>;
+  /**
+   * Override the default From address. Used for the founder outreach email
+   * which sends from `hello@coverboard.io` instead of the standard
+   * `noreply@coverboard.io` so replies route to a monitored mailbox.
+   */
+  from?: string;
+  /**
+   * Override the Reply-To address. Used by the founder outreach email so
+   * recipients can reply directly. Falls back to `from` (or default From)
+   * when omitted.
+   */
+  replyTo?: string;
 }) {
   if (!resend) {
     console.log(`[Email skipped — not configured] To: ${to}, Subject: ${subject}`);
@@ -37,11 +51,12 @@ export async function sendEmail({
 
   try {
     const { error } = await resend.emails.send({
-      from: getFromAddress(),
+      from: from ?? getFromAddress(),
       to,
       subject,
       html,
       ...(headers ? { headers } : {}),
+      ...(replyTo ? { replyTo } : {}),
     });
     if (error) {
       console.error(`Failed to send email to ${to}:`, error);

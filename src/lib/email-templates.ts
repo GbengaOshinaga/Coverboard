@@ -563,3 +563,39 @@ export function sspCapReachedEmail(data: {
     `),
   };
 }
+
+// ─── Founder outreach ────────────────────────────────────────────────
+//
+// Deliberately plain — no banner, no buttons, no card chrome. Reads like a
+// real person typed it in their mail client. The goal is "founder reaches
+// out personally" not "another transactional email from a brand". Sent
+// once per organisation, capped at the first N verified signups
+// (controlled by FOUNDER_OUTREACH_CAP, default 100).
+
+export function founderOutreachEmail(data: {
+  firstName: string;
+  founderName: string;
+  replyAddress: string;
+}): { subject: string; html: string } {
+  const safeName = data.firstName || "there";
+  const body = `
+    <p>Hi ${safeName},</p>
+    <p>I&rsquo;m ${data.founderName}, the founder of Coverboard. Your signup
+    came through and I wanted to reach out personally — thank you for
+    trying us out.</p>
+    <p>A couple of things that tend to help people get going:</p>
+    <ul>
+      <li>The team page is the fastest way to add your first few members.</li>
+      <li>If you&rsquo;re managing UK statutory leave, the settings page
+      has a one-click toggle to seed SSP, SMP, paternity and the rest.</li>
+      <li>Anything not working the way you&rsquo;d expect? Just reply to
+      this email — it comes straight to me, not a support queue.</li>
+    </ul>
+    <p>What brought you to Coverboard? I read every reply.</p>
+    <p>Thanks again,<br/>${data.founderName}</p>
+  `;
+  return {
+    subject: `Welcome to Coverboard — quick note from ${data.founderName}`,
+    html: `<!DOCTYPE html><html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:15px;line-height:1.55;color:#111827;max-width:560px;margin:32px auto;padding:0 16px;">${body}<p style="margin-top:24px;font-size:12px;color:#9ca3af;">Replies go to ${data.replyAddress}.</p></body></html>`,
+  };
+}
