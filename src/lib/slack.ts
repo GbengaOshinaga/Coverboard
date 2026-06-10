@@ -78,10 +78,30 @@ export function verifySlackRequest(
     .digest("hex");
   const expectedSignature = `v0=${hmac}`;
 
+  if (!signature.startsWith("v0=") || signature.length !== expectedSignature.length) {
+    return false;
+  }
+
   return crypto.timingSafeEqual(
     Buffer.from(signature),
     Buffer.from(expectedSignature)
   );
+}
+
+/** Post a follow-up message to Slack's slash-command `response_url`. */
+export async function postSlackCommandResponse(
+  responseUrl: string,
+  body: Record<string, unknown>
+): Promise<void> {
+  const res = await fetch(responseUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    console.error("Slack response_url failed:", res.status, text);
+  }
 }
 
 /**

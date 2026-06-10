@@ -77,6 +77,30 @@ export function buildWhosOutMessage(
   return blocks;
 }
 
+/** Plain-text fallback for slash-command responses (required by Slack). */
+export function summarizeWhosOutText(
+  outToday: AbsentPerson[],
+  upcoming: AbsentPerson[]
+): string {
+  if (outToday.length === 0 && upcoming.length === 0) {
+    return "Everyone is in today — no approved leave.";
+  }
+  const parts: string[] = [];
+  if (outToday.length === 0) {
+    parts.push("Everyone is in today.");
+  } else {
+    parts.push(
+      `${outToday.length} out today: ${outToday.map((p) => p.userName).join(", ")}`
+    );
+  }
+  if (upcoming.length > 0) {
+    parts.push(
+      `${upcoming.length} more in the next 7 days: ${upcoming.map((p) => p.userName).join(", ")}`
+    );
+  }
+  return parts.join(" ");
+}
+
 type BalanceEntry = {
   leaveTypeName: string;
   allowance: number;
