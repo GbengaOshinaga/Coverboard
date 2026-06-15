@@ -1256,14 +1256,19 @@ export default function SettingsPage() {
                 and receive approval notifications in Slack.
               </p>
               {isAdmin ? (
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    window.location.href = "/api/slack/connect";
-                  }}
-                >
-                  Connect Slack
-                </Button>
+                <>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      window.location.href = "/api/slack/connect";
+                    }}
+                  >
+                    Connect Slack
+                  </Button>
+                  <p className="text-xs text-gray-400">
+                    Slack may show a &ldquo;not yet reviewed&rdquo; notice during install — that&apos;s expected and safe to continue.
+                  </p>
+                </>
               ) : (
                 <p className="text-xs text-gray-400">Ask an admin to connect Slack.</p>
               )}
