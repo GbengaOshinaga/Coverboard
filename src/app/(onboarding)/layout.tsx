@@ -1,16 +1,21 @@
 import { redirect } from "next/navigation";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { requireActiveSession } from "@/lib/require-active-session";
 
 export default async function OnboardingLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const session = await getServerSession(authOptions);
+  const { orgId } = await requireActiveSession();
 
-  if (!session) {
-    redirect("/login");
+  const org = await prisma.organization.findUnique({
+    where: { id: orgId },
+    select: { onboardingCompleted: true },
+  });
+
+  if (org?.onboardingCompleted) {
+    redirect("/dashboard");
   }
 
   return (

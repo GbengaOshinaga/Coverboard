@@ -89,17 +89,17 @@ Added `src/lib/uk-compliance.ts` with:
   When eligible it returns `{ dailyRate, remainingDays, maxDays, … }`.
 - `calculateEstimatedSspCost(start, end, weeklyRate?, qualifyingDaysPerWeek?)`
   uses `calculateSspDailyRate` internally so callers never divide by 7.
-- `SSP_MAX_WEEKS` (28), `UK_LEL_WEEKLY` (123 for 2024/25).
+- `SSP_MAX_WEEKS` (28), `UK_LEL_WEEKLY` (125 for 2026/27, held from 2025/26).
 - `getUkBankHolidaysForRegion(year, region)` for 2026–2027 (extend the map as new years are needed)
 
 ## Environment Constants
 
-Added optional env keys in `.env.example`. **Update each April via HMRC guidance.**
+Added optional env keys in `.env.example`. **Update each April via HMRC guidance — see [docs/april-statutory-rate-update.md](docs/april-statutory-rate-update.md) for the step-by-step procedure.**
 
 - `SSP_WEEKLY_RATE` (default `123.25` — 2026/27)
 - `SMP_WEEKLY_RATE` (default `194.32` — 2026/27)
 - `SMP_FLAT_RATE` (alias of `SMP_WEEKLY_RATE` consumed by the SMP phase calculator; either env key is honoured)
-- `LEL_WEEKLY` (default `123` — Lower Earnings Limit for 2024/25; SSP is not payable below this average weekly earnings)
+- `LEL_WEEKLY` (default `125` — Lower Earnings Limit for 2026/27, held from 2025/26; SSP is not payable below this average weekly earnings)
 - `NEXT_PUBLIC_SUPPORT_EMAIL`, `NEXT_PUBLIC_PRIORITY_SUPPORT_EMAIL`, `NEXT_PUBLIC_SLA_SUPPORT_EMAIL` — Help page contact targets (see `.env.example`)
 
 ## Onboarding + Seeding Behavior
@@ -186,7 +186,7 @@ cap — all HMRC-penalty risks. Those three issues are fixed end-to-end:
 2. **Lower Earnings Limit gate** — `calculateSspEntitlement` returns
    `{ eligible: false, reason: "Below Lower Earnings Limit" }` when
    `averageWeeklyEarnings < LEL_WEEKLY`. The boundary is inclusive:
-   exactly £123/wk is eligible.
+   exactly £125/wk is eligible (2026/27 rate, held from 2025/26).
 3. **28-week cumulative cap** — `LeaveRequest.sspDaysPaid` records the
    payable days for each SSP spell; `LeaveRequest.sspLimitReached` flags
    the spell that tipped an employee over `28 × qualifyingDaysPerWeek`.
@@ -276,7 +276,7 @@ Added `src/lib/uk-compliance.test.ts` for:
 - SSP waiting-day logic
 - SSP daily rate for 3/4/5 qualifying days per week (and the missing-value default)
 - SSP daily-rate regression guard: rate must NOT equal `weekly / 7`
-- Lower Earnings Limit boundary (below, exactly at, and above £123/wk)
+- Lower Earnings Limit boundary (below, exactly at, and above the configured LEL — currently £125/wk for 2026/27)
 - 28-week cap boundary at 5-, 4-, and 3-day qualifying weeks (139/140/141, 111/112, 83/84)
 - `UK_SSP_WEEKLY_RATE` default still matches the 2026/27 rate (123.25)
 - UK bank holiday region filtering

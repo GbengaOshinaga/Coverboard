@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import {
   Card,
   CardContent,
   CardHeader,
+  CardHeaderIntro,
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
@@ -28,6 +29,13 @@ import {
   CalendarClock,
 } from "lucide-react";
 import { toCsv, downloadCsv } from "@/lib/csv-export";
+import { AbsenceTrendsSection } from "@/components/reports/absence-trends-section";
+import { RegionalCoverSection } from "@/components/reports/regional-cover-section";
+import { LeaveOperationsSection } from "@/components/reports/leave-operations-section";
+import {
+  formatEmploymentType,
+  isHoursAveragedEmploymentType,
+} from "@/lib/employment-types";
 
 type BradfordRow = {
   userId: string;
@@ -43,6 +51,7 @@ type RightToWorkRow = {
   name: string;
   email: string;
   department: string | null;
+  employmentType: string;
   rightToWorkVerified: boolean | null;
 };
 
@@ -94,8 +103,11 @@ type UKReport = {
 };
 
 type ActiveTab =
+  | "operations"
   | "analytics"
   | "bradford"
+  | "absence-trends"
+  | "regional-cover"
   | "right-to-work"
   | "weekly-hours"
   | "holiday-usage"
@@ -184,11 +196,30 @@ type RolloverPreviewRow = {
 
 export default function ReportsPage() {
   const { data: session } = useSession();
+
+  // Plan/role flags are derived from the session and used both to choose the
+  // initial tab below and to filter the visible tab list later. Declared
+  // here (above any useState) so the lazy-initializer for activeTab can
+  // read them without hitting the temporal dead zone.
+  const user = session?.user as Record<string, unknown> | undefined;
+  const userRole = user?.role as string | undefined;
+  const isAdmin = userRole === "ADMIN";
+  const userPlan = user?.plan as string | undefined;
+  // Absence trends + scheduled compliance reports are Scale-tier features.
+  // Trial inherits Pro-bundle access so the tab is visible during the
+  // 14-day trial too.
+  const hasAbsenceAnalytics =
+    userPlan === "SCALE" || userPlan === "PRO" || userPlan === "TRIAL";
+
   const [report, setReport] = useState<UKReport | null>(null);
   const [hasUkWorkforce, setHasUkWorkforce] = useState(true);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<ActiveTab>("analytics");
+  // Land on Operations when the user's plan unlocks it (Scale+); fall back
+  // to Analytics for lower tiers where Operations is filtered out.
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() =>
+    hasAbsenceAnalytics ? "operations" : "analytics"
+  );
   const [threshold, setThreshold] = useState(200);
 
   const [variableUsers, setVariableUsers] = useState<VariableHoursUser[]>([]);
@@ -219,11 +250,6 @@ export default function ReportsPage() {
 
   const { toast } = useToast();
 
-  const user = session?.user as Record<string, unknown> | undefined;
-  const userRole = user?.role as string | undefined;
-  const isReviewer = userRole === "ADMIN" || userRole === "MANAGER";
-  const isAdmin = userRole === "ADMIN";
-
   const fetchReport = useCallback(async () => {
     setLoading(true);
     try {
@@ -247,8 +273,8 @@ export default function ReportsPage() {
   }, [threshold]);
 
   useEffect(() => {
-    if (isReviewer) fetchReport();
-  }, [fetchReport, isReviewer]);
+    void fetchReport();
+  }, [fetchReport]);
 
   useEffect(() => {
     if (
@@ -257,9 +283,9 @@ export default function ReportsPage() {
         activeTab
       )
     ) {
-      setActiveTab("analytics");
+      setActiveTab(hasAbsenceAnalytics ? "operations" : "analytics");
     }
-  }, [hasUkWorkforce, activeTab]);
+  }, [hasUkWorkforce, hasAbsenceAnalytics, activeTab]);
 
   useEffect(() => {
     async function fetchAnalytics() {
@@ -270,8 +296,8 @@ export default function ReportsPage() {
         // ignore
       }
     }
-    if (isReviewer) fetchAnalytics();
-  }, [isReviewer]);
+    void fetchAnalytics();
+  }, []);
 
   const fetchPayroll = useCallback(async () => {
     setPayrollLoading(true);
@@ -292,10 +318,10 @@ export default function ReportsPage() {
   }, [payrollFrom, payrollTo, toast]);
 
   useEffect(() => {
-    if (activeTab === "payroll" && isReviewer && !payrollReport) {
+    if (activeTab === "payroll" && !payrollReport) {
       fetchPayroll();
     }
-  }, [activeTab, isReviewer, payrollReport, fetchPayroll]);
+  }, [activeTab, payrollReport, fetchPayroll]);
 
   function exportPayrollCsv() {
     if (!payrollReport) return;
@@ -479,7 +505,8 @@ export default function ReportsPage() {
           const all = await res.json();
           setVariableUsers(
             all.filter(
-              (u: VariableHoursUser) => u.employmentType === "VARIABLE_HOURS"
+              (u: VariableHoursUser) =>
+                isHoursAveragedEmploymentType(u.employmentType)
             )
           );
         }
@@ -487,8 +514,8 @@ export default function ReportsPage() {
         // ignore
       }
     }
-    if (isReviewer) fetchVariableUsers();
-  }, [isReviewer]);
+    void fetchVariableUsers();
+  }, []);
 
   useEffect(() => {
     async function loadHours() {
@@ -539,38 +566,56 @@ export default function ReportsPage() {
     setSavingHours(false);
   }
 
-  if (!isReviewer) {
-    return (
-      <div className="space-y-6">
-        <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">
-          Reports
-        </h1>
-        <p className="text-sm text-gray-500">
-          Reports are available to admins and managers only.
-        </p>
-      </div>
+  const tabs = useMemo(() => {
+    const reviewerTabs: {
+      id: ActiveTab;
+      label: string;
+      adminOnly?: boolean;
+      requiresUk?: boolean;
+      requiresAnalytics?: boolean;
+    }[] = [
+      { id: "operations", label: "Operations", requiresAnalytics: true },
+      { id: "analytics", label: "Analytics" },
+      { id: "bradford", label: "Bradford Factor", requiresUk: true },
+      {
+        id: "absence-trends",
+        label: "Absence trends",
+        requiresUk: true,
+        requiresAnalytics: true,
+      },
+      {
+        id: "regional-cover",
+        label: "Regional cover",
+        requiresAnalytics: true,
+      },
+      { id: "right-to-work", label: "Right to work", requiresUk: true },
+      { id: "weekly-hours", label: "Weekly hours" },
+      { id: "holiday-usage", label: "Holiday usage", requiresUk: true },
+      { id: "ssp", label: "SSP liability", requiresUk: true },
+      { id: "parental", label: "Parental leave", requiresUk: true },
+      { id: "payroll", label: "Payroll export" },
+      {
+        id: "year-end",
+        label: "Year-end rollover",
+        adminOnly: true,
+        requiresUk: true,
+      },
+    ];
+    return reviewerTabs.filter(
+      (t) =>
+        (!t.adminOnly || isAdmin) &&
+        (!t.requiresUk || hasUkWorkforce) &&
+        (!t.requiresAnalytics || hasAbsenceAnalytics)
     );
-  }
+  }, [isAdmin, hasUkWorkforce, hasAbsenceAnalytics]);
 
-  const allTabs: {
-    id: ActiveTab;
-    label: string;
-    adminOnly?: boolean;
-    requiresUk?: boolean;
-  }[] = [
-    { id: "analytics", label: "Analytics" },
-    { id: "bradford", label: "Bradford Factor", requiresUk: true },
-    { id: "right-to-work", label: "Right to work", requiresUk: true },
-    { id: "weekly-hours", label: "Weekly hours" },
-    { id: "holiday-usage", label: "Holiday usage", requiresUk: true },
-    { id: "ssp", label: "SSP liability", requiresUk: true },
-    { id: "parental", label: "Parental leave", requiresUk: true },
-    { id: "payroll", label: "Payroll export" },
-    { id: "year-end", label: "Year-end rollover", adminOnly: true, requiresUk: true },
-  ];
-  const tabs = allTabs.filter(
-    (t) => (!t.adminOnly || isAdmin) && (!t.requiresUk || hasUkWorkforce)
-  );
+  useEffect(() => {
+    const ids = tabs.map((t) => t.id);
+    if (!ids.length) return;
+    if (!ids.includes(activeTab)) {
+      setActiveTab(ids[0]!);
+    }
+  }, [tabs, activeTab]);
 
   const ukOnlyNote =
     report?.workforce && report.workforce.total > 0
@@ -589,11 +634,11 @@ export default function ReportsPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
+        <div className="space-y-2">
           <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">
             Reports
           </h1>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm leading-relaxed text-gray-500">
             Workforce analytics
             {hasUkWorkforce
               ? " and UK compliance reporting"
@@ -683,33 +728,32 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* Tab navigation */}
-      <div className="flex flex-wrap gap-1.5 border-b border-gray-200 pb-2">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-              activeTab === tab.id
-                ? "bg-brand-600 text-white"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
       {loading ? (
         <TableSkeleton rows={6} />
       ) : (
         <>
+          <div className="flex flex-wrap gap-1.5 border-b border-gray-200 pb-2">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  activeTab === tab.id
+                    ? "bg-brand-600 text-white"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
           {/* Bradford Factor */}
           {activeTab === "bradford" && (
             <Card>
               <CardHeader>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                  <div>
+                  <CardHeaderIntro>
                     <CardTitle>Bradford Factor scores</CardTitle>
                     <CardDescription>
                       S&sup2; &times; D — higher scores indicate frequent
@@ -717,9 +761,9 @@ export default function ReportsPage() {
                       and total sick days (D) over the last 12 months.
                     </CardDescription>
                     {ukOnlyNote && (
-                      <p className="mt-2 text-xs text-gray-500">{ukOnlyNote}</p>
+                      <p className="text-xs text-gray-500">{ukOnlyNote}</p>
                     )}
-                  </div>
+                  </CardHeaderIntro>
                   <div className="flex items-end gap-2">
                     <Input
                       id="threshold"
@@ -797,21 +841,37 @@ export default function ReportsPage() {
             </Card>
           )}
 
+          {/* Leave operations dashboard (Scale+) */}
+          {activeTab === "operations" && <LeaveOperationsSection />}
+
+          {/* Absence trends (Scale+) */}
+          {activeTab === "absence-trends" && <AbsenceTrendsSection />}
+
+          {/* Regional cover (Scale+) */}
+          {activeTab === "regional-cover" && <RegionalCoverSection />}
+
           {/* Right to work */}
           {activeTab === "right-to-work" && (
             <Card>
               <CardHeader>
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <CardHeaderIntro>
                     <CardTitle>Right to work verification</CardTitle>
                     <CardDescription>
                       Compliance status for all UK employees. Unverified
                       employees are flagged.
+                      {rtwRows.some(
+                        (r) =>
+                          r.employmentType === "ZERO_HOURS" &&
+                          r.rightToWorkVerified !== true
+                      )
+                        ? " Right to work verification is especially important for zero-hours and bank staff."
+                        : ""}
                     </CardDescription>
                     {ukOnlyNote && (
-                      <p className="mt-2 text-xs text-gray-500">{ukOnlyNote}</p>
+                      <p className="text-xs text-gray-500">{ukOnlyNote}</p>
                     )}
-                  </div>
+                  </CardHeaderIntro>
                   <Button
                     size="sm"
                     variant="outline"
@@ -876,14 +936,14 @@ export default function ReportsPage() {
             <Card>
               <CardHeader>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                  <div>
-                    <CardTitle>Variable hours tracking</CardTitle>
+                  <CardHeaderIntro>
+                    <CardTitle>Variable and zero-hours tracking</CardTitle>
                     <CardDescription>
-                      Record weekly hours for variable-hours employees. The last
-                      52 weeks are used to calculate their FTE ratio and
-                      pro-rated annual leave entitlement.
+                      Record weekly hours for variable-hours and zero-hours
+                      employees. The last 52 weeks are used to calculate their
+                      FTE ratio and pro-rated annual leave entitlement.
                     </CardDescription>
-                  </div>
+                  </CardHeaderIntro>
                   {selectedUser && (
                     <Button size="sm" onClick={() => setShowAddHours(true)}>
                       <Plus className="mr-1 h-3.5 w-3.5" />
@@ -902,16 +962,17 @@ export default function ReportsPage() {
                     { value: "", label: "Choose an employee..." },
                     ...variableUsers.map((u) => ({
                       value: u.id,
-                      label: `${u.name} (${u.email})`,
+                      label: `${u.name} (${formatEmploymentType(
+                        u.employmentType
+                      )})`,
                     })),
                   ]}
                 />
 
                 {variableUsers.length === 0 && (
                   <p className="text-sm text-gray-400">
-                    No variable-hours employees found. Set an employee&apos;s
-                    employment type to &quot;Variable hours&quot; on the Team
-                    page first.
+                    No variable-hours or zero-hours employees found. Set an
+                    employee&apos;s employment type on the Team page first.
                   </p>
                 )}
 
@@ -983,15 +1044,15 @@ export default function ReportsPage() {
             <Card>
               <CardHeader>
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <CardHeaderIntro>
                     <CardTitle>Holiday usage</CardTitle>
                     <CardDescription>
                       Annual leave days taken per UK employee this year.
                     </CardDescription>
                     {ukOnlyNote && (
-                      <p className="mt-2 text-xs text-gray-500">{ukOnlyNote}</p>
+                      <p className="text-xs text-gray-500">{ukOnlyNote}</p>
                     )}
-                  </div>
+                  </CardHeaderIntro>
                   <Button
                     size="sm"
                     variant="outline"
@@ -1050,16 +1111,16 @@ export default function ReportsPage() {
             <Card>
               <CardHeader>
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <CardHeaderIntro>
                     <CardTitle>SSP liability</CardTitle>
                     <CardDescription>
                       Employees currently on Statutory Sick Pay with estimated
                       costs.
                     </CardDescription>
                     {ukOnlyNote && (
-                      <p className="mt-2 text-xs text-gray-500">{ukOnlyNote}</p>
+                      <p className="text-xs text-gray-500">{ukOnlyNote}</p>
                     )}
-                  </div>
+                  </CardHeaderIntro>
                   <Button
                     size="sm"
                     variant="outline"
@@ -1122,16 +1183,16 @@ export default function ReportsPage() {
             <Card>
               <CardHeader>
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <CardHeaderIntro>
                     <CardTitle>Parental leave tracker</CardTitle>
                     <CardDescription>
                       Active statutory parental leave with KIT (Keeping In
                       Touch) day usage. Click a KIT cell to edit.
                     </CardDescription>
                     {ukOnlyNote && (
-                      <p className="mt-2 text-xs text-gray-500">{ukOnlyNote}</p>
+                      <p className="text-xs text-gray-500">{ukOnlyNote}</p>
                     )}
-                  </div>
+                  </CardHeaderIntro>
                   <Button
                     size="sm"
                     variant="outline"
@@ -1490,7 +1551,7 @@ export default function ReportsPage() {
             <Card>
               <CardHeader>
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <CardHeaderIntro>
                     <CardTitle>Payroll export</CardTitle>
                     <CardDescription>
                       Approved leave in a date range with the legally
@@ -1502,7 +1563,7 @@ export default function ReportsPage() {
                       <code>recalculated</code> when computed now for
                       annual leave requests lacking a stored rate.
                     </CardDescription>
-                  </div>
+                  </CardHeaderIntro>
                   <Button
                     size="sm"
                     variant="outline"

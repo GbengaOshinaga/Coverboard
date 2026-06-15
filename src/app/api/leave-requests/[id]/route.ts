@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { notifyRequestStatusChange } from "@/lib/slack-notifications";
 import { emailRequestStatusChange } from "@/lib/email-notifications";
 import { recordAudit, requestAuditContext, type AuditAction } from "@/lib/audit";
+import { AnalyticsEvents } from "@/lib/analytics/events";
+import { trackServer } from "@/lib/analytics/server";
 import {
   calculateSMPPhaseDates,
   calculateSMPPhaseRates,
@@ -158,7 +160,7 @@ export async function PATCH(
           },
         },
         leaveType: {
-          select: { id: true, name: true, color: true },
+          select: { id: true, name: true, color: true, category: true, isPaid: true },
         },
         reviewedBy: {
           select: { id: true, name: true },
@@ -166,20 +168,30 @@ export async function PATCH(
       },
     });
 
-    // ── Bradford Factor recalculation on SSP approval ─────────────────
-    if (status === "APPROVED" && /SSP/i.test(leaveRequest.leaveType.name)) {
+    // ── Bradford Factor recalculation on any sickness status change ───
+    // Recompute whenever a sickness/SSP request changes status — not just
+    // on APPROVED — so downgrades (APPROVED → REJECTED/CANCELLED) also
+    // clear stale score contributions. The query itself filters to
+    // APPROVED rows, so the recount stays correct.
+    if (
+      status !== undefined &&
+      /SSP|Sick/i.test(leaveRequest.leaveType.name)
+    ) {
       prisma.leaveRequest
         .findMany({
           where: {
             userId: leaveRequest.userId,
-            leaveType: { name: { contains: "SSP" } },
+            OR: [
+              { leaveType: { name: { contains: "SSP" } } },
+              { leaveType: { name: { contains: "Sick" } } },
+            ],
             status: "APPROVED",
           },
           select: { startDate: true, endDate: true },
         })
-        .then((sspRequests) => {
-          const spells = sspRequests.length;
-          const days = sspRequests.reduce(
+        .then((sickRequests) => {
+          const spells = sickRequests.length;
+          const days = sickRequests.reduce(
             (sum, r) => sum + countWeekdays(r.startDate, r.endDate),
             0
           );
@@ -195,6 +207,7 @@ export async function PATCH(
     // Send notifications (fire and forget)
     if (status === "APPROVED" || status === "REJECTED") {
       notifyRequestStatusChange({
+        organizationId: leaveRequest.user.organizationId,
         requesterEmail: updated.user.email,
         status,
         leaveTypeName: updated.leaveType.name,
@@ -246,6 +259,35 @@ export async function PATCH(
           },
           context: ctx,
         });
+        if (status === "APPROVED") {
+          trackServer(
+            AnalyticsEvents.LEAVE_REQUEST_APPROVED,
+            {
+              cover_override: coverOverride === true,
+              is_statutory: /SSP|Statutory/i.test(updated.leaveType.name),
+              leave_category: updated.leaveType.category,
+            },
+            {
+              userId,
+              organizationId: orgId,
+              role: userRole,
+            }
+          );
+        }
+        if (status === "CANCELLED") {
+          trackServer(
+            AnalyticsEvents.LEAVE_REQUEST_CANCELLED,
+            {
+              is_statutory: /SSP|Statutory/i.test(updated.leaveType.name),
+              leave_category: updated.leaveType.category,
+            },
+            {
+              userId,
+              organizationId: orgId,
+              role: userRole,
+            }
+          );
+        }
       }
       if (status === "APPROVED" && coverOverride === true) {
         recordAudit({

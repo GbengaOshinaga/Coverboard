@@ -11,6 +11,7 @@ import {
   FileUp,
   Loader2,
 } from "lucide-react";
+import { normalizeEmploymentType } from "@/lib/employment-types";
 
 const TEMPLATE_HEADERS = [
   "name",
@@ -39,6 +40,19 @@ const TEMPLATE_ROWS: string[][] = [
     "GB",
     "GB",
     "yes",
+  ],
+  [
+    "Cara Patel",
+    "cara@example.com",
+    "MEMBER",
+    "EMPLOYEE",
+    "ZERO_HOURS",
+    "0",
+    "0",
+    "Healthcare",
+    "GB",
+    "GB",
+    "no",
   ],
   [
     "Bob Jones",
@@ -140,8 +154,15 @@ function normalizeRows(csv: string): Row[] {
       email: get("email"),
       role: (get("role") || "MEMBER").toUpperCase(),
       memberType: (get("memberType") || "EMPLOYEE").toUpperCase(),
-      employmentType: (get("employmentType") || "FULL_TIME").toUpperCase(),
-      daysWorkedPerWeek: Number.isFinite(days) ? days : 5,
+      employmentType: normalizeEmploymentType(
+        get("employmentType") || "FULL_TIME"
+      ) as string,
+      daysWorkedPerWeek:
+        normalizeEmploymentType(get("employmentType")) === "ZERO_HOURS"
+          ? 0
+          : Number.isFinite(days)
+            ? days
+            : 5,
       fteRatio: Number.isFinite(fte) ? fte : 1,
       department: get("department") || undefined,
       countryCode: (get("countryCode") || "GB").toUpperCase(),
@@ -365,7 +386,7 @@ export function BulkImportDialog({
                 id="bulk-csv-text"
                 value={csvText}
                 onChange={(e) => setCsvText(e.target.value)}
-                placeholder={`${TEMPLATE_HEADERS.join(",")}\nAlice Smith,alice@example.com,MEMBER,EMPLOYEE,FULL_TIME,5,1,Engineering,GB,yes`}
+                placeholder={`${TEMPLATE_HEADERS.join(",")}\nAlice Smith,alice@example.com,MEMBER,EMPLOYEE,FULL_TIME,5,1,Engineering,GB,GB,yes\nCara Patel,cara@example.com,MEMBER,EMPLOYEE,zero hours,0,0,Healthcare,GB,GB,no`}
                 rows={6}
                 className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-xs text-gray-800 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               />

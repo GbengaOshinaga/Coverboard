@@ -3,6 +3,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
+import { subscriptionAccessEndDate } from "@/lib/stripe-subscription";
+import { AnalyticsEvents } from "@/lib/analytics/events";
+import { trackServer } from "@/lib/analytics/server";
 
 export async function POST() {
   const session = await getServerSession(authOptions);
@@ -25,12 +28,30 @@ export async function POST() {
     const sub = await stripe.subscriptions.update(org.stripeSubscriptionId, {
       cancel_at_period_end: true,
     });
+    const accessEnd = subscriptionAccessEndDate(sub);
+    const orgPlan = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { plan: true },
+    });
     await prisma.organization.update({
       where: { id: orgId },
-      data: { cancelAtPeriodEnd: true },
+      data: {
+        cancelAtPeriodEnd: true,
+        ...(accessEnd ? { currentPeriodEnd: accessEnd } : {}),
+      },
     });
+    trackServer(
+      AnalyticsEvents.SUBSCRIPTION_CANCELED,
+      { scheduled: true },
+      {
+        userId: sessionUser.id as string,
+        organizationId: orgId,
+        role: "ADMIN",
+        plan: orgPlan?.plan,
+      }
+    );
     return NextResponse.json({
-      cancelAt: sub.cancel_at ? new Date(sub.cancel_at * 1000) : null,
+      cancelAt: accessEnd,
     });
   } catch (err) {
     console.error("Cancel subscription failed:", err);

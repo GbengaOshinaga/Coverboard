@@ -47,8 +47,8 @@ export default function DeletionConfirmedPage() {
         <div className="mt-6 space-y-2 rounded-md bg-blue-50 p-4 text-sm text-blue-900">
           <p className="font-medium">Changed your mind?</p>
           <p>
-            Sign back in and go to <strong>Settings → Billing</strong> to cancel
-            the deletion and reactivate your account. After the scheduled date
+            Sign back in and go to <strong>Settings</strong> to cancel the
+            deletion and keep your data. After the scheduled date
             this option will no longer be available.
           </p>
         </div>
@@ -69,10 +69,10 @@ export default function DeletionConfirmedPage() {
         <p className="mt-6 text-center text-xs text-gray-400">
           Questions? Email{" "}
           <a
-            href="mailto:hello@coverboard.app"
+            href="mailto:support@coverboard.io"
             className="text-brand-600 hover:underline"
           >
-            hello@coverboard.app
+            support@coverboard.io
           </a>
         </p>
       </div>

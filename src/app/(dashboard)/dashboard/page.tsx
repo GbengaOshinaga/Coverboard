@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { EmploymentType } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -16,6 +17,8 @@ export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
   const orgId = (session!.user as Record<string, unknown>).organizationId as string;
   const currentUserId = (session!.user as Record<string, unknown>).id as string;
+  const userRole = (session!.user as Record<string, unknown>).role as string;
+  const canSeeComplianceAlerts = userRole === "ADMIN" || userRole === "MANAGER";
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -26,7 +29,15 @@ export default async function DashboardPage() {
   nextWeek.setDate(nextWeek.getDate() + 14);
 
   // Parallel queries
-  const [outToday, upcoming, teamCount, pendingCount, myBalances, rightToWorkRiskCount] = await Promise.all([
+  const [
+    outToday,
+    upcoming,
+    teamCount,
+    pendingCount,
+    myBalances,
+    rightToWorkRiskCount,
+    zeroHoursRightToWorkRiskCount,
+  ] = await Promise.all([
     // Who's out today
     prisma.leaveRequest.findMany({
       where: {
@@ -66,13 +77,25 @@ export default async function DashboardPage() {
     }),
     // Current user's leave balances
     getUserLeaveBalances(currentUserId, today.getFullYear()),
-    prisma.user.count({
-      where: {
-        organizationId: orgId,
-        countryCode: "GB",
-        OR: [{ rightToWorkVerified: false }, { rightToWorkVerified: null }],
-      },
-    }),
+    canSeeComplianceAlerts
+      ? prisma.user.count({
+          where: {
+            organizationId: orgId,
+            workCountry: "GB",
+            OR: [{ rightToWorkVerified: false }, { rightToWorkVerified: null }],
+          },
+        })
+      : Promise.resolve(0),
+    canSeeComplianceAlerts
+      ? prisma.user.count({
+          where: {
+            organizationId: orgId,
+            workCountry: "GB",
+            employmentType: EmploymentType.ZERO_HOURS,
+            OR: [{ rightToWorkVerified: false }, { rightToWorkVerified: null }],
+          },
+        })
+      : Promise.resolve(0),
   ]);
 
   const outTodayCount = outToday.length;
@@ -156,10 +179,19 @@ export default async function DashboardPage() {
       {/* Leave balances */}
       <LeaveBalances balances={myBalances} />
 
-      {rightToWorkRiskCount > 0 && (
+      {canSeeComplianceAlerts && rightToWorkRiskCount > 0 && (
         <Card className="border-amber-200 bg-amber-50">
-          <CardContent className="py-3 text-sm text-amber-800">
-            UK compliance warning: {rightToWorkRiskCount} team member(s) have missing right-to-work verification.
+          <CardContent className="space-y-1 py-3 text-sm text-amber-800">
+            <p>
+              UK compliance warning: {rightToWorkRiskCount} team member(s) have
+              missing right-to-work verification.
+            </p>
+            {zeroHoursRightToWorkRiskCount > 0 && (
+              <p className="font-medium">
+                Right to work verification is especially important for
+                zero-hours and bank staff.
+              </p>
+            )}
           </CardContent>
         </Card>
       )}

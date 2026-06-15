@@ -23,6 +23,13 @@ async function getAdminEmail(organizationId: string): Promise<string | null> {
   return admin?.email ?? null;
 }
 
+/**
+ * Schedules deletion 30 days out. The org `plan` is left untouched —
+ * billing-triggered callers (Stripe webhooks) set `plan = LOCKED` themselves
+ * because non-payment means the app should be unavailable. User-requested
+ * deletion intentionally keeps the app usable during the grace window so the
+ * admin can wind down (export data, settle pending leave, etc.).
+ */
 export async function scheduleDeletion(params: {
   organizationId: string;
   reason: DeletionReason;

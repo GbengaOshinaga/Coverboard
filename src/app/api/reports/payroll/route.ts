@@ -8,20 +8,15 @@ import {
   getCurrentSMPPhase,
   isMaternityLeaveType,
 } from "@/lib/smpCalculator";
-
-export function buildPayrollHolidayRateFields(params: {
-  isUkBased: boolean;
-  dailyRate: number | null;
-  estimatedPay: number | null;
-  rateSource: "captured_at_booking" | "recalculated" | "not_applicable";
-}) {
-  if (!params.isUkBased) return {};
-  return {
-    dailyHolidayPayRate: params.dailyRate,
-    estimatedPay: params.estimatedPay,
-    rateSource: params.rateSource,
-  };
-}
+import { buildPayrollHolidayRateFields } from "@/lib/payroll-export";
+import {
+  parseExportFormat,
+  toCsv,
+  toExcel,
+  EXPORT_CONTENT_TYPE,
+  exportFilename,
+  type ExportColumn,
+} from "@/lib/export-formats";
 
 /**
  * Payroll export for a given date range.
@@ -200,10 +195,99 @@ export async function GET(request: Request) {
     ),
   };
 
-  return NextResponse.json({
-    from: from.toISOString(),
-    to: to.toISOString(),
-    rows,
-    totals,
+  const format = parseExportFormat(searchParams.get("format"));
+  if (format === "json") {
+    return NextResponse.json({
+      from: from.toISOString(),
+      to: to.toISOString(),
+      rows,
+      totals,
+    });
+  }
+
+  // Flatten the nested SMP block into top-level columns for tabular export —
+  // payroll software won't read a JSON sub-object inside a CSV cell.
+  type PayrollRow = (typeof rows)[number];
+  const columns: ExportColumn<PayrollRow>[] = [
+    { key: "leaveRequestId", header: "Leave request ID" },
+    { key: "userId", header: "Employee ID" },
+    { key: "name", header: "Name" },
+    { key: "email", header: "Email" },
+    { key: "department", header: "Department" },
+    { key: "countryCode", header: "Country" },
+    { key: "employmentType", header: "Employment type" },
+    { key: "leaveType", header: "Leave type" },
+    { key: "leaveCategory", header: "Category" },
+    { key: "isPaid", header: "Paid" },
+    {
+      key: (r) =>
+        r.startDate instanceof Date ? r.startDate.toISOString() : r.startDate,
+      header: "Start date",
+    },
+    {
+      key: (r) =>
+        r.endDate instanceof Date ? r.endDate.toISOString() : r.endDate,
+      header: "End date",
+    },
+    { key: "daysTaken", header: "Days taken" },
+    {
+      key: (r) => (r as Record<string, unknown>).dailyRate ?? null,
+      header: "Daily rate (£)",
+    },
+    {
+      key: (r) => (r as Record<string, unknown>).estimatedPay ?? null,
+      header: "Estimated pay (£)",
+    },
+    {
+      key: (r) => (r as Record<string, unknown>).rateSource ?? null,
+      header: "Rate source",
+    },
+    {
+      key: (r) => r.smp?.phase ?? null,
+      header: "SMP phase",
+    },
+    {
+      key: (r) => r.smp?.weeklyRate ?? null,
+      header: "SMP weekly rate (£)",
+    },
+    {
+      key: (r) => r.smp?.averageWeeklyEarnings ?? null,
+      header: "AWE (£)",
+    },
+  ];
+
+  const filename = exportFilename(
+    `coverboard-payroll-${from.toISOString().slice(0, 10)}-to-${to.toISOString().slice(0, 10)}`,
+    format,
+    new Date()
+  );
+
+  if (format === "csv") {
+    const body = toCsv(rows, columns);
+    return new NextResponse(body, {
+      status: 200,
+      headers: {
+        "Content-Type": EXPORT_CONTENT_TYPE.csv,
+        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+
+  // Excel
+  const buffer = await toExcel([
+    {
+      name: "Payroll",
+      columns,
+      rows,
+    },
+  ]);
+  return new NextResponse(new Uint8Array(buffer), {
+    status: 200,
+    headers: {
+      "Content-Type": EXPORT_CONTENT_TYPE.excel,
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Cache-Control": "no-store",
+    },
   });
 }

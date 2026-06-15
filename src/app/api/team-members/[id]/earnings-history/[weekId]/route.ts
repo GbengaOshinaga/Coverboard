@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { calculateHolidayPayRate } from "@/lib/holidayPay";
+import { syncUserAverageWeeklyEarnings } from "@/lib/smpCalculator";
 import {
   holidayPayNotApplicablePayload,
   isUkHolidayPayApplicable,
@@ -85,6 +86,10 @@ export async function PUT(
     },
   });
 
+  await syncUserAverageWeeklyEarnings(memberId).catch((err) =>
+    console.error("Failed to sync average weekly earnings:", err)
+  );
+
   const stats = await getEarningsStats(memberId);
   return NextResponse.json(stats);
 }
@@ -120,6 +125,10 @@ export async function DELETE(
   if (!entry) return NextResponse.json({ error: "Earnings entry not found" }, { status: 404 });
 
   await prisma.weeklyEarning.delete({ where: { id: weekId } });
+
+  await syncUserAverageWeeklyEarnings(memberId).catch((err) =>
+    console.error("Failed to sync average weekly earnings:", err)
+  );
 
   const stats = await getEarningsStats(memberId);
   return NextResponse.json(stats);

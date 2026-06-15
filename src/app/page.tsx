@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { requireActiveSession } from "@/lib/require-active-session";
 import { LandingPage } from "@/components/landing/landing-page";
 
 export default async function Home() {
@@ -11,7 +12,8 @@ export default async function Home() {
     return <LandingPage />;
   }
 
-  const orgId = (session.user as Record<string, unknown>).organizationId as string;
+  const { orgId } = await requireActiveSession();
+
   const org = await prisma.organization.findUnique({
     where: { id: orgId },
     select: { onboardingCompleted: true },
@@ -19,7 +21,7 @@ export default async function Home() {
 
   if (org && !org.onboardingCompleted) {
     redirect("/onboarding");
-  } else {
-    redirect("/dashboard");
   }
+
+  redirect("/dashboard");
 }

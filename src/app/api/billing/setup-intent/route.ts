@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
+import { ensureStripeCustomer } from "@/lib/billing-customer";
 
 export async function POST() {
   const session = await getServerSession(authOptions);
@@ -25,19 +26,23 @@ export async function POST() {
   const orgId = sessionUser.organizationId as string;
   const org = await prisma.organization.findUnique({
     where: { id: orgId },
-    select: { stripeCustomerId: true },
+    select: { id: true, name: true, stripeCustomerId: true },
   });
 
-  if (!org?.stripeCustomerId) {
-    return NextResponse.json(
-      { error: "No Stripe customer associated with this organization" },
-      { status: 400 }
-    );
+  if (!org) {
+    return NextResponse.json({ error: "Organization not found" }, { status: 404 });
   }
 
   try {
+    const stripeCustomerId = await ensureStripeCustomer({
+      stripeClient: stripe,
+      organizationId: org.id,
+      organizationName: org.name,
+      stripeCustomerId: org.stripeCustomerId,
+    });
+
     const setupIntent = await stripe.setupIntents.create({
-      customer: org.stripeCustomerId,
+      customer: stripeCustomerId,
       payment_method_types: ["card"],
       usage: "off_session",
     });

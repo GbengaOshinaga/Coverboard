@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
+import { isPathnameForbiddenForMember } from "@/lib/member-route-access";
 
 /**
  * Locked-account gate. When an org's plan is LOCKED we redirect every page
@@ -17,6 +18,7 @@ const ALLOWED_WHEN_LOCKED: RegExp[] = [
   /^\/api\/billing(\/|$)/,
   /^\/api\/account(\/|$)/,
   /^\/api\/auth(\/|$)/,
+  /^\/api\/health(\/|$)/,
   /^\/login(\/|$)/,
   /^\/signup(\/|$)/,
   /^\/logout(\/|$)/,
@@ -30,18 +32,28 @@ export async function middleware(request: NextRequest) {
 
   if (!token) return NextResponse.next();
 
-  const plan = token.plan as string | undefined;
-  if (plan !== "LOCKED") return NextResponse.next();
-
   const path = request.nextUrl.pathname;
-  if (ALLOWED_WHEN_LOCKED.some((re) => re.test(path))) {
-    return NextResponse.next();
+
+  const plan = token.plan as string | undefined;
+  if (plan === "LOCKED") {
+    if (ALLOWED_WHEN_LOCKED.some((re) => re.test(path))) {
+      return NextResponse.next();
+    }
+    const lockedUrl = request.nextUrl.clone();
+    lockedUrl.pathname = "/locked";
+    lockedUrl.search = "";
+    return NextResponse.redirect(lockedUrl);
   }
 
-  const url = request.nextUrl.clone();
-  url.pathname = "/locked";
-  url.search = "";
-  return NextResponse.redirect(url);
+  const role = token.role as string | undefined;
+  if (role === "MEMBER" && isPathnameForbiddenForMember(path)) {
+    const dashUrl = request.nextUrl.clone();
+    dashUrl.pathname = "/dashboard";
+    dashUrl.search = "";
+    return NextResponse.redirect(dashUrl);
+  }
+
+  return NextResponse.next();
 }
 
 export const config = {

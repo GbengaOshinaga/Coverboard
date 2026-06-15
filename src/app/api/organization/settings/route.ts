@@ -40,6 +40,7 @@ export async function GET() {
           plan: true,
           regionsEnabled: true,
           industry: true,
+          deletionScheduledFor: true,
         },
       }),
       hasUKEmployees(orgId),

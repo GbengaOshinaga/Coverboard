@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
 import { planKeyFromPriceId, PLAN_DISPLAY_NAME, PLAN_MONTHLY_PRICE_GBP } from "@/config/stripePrices";
+import { subscriptionAccessEndDate } from "@/lib/stripe-subscription";
+import { TAX_ID_TYPE_LABELS } from "@/config/billing-countries";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -39,6 +41,30 @@ export async function GET() {
     return NextResponse.json({ error: "Organization not found" }, { status: 404 });
   }
 
+  let currentPeriodEnd = org.currentPeriodEnd;
+  // Whether the pending cancellation is actually a downgrade-to-Free (set
+  // via `/api/billing/downgrade-to-free`) rather than a hard cancel. The
+  // distinction matters in the UI — hard cancel triggers 30-day deletion;
+  // a downgrade simply moves the org to FREE at period end.
+  let pendingDowngradeToFree = false;
+  if (stripe && org.stripeSubscriptionId && org.cancelAtPeriodEnd) {
+    try {
+      const sub = await stripe.subscriptions.retrieve(org.stripeSubscriptionId);
+      const accessEnd = subscriptionAccessEndDate(sub);
+      if (accessEnd && !currentPeriodEnd) {
+        currentPeriodEnd = accessEnd;
+        await prisma.organization.update({
+          where: { id: orgId },
+          data: { currentPeriodEnd: accessEnd },
+        });
+      }
+      pendingDowngradeToFree =
+        (sub.metadata?.downgrade_target ?? "").toLowerCase() === "free";
+    } catch (err) {
+      console.error("Failed to hydrate subscription state:", err);
+    }
+  }
+
   const planKey = org.stripePriceId ? planKeyFromPriceId(org.stripePriceId) : null;
   const planName = planKey ? PLAN_DISPLAY_NAME[planKey] : null;
   const planPriceGbp = planKey ? PLAN_MONTHLY_PRICE_GBP[planKey] : null;
@@ -53,7 +79,35 @@ export async function GET() {
     pdf: string | null;
   };
   let invoices: InvoiceDTO[] = [];
+  let paymentMethodBrand: string | null = null;
+  let paymentMethodLast4: string | null = null;
+  let billingCountry: string | null = null;
+  type TaxIdDTO = {
+    id: string;
+    type: string;
+    typeLabel: string;
+    value: string;
+    verificationStatus: string | null;
+  };
+  let taxIds: TaxIdDTO[] = [];
+
   if (stripe && org.stripeCustomerId) {
+    try {
+      const customer = await stripe.customers.retrieve(org.stripeCustomerId, {
+        expand: ["invoice_settings.default_payment_method"],
+      });
+      if (customer && !("deleted" in customer && customer.deleted)) {
+        const pm = customer.invoice_settings?.default_payment_method;
+        if (pm && typeof pm === "object" && "card" in pm && pm.card) {
+          paymentMethodBrand = pm.card.brand ?? null;
+          paymentMethodLast4 = pm.card.last4 ?? null;
+        }
+        billingCountry = customer.address?.country ?? null;
+      }
+    } catch (err) {
+      console.error("Failed to retrieve Stripe customer:", err);
+    }
+
     try {
       const list = await stripe.invoices.list({
         customer: org.stripeCustomerId,
@@ -71,6 +125,21 @@ export async function GET() {
     } catch (err) {
       console.error("Failed to list Stripe invoices:", err);
     }
+
+    try {
+      const taxList = await stripe.customers.listTaxIds(org.stripeCustomerId, {
+        limit: 20,
+      });
+      taxIds = taxList.data.map((t) => ({
+        id: t.id,
+        type: t.type,
+        typeLabel: TAX_ID_TYPE_LABELS[t.type] ?? t.type,
+        value: t.value,
+        verificationStatus: t.verification?.status ?? null,
+      }));
+    } catch (err) {
+      console.error("Failed to list Stripe tax IDs:", err);
+    }
   }
 
   return NextResponse.json({
@@ -80,11 +149,16 @@ export async function GET() {
     subscriptionStatus: org.subscriptionStatus,
     trialEndsAt: org.trialEndsAt,
     cardAdded: org.cardAdded,
+    paymentMethodBrand,
+    paymentMethodLast4,
     cancelAtPeriodEnd: org.cancelAtPeriodEnd,
-    currentPeriodEnd: org.currentPeriodEnd,
+    pendingDowngradeToFree,
+    currentPeriodEnd,
     deletionScheduledFor: org.deletionScheduledFor,
     deletionReason: org.deletionReason,
     trialExpiredGraceEndsAt: org.trialExpiredGraceEndsAt,
     invoices,
+    billingCountry,
+    taxIds,
   });
 }

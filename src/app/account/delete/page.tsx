@@ -75,8 +75,8 @@ export default function DeleteAccountPage() {
                 <li>Your subscription will be canceled immediately.</li>
                 <li>Your data will be scheduled for deletion in 30 days.</li>
                 <li>
-                  During that 30 days you can cancel the deletion from your
-                  billing page and restore your account.
+                  During that 30 days you can cancel the deletion from
+                  Settings and restore your account.
                 </li>
                 <li>
                   After 30 days, all data is permanently and irrecoverably

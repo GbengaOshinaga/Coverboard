@@ -6,6 +6,8 @@ import { stripe } from "@/lib/stripe";
 import { scheduleDeletion } from "@/lib/deletionScheduler";
 import { emailDeletionScheduled } from "@/lib/billing-emails";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
+import { AnalyticsEvents } from "@/lib/analytics/events";
+import { trackServer } from "@/lib/analytics/server";
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
@@ -78,6 +80,17 @@ export async function POST(request: Request) {
       reason: "user_requested",
     });
   }
+
+  trackServer(
+    AnalyticsEvents.ACCOUNT_DELETION_REQUESTED,
+    { scheduled_for: scheduledFor.toISOString() },
+    {
+      userId: sessionUser.id as string,
+      organizationId: orgId,
+      role: "ADMIN",
+      plan: sessionUser.plan as string | undefined,
+    }
+  );
 
   return NextResponse.json({ scheduledFor });
 }

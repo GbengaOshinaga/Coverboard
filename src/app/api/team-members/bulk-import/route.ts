@@ -7,9 +7,8 @@ import { prisma } from "@/lib/prisma";
 import { teamMemberSchema } from "@/lib/validations";
 import { sendTeamInviteEmail } from "@/lib/email-notifications";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
-import { hasUKEmployees } from "@/lib/uk-workforce";
 import { hasUkStatutoryLeaveTypes } from "@/lib/uk-statutory";
-import { hasFeatureForEnum } from "@/lib/planFeatures";
+import { maxAdminsForPlan, maxEmployeesForPlan } from "@/lib/plans";
 
 // Cap the batch size to keep single-request latency bounded and avoid abuse.
 // Larger imports should be split client-side.
@@ -52,7 +51,6 @@ export async function POST(request: Request) {
   }
 
   const { rows, dryRun } = parsed.data;
-  const hadUkEmployees = await hasUKEmployees(orgId);
 
   type ValidRow = {
     index: number;
@@ -114,31 +112,44 @@ export async function POST(request: Request) {
 
   // Enforce the plan-level admin seat cap across the whole batch.
   const newAdminCount = valid.filter((v) => v.data.role === "ADMIN").length;
+  const [org, currentAdmins, currentEmployees] = await Promise.all([
+    prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { plan: true },
+    }),
+    prisma.user.count({
+      where: { organizationId: orgId, role: "ADMIN" },
+    }),
+    prisma.user.count({
+      where: { organizationId: orgId, isActive: true },
+    }),
+  ]);
+
   let adminCapMessage: string | null = null;
-  if (newAdminCount > 0) {
-    const [org, currentAdmins] = await Promise.all([
-      prisma.organization.findUnique({
-        where: { id: orgId },
-        select: { maxAdminUsers: true, plan: true },
-      }),
-      prisma.user.count({
-        where: { organizationId: orgId, role: "ADMIN" },
-      }),
-    ]);
-    const unlimitedAdminsPlan = hasFeatureForEnum(org?.plan, "unlimited_admins");
+  let employeeCapMessage: string | null = null;
+
+  if (org) {
+    const maxAdmins = maxAdminsForPlan(org.plan);
     if (
-      org &&
-      !unlimitedAdminsPlan &&
-      org.maxAdminUsers > 0 &&
-      currentAdmins + newAdminCount > org.maxAdminUsers
+      newAdminCount > 0 &&
+      Number.isFinite(maxAdmins) &&
+      currentAdmins + newAdminCount > maxAdmins
     ) {
-      const remaining = Math.max(0, org.maxAdminUsers - currentAdmins);
-      adminCapMessage = `Your plan allows up to ${org.maxAdminUsers} admin users (${currentAdmins} already used). Reduce admin rows to ${remaining} or upgrade.`;
-      errors.push({
-        index: -1,
-        field: "role",
-        message: adminCapMessage,
-      });
+      const remaining = Math.max(0, maxAdmins - currentAdmins);
+      adminCapMessage = `Your plan allows up to ${maxAdmins} admin user${
+        maxAdmins === 1 ? "" : "s"
+      } (${currentAdmins} already used). Reduce admin rows to ${remaining} or upgrade.`;
+      errors.push({ index: -1, field: "role", message: adminCapMessage });
+    }
+
+    const maxEmployees = maxEmployeesForPlan(org.plan);
+    if (
+      Number.isFinite(maxEmployees) &&
+      currentEmployees + valid.length > maxEmployees
+    ) {
+      const remaining = Math.max(0, maxEmployees - currentEmployees);
+      employeeCapMessage = `Your plan allows up to ${maxEmployees} team members (${currentEmployees} already added). Reduce the import to ${remaining} rows or upgrade.`;
+      errors.push({ index: -1, field: "email", message: employeeCapMessage });
     }
   }
 
@@ -146,7 +157,7 @@ export async function POST(request: Request) {
     errors.filter((e) => e.index >= 0).map((e) => e.index)
   );
   const importable = valid.filter((v) => !rowErrorIndices.has(v.index));
-  const batchBlocked = adminCapMessage !== null;
+  const batchBlocked = adminCapMessage !== null || employeeCapMessage !== null;
 
   if (dryRun) {
     return NextResponse.json({
@@ -263,9 +274,7 @@ export async function POST(request: Request) {
 
   const addedUkEmployee = toCreate.some((row) => row.data.workCountry === "GB");
   const shouldSuggestUkSetup =
-    addedUkEmployee &&
-    !hadUkEmployees &&
-    !(await hasUkStatutoryLeaveTypes(orgId));
+    addedUkEmployee && !(await hasUkStatutoryLeaveTypes(orgId));
 
   return NextResponse.json(
     {

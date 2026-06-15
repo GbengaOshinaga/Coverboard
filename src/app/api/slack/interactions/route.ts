@@ -3,15 +3,17 @@ import { prisma } from "@/lib/prisma";
 import {
   verifySlackRequest,
   resolveSlackUser,
-  isSlackConfigured,
-  slack,
+  isSlackAppConfigured,
+  getSlackIntegrationByTeamId,
+  createSlackClient,
   findSlackUserByEmail,
 } from "@/lib/slack";
 import { buildStatusUpdateMessage } from "@/lib/slack-messages";
 import { countWeekdays } from "@/lib/utils";
+import { notifyRequestStatusChange } from "@/lib/slack-notifications";
 
 export async function POST(request: Request) {
-  if (!isSlackConfigured()) {
+  if (!isSlackAppConfigured()) {
     return new Response("Not configured", { status: 200 });
   }
 
@@ -23,7 +25,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
-  // Slack sends interactions as a URL-encoded "payload" JSON string
   const params = new URLSearchParams(rawBody);
   const payloadStr = params.get("payload");
 
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
 }
 
 async function handleBlockAction(payload: {
+  team: { id: string };
   user: { id: string };
   actions: { action_id: string; value: string }[];
   message: { ts: string };
@@ -55,8 +57,23 @@ async function handleBlockAction(payload: {
     return new Response("OK", { status: 200 });
   }
 
-  // Resolve the Slack user who clicked the button
-  const reviewer = await resolveSlackUser(payload.user.id);
+  const integration = await getSlackIntegrationByTeamId(payload.team.id);
+  if (!integration) {
+    return NextResponse.json({
+      response_type: "ephemeral",
+      text: "This Slack workspace is not connected to Coverboard.",
+      replace_original: false,
+    });
+  }
+
+  const slack = createSlackClient(integration.botToken);
+
+  const reviewer = await resolveSlackUser(
+    payload.user.id,
+    slack,
+    integration.organizationId
+  );
+
   if (!reviewer) {
     return NextResponse.json({
       response_type: "ephemeral",
@@ -65,7 +82,6 @@ async function handleBlockAction(payload: {
     });
   }
 
-  // Check reviewer permissions
   if (reviewer.role !== "ADMIN" && reviewer.role !== "MANAGER") {
     return NextResponse.json({
       response_type: "ephemeral",
@@ -76,11 +92,12 @@ async function handleBlockAction(payload: {
 
   const newStatus = action_id === "approve_leave" ? "APPROVED" : "REJECTED";
 
-  // Fetch and update the leave request
   const leaveRequest = await prisma.leaveRequest.findUnique({
     where: { id: requestId },
     include: {
-      user: { select: { name: true, email: true } },
+      user: {
+        select: { name: true, email: true, organizationId: true },
+      },
       leaveType: { select: { name: true } },
     },
   });
@@ -93,6 +110,14 @@ async function handleBlockAction(payload: {
     });
   }
 
+  if (leaveRequest.user.organizationId !== integration.organizationId) {
+    return NextResponse.json({
+      response_type: "ephemeral",
+      text: "This leave request does not belong to your organization.",
+      replace_original: false,
+    });
+  }
+
   if (leaveRequest.status !== "PENDING") {
     return NextResponse.json({
       response_type: "ephemeral",
@@ -101,7 +126,6 @@ async function handleBlockAction(payload: {
     });
   }
 
-  // Update the request
   await prisma.leaveRequest.update({
     where: { id: requestId },
     data: {
@@ -116,68 +140,50 @@ async function handleBlockAction(payload: {
     leaveRequest.endDate
   );
 
-  // Update the original message to remove buttons and show the decision
   const statusEmoji = newStatus === "APPROVED" ? ":white_check_mark:" : ":x:";
   const statusText = newStatus === "APPROVED" ? "Approved" : "Rejected";
 
-  if (slack) {
-    try {
-      await slack.chat.update({
-        channel: payload.channel.id,
-        ts: payload.message.ts,
-        blocks: [
-          {
-            type: "section",
-            text: {
+  try {
+    await slack.chat.update({
+      channel: payload.channel.id,
+      ts: payload.message.ts,
+      blocks: [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `${statusEmoji} *${leaveRequest.user.name}*'s leave request — *${statusText}* by ${reviewer.name}`,
+          },
+        },
+        {
+          type: "section",
+          fields: [
+            {
               type: "mrkdwn",
-              text: `${statusEmoji} *${leaveRequest.user.name}*'s leave request — *${statusText}* by ${reviewer.name}`,
+              text: `*Type:*\n${leaveRequest.leaveType.name}`,
             },
-          },
-          {
-            type: "section",
-            fields: [
-              {
-                type: "mrkdwn",
-                text: `*Type:*\n${leaveRequest.leaveType.name}`,
-              },
-              {
-                type: "mrkdwn",
-                text: `*Days:*\n${daysRequested}`,
-              },
-            ],
-          },
-        ],
-        text: `${leaveRequest.user.name}'s leave request ${statusText.toLowerCase()} by ${reviewer.name}`,
-      });
-    } catch (err) {
-      console.error("Failed to update Slack message:", err);
-    }
-
-    // DM the requester about the decision
-    try {
-      const requesterSlackId = await findSlackUserByEmail(
-        leaveRequest.user.email
-      );
-      if (requesterSlackId) {
-        const dmBlocks = buildStatusUpdateMessage({
-          status: newStatus as "APPROVED" | "REJECTED",
-          leaveTypeName: leaveRequest.leaveType.name,
-          startDate: leaveRequest.startDate,
-          endDate: leaveRequest.endDate,
-          reviewerName: reviewer.name,
-          daysRequested,
-        });
-
-        await slack.chat.postMessage({
-          channel: requesterSlackId,
-          blocks: dmBlocks,
-          text: `Your ${leaveRequest.leaveType.name} request was ${statusText.toLowerCase()}.`,
-        });
-      }
-    } catch (err) {
-      console.error("Failed to DM requester:", err);
-    }
+            {
+              type: "mrkdwn",
+              text: `*Days:*\n${daysRequested}`,
+            },
+          ],
+        },
+      ],
+      text: `${leaveRequest.user.name}'s leave request ${statusText.toLowerCase()} by ${reviewer.name}`,
+    });
+  } catch (err) {
+    console.error("Failed to update Slack message:", err);
   }
+
+  notifyRequestStatusChange({
+    organizationId: integration.organizationId,
+    requesterEmail: leaveRequest.user.email,
+    status: newStatus as "APPROVED" | "REJECTED",
+    leaveTypeName: leaveRequest.leaveType.name,
+    startDate: leaveRequest.startDate,
+    endDate: leaveRequest.endDate,
+    reviewerName: reviewer.name,
+  }).catch((err) => console.error("Failed to DM requester:", err));
 
   return new Response("", { status: 200 });
 }

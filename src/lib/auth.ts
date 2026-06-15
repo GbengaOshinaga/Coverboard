@@ -2,6 +2,10 @@ import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import {
+  checkAuthRateLimit,
+  getClientIpFromAuthorizeReq,
+} from "@/lib/rate-limit";
 
 export const authOptions: NextAuthOptions = {
   session: {
@@ -17,9 +21,23 @@ export const authOptions: NextAuthOptions = {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.password) {
           return null;
+        }
+
+        // Rate-limit login attempts by IP. On overflow we throw so NextAuth
+        // surfaces a useful message on the login page instead of the generic
+        // "Invalid credentials" (which would conflate brute-force throttling
+        // with real bad-password feedback).
+        const rateLimit = await checkAuthRateLimit(
+          getClientIpFromAuthorizeReq(req?.headers),
+          "login"
+        );
+        if (!rateLimit.ok) {
+          throw new Error(
+            `Too many sign-in attempts. Try again in ${rateLimit.retryAfterSeconds}s.`
+          );
         }
 
         const user = await prisma.user.findUnique({

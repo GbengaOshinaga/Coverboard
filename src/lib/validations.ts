@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  EMPLOYMENT_TYPES,
+  normalizeEmploymentType,
+} from "@/lib/employment-types";
 
 export const leaveRequestSchema = z
   .object({
@@ -18,31 +22,71 @@ export const leaveRequestSchema = z
 
 export type LeaveRequestInput = z.infer<typeof leaveRequestSchema>;
 
-export const teamMemberSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters"),
-  email: z.string().email("Invalid email address"),
-  role: z.enum(["ADMIN", "MANAGER", "MEMBER"]),
-  memberType: z.enum(["EMPLOYEE", "CONTRACTOR", "FREELANCER"]),
-  employmentType: z.enum(["FULL_TIME", "PART_TIME", "VARIABLE_HOURS"]).default("FULL_TIME"),
-  daysWorkedPerWeek: z.number().min(0).max(7).default(5),
-  fteRatio: z.number().min(0).max(1).default(1),
-  rightToWorkVerified: z.boolean().nullable().optional(),
-  department: z.string().max(100).optional(),
-  countryCode: z.string().min(2, "Country is required").max(2),
-  workCountry: z
-    .string()
-    .trim()
-    .toUpperCase()
-    .length(2, "Work location (country) is required"),
-});
+export const teamMemberSchema = z
+  .object({
+    name: z.string().min(2, "Name must be at least 2 characters"),
+    email: z.string().email("Invalid email address"),
+    role: z.enum(["ADMIN", "MANAGER", "MEMBER"]),
+    memberType: z.enum(["EMPLOYEE", "CONTRACTOR", "FREELANCER"]),
+    employmentType: z
+      .preprocess(normalizeEmploymentType, z.enum(EMPLOYMENT_TYPES))
+      .default("FULL_TIME"),
+    daysWorkedPerWeek: z.number().min(0).max(7).default(5),
+    fteRatio: z.number().min(0).max(1).default(1),
+    rightToWorkVerified: z.boolean().nullable().optional(),
+    department: z.string().max(100).optional(),
+    countryCode: z.string().min(2, "Country is required").max(2),
+    workCountry: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .length(2, "Work location (country) is required"),
+  })
+  .transform((data) =>
+    data.employmentType === "ZERO_HOURS"
+      ? { ...data, daysWorkedPerWeek: 0 }
+      : data
+  );
 
 export type TeamMemberInput = z.infer<typeof teamMemberSchema>;
 
+/**
+ * Leave type configuration. Maps directly to Prisma `LeaveType` columns.
+ *
+ * `name`/`color`/`isPaid`/`defaultDays` are the "basics" any tier can edit.
+ * The remaining fields (`category`, `requiresEvidence`, `minNoticeDays`,
+ * `applyProRata`, `countryCode`) are the Scale-tier "custom leave policy
+ * builder" surface. They're all optional here so partial updates work; the
+ * route layer is what gates *creation* of leave types on Scale+.
+ */
 export const leaveTypeSchema = z.object({
   name: z.string().min(1, "Name is required"),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Must be a valid hex color"),
   isPaid: z.boolean(),
   defaultDays: z.number().int().min(1, "Must be at least 1 day"),
+  category: z.enum(["PAID", "UNPAID", "STATUTORY"]).optional(),
+  requiresEvidence: z.boolean().optional(),
+  minNoticeDays: z
+    .number()
+    .int()
+    .min(0, "Notice days cannot be negative")
+    .max(365, "Notice days cannot exceed 365")
+    .optional(),
+  applyProRata: z.boolean().optional(),
+  countryCode: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .length(2, "Country code must be a 2-letter ISO code")
+    .nullable()
+    .optional(),
 });
 
 export type LeaveTypeInput = z.infer<typeof leaveTypeSchema>;
+
+/**
+ * Partial update schema — every field optional. Used by `PATCH
+ * /api/leave-types/[id]`. Reuses the same field validations.
+ */
+export const leaveTypeUpdateSchema = leaveTypeSchema.partial();
+export type LeaveTypeUpdateInput = z.infer<typeof leaveTypeUpdateSchema>;

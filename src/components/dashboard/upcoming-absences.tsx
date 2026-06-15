@@ -72,7 +72,7 @@ export function UpcomingAbsences({
                     &middot; {days} day{days !== 1 ? "s" : ""}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center gap-2">
                   {absence.status === "PENDING" && (
                     <Badge variant="warning">Pending</Badge>
                   )}

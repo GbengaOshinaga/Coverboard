@@ -133,7 +133,7 @@ Since the 2020 Working Time Regulations amendments (and Harpur Trust v Brazel), 
 SSP is gated on three HMRC rules that were previously approximated; the calculator in `src/lib/uk-compliance.ts` now enforces each one:
 
 - **Qualifying-day daily rate** — `calculateSspDailyRate(qualifyingDaysPerWeek)` divides the weekly rate by the employee's contracted working days (`User.qualifyingDaysPerWeek`, default 5). A 3-day-a-week employee earns `123.25 / 3` per sick day — **not** `123.25 / 7`.
-- **Lower Earnings Limit** — `calculateSspEntitlement` returns `{ eligible: false, reason: "Below Lower Earnings Limit" }` when `User.averageWeeklyEarnings < LEL_WEEKLY` (£123 for 2024/25, overridable via `LEL_WEEKLY` env).
+- **Lower Earnings Limit** — `calculateSspEntitlement` returns `{ eligible: false, reason: "Below Lower Earnings Limit" }` when `User.averageWeeklyEarnings < LEL_WEEKLY` (£125 for 2026/27, held from 2025/26 — overridable via `LEL_WEEKLY` env; see **[docs/april-statutory-rate-update.md](docs/april-statutory-rate-update.md)** for the annual refresh).
 - **28-week cumulative cap** — `LeaveRequest.sspDaysPaid` and `LeaveRequest.sspLimitReached` track the statutory 28-week ceiling per PIW (linked with a 56-day window). When the cap is first hit, org admins/managers get an email and an `leave_request.ssp_cap_reached` audit entry is written.
 
 `POST /api/leave-requests` returns an `sspInfo` block with `eligible`, `reason`, `dailyRate`, `sspDaysPaidThisRequest`, `cumulativeSspDaysPaid`, `remainingDaysAfter`, and `limitReached`. Full details and test coverage in **`UK_COMPLIANCE.md`**.
@@ -146,7 +146,7 @@ SMP runs in two phases: **weeks 1–6 at 90% of Average Weekly Earnings**, then 
 - **Persisted on `LeaveRequest`**: `smpAverageWeeklyEarnings`, `smpPhase1EndDate`, `smpPhase2EndDate`, `smpPhase1WeeklyRate`, `smpPhase2WeeklyRate`.
 - **UK compliance report** (`/api/reports/uk-compliance`): the **parental tracker** row now includes an `smp` object with the current phase label ("Phase 1 (90% AWE)" / "Phase 2 (flat rate)"), weekly rate, and both phase end dates.
 - **Payroll export** (`/api/reports/payroll`): maternity rows include an `smp` block (AWE + current phase + current weekly rate + both phase rates) so the export CSV can drive payroll without manual lookups.
-- **Env override**: `SMP_WEEKLY_RATE` or `SMP_FLAT_RATE` (same value, update each April).
+- **Env override**: `SMP_WEEKLY_RATE` or `SMP_FLAT_RATE` (same value, update each April — see **[docs/april-statutory-rate-update.md](docs/april-statutory-rate-update.md)**).
 - **Tests**: `src/lib/smpCalculator.test.ts` — AWE math, both phase-2 branches (low earner and high earner), phase date/rate edge cases.
 
 ### Help & Contact
@@ -287,23 +287,40 @@ Under **Interactivity & Shortcuts**, enable interactivity and set:
 
 This allows the Approve / Reject buttons on leave request notifications.
 
-### 5. Install to workspace
+### 5. Add OAuth redirect URL
 
-Install the app to your Slack workspace and copy the **Bot User OAuth Token** and **Signing Secret**.
+Under **OAuth & Permissions**, add a redirect URL:
 
-### 6. Add environment variables
+- `https://your-domain.com/api/slack/callback` (use ngrok for local dev)
+
+You do **not** need to install the app manually to your workspace — each Coverboard customer admin connects from **Settings → Connect Slack**.
+
+### 6. Add environment variables (platform operator)
+
+Set these once on your Coverboard deployment (Vercel, etc.):
 
 ```
-SLACK_BOT_TOKEN="xoxb-your-bot-token"
+SLACK_CLIENT_ID="your-client-id"
+SLACK_CLIENT_SECRET="your-client-secret"
 SLACK_SIGNING_SECRET="your-signing-secret"
 SLACK_NOTIFICATION_CHANNEL="#time-off"
 ```
 
-The notification channel is where new leave request notifications (with approve/reject buttons) are posted. Defaults to `#time-off` if not set.
+Optional: `SLACK_REDIRECT_URI` if it differs from `{NEXTAUTH_URL}/api/slack/callback`.
+
+### 7. Enable distribution (production SaaS)
+
+In your Slack app, open **Manage Distribution** and allow installation on other workspaces (Share with any workspace, or publish to the Slack App Directory). Without this, only the workspace where you created the app can connect.
+
+### 8. Per-customer connection
+
+After signup, an **admin** opens **Settings** and clicks **Connect Slack**. That installs the bot into *their* Slack workspace and stores the bot token for their organization. No action is required from individual employees.
+
+The default notification channel is `#time-off` (configurable per org in Settings after connecting). Invite the bot to that channel: `/invite @YourBotName`.
 
 ### How user matching works
 
-The bot matches Slack users to Coverboard accounts by **email address**. When someone runs a slash command, the bot looks up their Slack profile email and finds the matching Coverboard user. Make sure team members use the same email in both systems.
+The bot matches Slack users to Coverboard accounts by **email address** within the same organization. When someone runs a slash command, the bot looks up their Slack profile email and finds the matching Coverboard user. Make sure team members use the same email in both systems.
 
 ## Jira Integration Setup
 
@@ -315,13 +332,14 @@ Go to [developer.atlassian.com/console/myapps](https://developer.atlassian.com/c
 
 ### 2. Configure scopes
 
-Add the following scopes:
+In the developer console, open your app → **Permissions** → add **Jira API** scopes:
 
 - `read:jira-work` — Search issues
 - `write:jira-work` — Reassign issues
 - `read:jira-user` — Look up users by email
 - `read:me` — Read the connecting user's identity
-- `offline_access` — Obtain a refresh token
+
+You will **not** see `offline_access` as a checkbox in the console. Atlassian treats it as a special OAuth scope: Coverboard adds it to the authorize URL when an admin clicks **Connect Jira**, which is how refresh tokens are issued. No separate console step is required.
 
 ### 3. Set the callback URL
 
@@ -378,7 +396,7 @@ src/
       locked/page.tsx             Full-page lock overlay for canceled/paused orgs
     api/
       auth/[...nextauth]/route.ts NextAuth handler
-      auth/register/route.ts      Registration endpoint
+      auth/signup/route.ts        Org + admin signup (creates Stripe trial)
       auth/forgot-password/       Password reset request
       auth/reset-password/        Password reset completion
       auth/change-password/       Authenticated password change
@@ -483,7 +501,7 @@ vercel.json                       Cron job configuration (weekly digest)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/auth/register` | Register a new user |
+| POST | `/api/auth/signup` | Create org + admin user, provision Stripe customer & 14-day trial subscription |
 | * | `/api/auth/[...nextauth]` | NextAuth sign-in/sign-out/session |
 | POST | `/api/auth/forgot-password` | Request a password reset email |
 | POST | `/api/auth/reset-password` | Reset password with token |

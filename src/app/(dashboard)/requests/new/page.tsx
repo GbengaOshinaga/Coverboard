@@ -14,7 +14,13 @@ export default async function NewRequestPage() {
 
   const leaveTypes = await prisma.leaveType.findMany({
     where: { organizationId: orgId },
-    select: { id: true, name: true, color: true },
+    select: {
+      id: true,
+      name: true,
+      color: true,
+      requiresEvidence: true,
+      minNoticeDays: true,
+    },
     orderBy: { name: "asc" },
   });
 

@@ -8,15 +8,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { PRICING } from "@/config/pricing";
+import { trackClient, AnalyticsEvents } from "@/lib/analytics";
+import {
+  BILLING_COUNTRIES,
+  DEFAULT_BILLING_COUNTRY,
+} from "@/config/billing-countries";
 
-type PlanKey = "starter" | "growth" | "scale" | "pro";
+type PlanKey = "free" | "starter" | "growth" | "scale" | "pro";
 
 const PLAN_TIER_NAMES: Record<PlanKey, string> = {
+  free: "Free",
   starter: "Starter",
   growth: "Growth",
   scale: "Scale",
   pro: "Pro",
 };
+
+const ALL_PLAN_KEYS: PlanKey[] = ["free", "starter", "growth", "scale", "pro"];
 
 export default function SignupPage() {
   return (
@@ -30,8 +38,7 @@ function SignupInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselected = (searchParams.get("plan") ?? "growth").toLowerCase();
-  const initialPlan: PlanKey = (["starter", "growth", "scale", "pro"] as PlanKey[])
-    .includes(preselected as PlanKey)
+  const initialPlan: PlanKey = ALL_PLAN_KEYS.includes(preselected as PlanKey)
     ? (preselected as PlanKey)
     : "growth";
 
@@ -40,6 +47,7 @@ function SignupInner() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [plan, setPlan] = useState<PlanKey>(initialPlan);
+  const [billingCountry, setBillingCountry] = useState(DEFAULT_BILLING_COUNTRY);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -52,13 +60,25 @@ function SignupInner() {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, orgName, plan }),
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          orgName,
+          plan,
+          billingCountry,
+        }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error ?? "Signup failed");
+        const errorMsg = data.error ?? "Signup failed";
+        setError(errorMsg);
+        trackClient(AnalyticsEvents.SIGNUP_FAILED, {
+          reason: errorMsg,
+          selected_plan: plan,
+        });
         setLoading(false);
         return;
       }
@@ -76,6 +96,10 @@ function SignupInner() {
       }
     } catch {
       setError("Something went wrong");
+      trackClient(AnalyticsEvents.SIGNUP_FAILED, {
+        reason: "network_error",
+        selected_plan: plan,
+      });
       setLoading(false);
     }
   }
@@ -91,12 +115,16 @@ function SignupInner() {
             Start managing your team&apos;s leave
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            14-day free trial. No card required.
+            {plan === "free"
+              ? "Free for up to 5 employees. No card required."
+              : "14-day free trial. No card required."}
           </p>
-          <p className="mt-1 text-xs text-gray-400">
-            If you don&apos;t subscribe, all data is permanently deleted within
-            30 days.
-          </p>
+          {plan !== "free" && (
+            <p className="mt-1 text-xs text-gray-400">
+              If you don&apos;t subscribe, all data is permanently deleted within
+              30 days.
+            </p>
+          )}
         </div>
 
         <Card>
@@ -117,12 +145,13 @@ function SignupInner() {
                 <label className="mb-2 block text-sm font-medium text-gray-700">
                   Choose a plan
                 </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(Object.keys(PLAN_TIER_NAMES) as PlanKey[]).map((k) => {
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {ALL_PLAN_KEYS.map((k) => {
                     const tier = PRICING.tiers.find(
                       (t) => t.name === PLAN_TIER_NAMES[k]
                     );
                     const selected = plan === k;
+                    const isFreeTier = k === "free";
                     return (
                       <button
                         type="button"
@@ -138,14 +167,19 @@ function SignupInner() {
                           {PLAN_TIER_NAMES[k]}
                         </div>
                         <div className="text-xs text-gray-500">
-                          £{tier?.price_monthly}/month
+                          {isFreeTier ? "Free" : `£${tier?.price_monthly}/month`}
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-gray-400">
+                          {tier?.headcount}
                         </div>
                       </button>
                     );
                   })}
                 </div>
                 <p className="mt-2 text-xs text-gray-400">
-                  You can change this later. Nothing charged during the 14-day trial.
+                  {plan === "free"
+                    ? "Upgrade any time from Settings → Billing."
+                    : "You can change this later. Nothing charged during the 14-day trial. Prices shown are exclusive of VAT or local taxes, which we calculate at checkout based on your billing country."}
                 </p>
               </div>
               <Input
@@ -157,6 +191,31 @@ function SignupInner() {
                 onChange={(e) => setOrgName(e.target.value)}
                 required
               />
+              <div>
+                <label
+                  htmlFor="billingCountry"
+                  className="mb-1.5 block text-sm font-medium text-gray-700"
+                >
+                  Billing country
+                </label>
+                <select
+                  id="billingCountry"
+                  value={billingCountry}
+                  onChange={(e) => setBillingCountry(e.target.value)}
+                  className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  required
+                >
+                  {BILLING_COUNTRIES.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-500">
+                  Used for VAT calculation. You can add a VAT number after
+                  signup in billing settings.
+                </p>
+              </div>
               <div className="border-t border-gray-100 pt-4">
                 <p className="mb-3 text-xs font-medium text-gray-500 uppercase tracking-wide">
                   Your account
@@ -193,8 +252,31 @@ function SignupInner() {
                 </div>
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Creating your team..." : "Start 14-day free trial"}
+                {loading
+                  ? "Creating your team..."
+                  : plan === "free"
+                  ? "Get started"
+                  : "Start 14-day free trial"}
               </Button>
+              <p className="text-center text-xs text-gray-500">
+                By creating an account you agree to our{" "}
+                <Link
+                  href="/terms"
+                  target="_blank"
+                  className="font-medium text-brand-600 hover:underline"
+                >
+                  Terms of Service
+                </Link>{" "}
+                and{" "}
+                <Link
+                  href="/privacy"
+                  target="_blank"
+                  className="font-medium text-brand-600 hover:underline"
+                >
+                  Privacy Policy
+                </Link>
+                .
+              </p>
             </form>
             <div className="mt-4 text-center text-sm text-gray-500">
               Already have an account?{" "}

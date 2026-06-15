@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { COUNTRY_NAMES } from "@/lib/utils";
+import { formatEmploymentType } from "@/lib/employment-types";
 
 type Member = {
   id: string;
@@ -31,15 +32,25 @@ const roleVariant: Record<string, "default" | "warning" | "outline"> = {
 export function MemberCard({
   member,
   regionsEnabled = false,
+  showRightToWorkAlerts = false,
+  showViewLink = false,
   onEdit,
   onAssignRegion,
 }: {
   member: Member;
   regionsEnabled?: boolean;
+  showRightToWorkAlerts?: boolean;
+  /** Admins and managers can open full employee profiles. */
+  showViewLink?: boolean;
   onEdit?: (member: Member) => void;
   onAssignRegion?: (member: Member) => void;
 }) {
   const isOut = member._count?.leaveRequests && member._count.leaveRequests > 0;
+  const needsRightToWork =
+    member.workCountry === "GB" &&
+    (member.rightToWorkVerified === false ||
+      member.rightToWorkVerified === null);
+  const isZeroHours = member.employmentType === "ZERO_HOURS";
 
   return (
     <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-3 transition-shadow hover:shadow-sm sm:gap-4 sm:p-4">
@@ -82,41 +93,55 @@ export function MemberCard({
             : "Not set"}
         </p>
         <p className="text-xs text-gray-400 mt-0.5">
-          {member.employmentType.replace("_", " ")} • FTE {member.fteRatio}
+          {formatEmploymentType(member.employmentType)} • FTE {member.fteRatio}
         </p>
-        {(member.workCountry === "GB" &&
-          (member.rightToWorkVerified === false ||
-            member.rightToWorkVerified === null)) && (
-          <p className="mt-1 inline-flex rounded bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-            Right to work verification required
-          </p>
+        {showRightToWorkAlerts && needsRightToWork && (
+          <div
+            className={`mt-1 rounded border px-2 py-1 text-[10px] font-medium ${
+              isZeroHours
+                ? "border-amber-300 bg-amber-100 text-amber-800"
+                : "border-amber-200 bg-amber-50 text-amber-700"
+            }`}
+          >
+            <p>Right to work verification required</p>
+            {isZeroHours && (
+              <p className="mt-0.5 font-normal">
+                Right to work verification is especially important for
+                zero-hours and bank staff.
+              </p>
+            )}
+          </div>
         )}
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <Link
-          href={`/team/${member.id}`}
-          className="rounded-md px-3 py-1.5 text-xs font-medium text-brand-600 border border-brand-200 hover:bg-brand-50 transition-colors text-center"
-        >
-          View
-        </Link>
-        {onEdit && (
-          <button
-            onClick={() => onEdit(member)}
-            className="rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
-          >
-            Edit
-          </button>
-        )}
-        {onAssignRegion && (
-          <button
-            onClick={() => onAssignRegion(member)}
-            className="rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
-          >
-            Region
-          </button>
-        )}
-      </div>
+      {(showViewLink || onEdit || onAssignRegion) && (
+        <div className="flex shrink-0 flex-col gap-1.5">
+          {showViewLink && (
+            <Link
+              href={`/team/${member.id}`}
+              className="rounded-md px-3 py-1.5 text-xs font-medium text-brand-600 border border-brand-200 hover:bg-brand-50 transition-colors text-center"
+            >
+              View
+            </Link>
+          )}
+          {onEdit && (
+            <button
+              onClick={() => onEdit(member)}
+              className="rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
+            >
+              Edit
+            </button>
+          )}
+          {onAssignRegion && (
+            <button
+              onClick={() => onAssignRegion(member)}
+              className="rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
+            >
+              Region
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

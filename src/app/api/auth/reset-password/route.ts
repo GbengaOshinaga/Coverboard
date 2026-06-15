@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { checkAuthRateLimit, getClientIp } from "@/lib/rate-limit";
+import { evaluatePasswordStrength } from "@/lib/password-strength";
 import { z } from "zod";
 
 const schema = z.object({
@@ -10,6 +12,12 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   try {
+    const rateLimit = await checkAuthRateLimit(
+      getClientIp(request),
+      "passwordReset"
+    );
+    if (!rateLimit.ok) return rateLimit.response;
+
     const body = await request.json();
     const parsed = schema.safeParse(body);
 
@@ -24,7 +32,7 @@ export async function POST(request: Request) {
 
     const resetToken = await prisma.passwordResetToken.findUnique({
       where: { token },
-      include: { user: { select: { id: true } } },
+      include: { user: { select: { id: true, email: true, name: true } } },
     });
 
     if (!resetToken) {
@@ -46,6 +54,14 @@ export async function POST(request: Request) {
         { error: "This reset link has expired. Please request a new one." },
         { status: 400 }
       );
+    }
+
+    const strength = evaluatePasswordStrength(password, [
+      resetToken.user.email,
+      resetToken.user.name,
+    ]);
+    if (!strength.ok) {
+      return NextResponse.json({ error: strength.message }, { status: 400 });
     }
 
     const passwordHash = await bcrypt.hash(password, 10);

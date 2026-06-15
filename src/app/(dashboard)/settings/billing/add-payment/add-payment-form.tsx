@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { loadStripe, type Stripe as StripeJs } from "@stripe/stripe-js";
 import {
   Elements,
@@ -16,9 +17,17 @@ import { ArrowLeft, CheckCircle, Lock } from "lucide-react";
 type Props = {
   publishableKey: string;
   planName: string;
-  planPriceGbp: number | null;
+  planPriceGbp: number;
   trialEndFormatted: string;
   alreadyAdded: boolean;
+  updateMode?: boolean;
+  /**
+   * Non-null when this is a Free → Paid upgrade. The chosen tier is
+   * forwarded to /api/billing/confirm-payment, which creates the
+   * subscription on that tier (no trial — they've already used the
+   * product on Free).
+   */
+  upgradeToPlanKey?: "starter" | "growth" | "scale" | "pro" | null;
 };
 
 export function AddPaymentForm({
@@ -27,7 +36,10 @@ export function AddPaymentForm({
   planPriceGbp,
   trialEndFormatted,
   alreadyAdded,
+  updateMode = false,
+  upgradeToPlanKey = null,
 }: Props) {
+  const isUpgrade = upgradeToPlanKey !== null;
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
   const [stripePromise] = useState<Promise<StripeJs | null> | null>(() =>
@@ -48,10 +60,14 @@ export function AddPaymentForm({
     init();
   }, []);
 
-  if (alreadyAdded) {
+  // Free → Paid upgrade: even if `cardAdded` is true (e.g. the org was
+  // previously on a paid plan, downgraded to Free, and is now coming back),
+  // we still need them to confirm — that's how the subscription gets
+  // created. So skip the "already added" short-circuit when upgrading.
+  if (alreadyAdded && !updateMode && !isUpgrade) {
     return (
       <>
-        <Header />
+        <Header updateMode={false} isUpgrade={false} />
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-start gap-3 rounded-md bg-emerald-50 p-4 text-sm text-emerald-800">
@@ -64,12 +80,18 @@ export function AddPaymentForm({
                 </p>
               </div>
             </div>
-            <div className="mt-4 flex justify-end">
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
               <Link
-                href="/dashboard"
+                href="/settings/billing/add-payment?update=1"
+                className="rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Update payment method
+              </Link>
+              <Link
+                href="/settings/billing"
                 className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
               >
-                Back to dashboard
+                Back to billing
               </Link>
             </div>
           </CardContent>
@@ -81,7 +103,7 @@ export function AddPaymentForm({
   if (!publishableKey) {
     return (
       <>
-        <Header />
+        <Header updateMode={false} isUpgrade={isUpgrade} planName={planName} />
         <Card>
           <CardContent className="pt-6 text-sm text-gray-700">
             Billing is not configured. Set NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY and
@@ -95,7 +117,7 @@ export function AddPaymentForm({
   if (initError) {
     return (
       <>
-        <Header />
+        <Header updateMode={false} isUpgrade={isUpgrade} planName={planName} />
         <Card>
           <CardContent className="pt-6 text-sm text-red-700">
             {initError}
@@ -107,14 +129,24 @@ export function AddPaymentForm({
 
   return (
     <>
-      <Header />
+      <Header updateMode={updateMode} isUpgrade={isUpgrade} planName={planName} />
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Add a payment method</CardTitle>
+          <CardTitle className="text-base">
+            {isUpgrade
+              ? `Subscribe to ${planName}`
+              : updateMode
+              ? "Update payment method"
+              : "Add a payment method"}
+          </CardTitle>
           <CardDescription>
-            {planPriceGbp !== null && trialEndFormatted
-              ? `Your card will be charged £${planPriceGbp}/month starting ${trialEndFormatted}.`
-              : "Your card will be charged once your trial ends."}
+            {isUpgrade
+              ? `Your card will be charged £${planPriceGbp}/month (excl. VAT). No trial — Free customers go straight to paid.`
+              : updateMode
+              ? "Enter new card details. Future invoices will use this card."
+              : trialEndFormatted
+                ? `Your card will be charged £${planPriceGbp}/month starting ${trialEndFormatted}.`
+                : `Your card will be charged £${planPriceGbp}/month after you confirm.`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -123,7 +155,11 @@ export function AddPaymentForm({
               stripe={stripePromise}
               options={{ clientSecret, appearance: { theme: "stripe" } }}
             >
-              <InnerForm planName={planName} />
+              <InnerForm
+                planName={planName}
+                updateMode={updateMode}
+                upgradeToPlanKey={upgradeToPlanKey}
+              />
             </Elements>
           ) : (
             <p className="text-sm text-gray-500">Loading secure payment form…</p>
@@ -138,7 +174,25 @@ export function AddPaymentForm({
   );
 }
 
-function Header() {
+function Header({
+  updateMode,
+  isUpgrade,
+  planName,
+}: {
+  updateMode: boolean;
+  isUpgrade: boolean;
+  planName?: string;
+}) {
+  const title = isUpgrade
+    ? `Upgrade to ${planName ?? "paid"}`
+    : updateMode
+    ? "Update payment method"
+    : "Add payment details";
+  const subtitle = isUpgrade
+    ? "Add a card to activate your subscription"
+    : updateMode
+    ? "Replace the card used for your Coverboard subscription"
+    : "Keep your Coverboard access after the trial ends";
   return (
     <div className="mb-6 flex items-center gap-3">
       <Link
@@ -148,20 +202,26 @@ function Header() {
         <ArrowLeft size={18} />
       </Link>
       <div>
-        <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">
-          Add payment details
-        </h1>
-        <p className="text-sm text-gray-500">
-          Keep your Coverboard access after the trial ends
-        </p>
+        <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">{title}</h1>
+        <p className="text-sm text-gray-500">{subtitle}</p>
       </div>
     </div>
   );
 }
 
-function InnerForm({ planName }: { planName: string }) {
+function InnerForm({
+  planName,
+  updateMode,
+  upgradeToPlanKey,
+}: {
+  planName: string;
+  updateMode: boolean;
+  upgradeToPlanKey: "starter" | "growth" | "scale" | "pro" | null;
+}) {
+  const isUpgrade = upgradeToPlanKey !== null;
   const stripe = useStripe();
   const elements = useElements();
+  const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -201,7 +261,10 @@ function InnerForm({ planName }: { planName: string }) {
     const confirm = await fetch("/api/billing/confirm-payment", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ paymentMethodId }),
+      body: JSON.stringify({
+        paymentMethodId,
+        ...(upgradeToPlanKey ? { planKey: upgradeToPlanKey } : {}),
+      }),
     });
     if (!confirm.ok) {
       const data = await confirm.json().catch(() => ({}));
@@ -212,6 +275,8 @@ function InnerForm({ planName }: { planName: string }) {
 
     setSuccess(true);
     setSubmitting(false);
+    // Re-fetch the dashboard layout so the trial banner picks up cardAdded=true.
+    router.refresh();
   }
 
   if (success) {
@@ -220,15 +285,18 @@ function InnerForm({ planName }: { planName: string }) {
         <div className="flex items-start gap-3 rounded-md bg-emerald-50 p-4 text-sm text-emerald-800">
           <CheckCircle size={18} className="mt-0.5 shrink-0" />
           <p>
-            You&apos;re all set. Your {planName} plan is ready to activate when
-            the trial ends.
+            {isUpgrade
+              ? `You're on the ${planName} plan. Welcome aboard.`
+              : updateMode
+              ? "Your payment method has been updated."
+              : `You're all set. Your ${planName} plan is ready to activate when the trial ends.`}
           </p>
         </div>
         <Link
-          href="/dashboard"
+          href="/settings/billing"
           className="inline-flex rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
         >
-          Back to dashboard
+          Back to billing
         </Link>
       </div>
     );
@@ -241,7 +309,13 @@ function InnerForm({ planName }: { planName: string }) {
         <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div>
       )}
       <Button type="submit" disabled={submitting || !stripe} className="w-full">
-        {submitting ? "Saving…" : "Save card & activate plan"}
+        {submitting
+          ? "Saving…"
+          : isUpgrade
+            ? `Subscribe to ${planName}`
+            : updateMode
+              ? "Save new card"
+              : "Save card & activate plan"}
       </Button>
     </form>
   );

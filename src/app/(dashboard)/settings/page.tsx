@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -10,12 +11,11 @@ import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
-import { Plus, MessageSquare, CheckCircle, XCircle, User, ChevronRight, SquareKanban, ExternalLink, Unlink, Pencil, Trash2, AlertTriangle, Banknote, MapPin } from "lucide-react";
+import { Plus, MessageSquare, CheckCircle, XCircle, User, ChevronRight, SquareKanban, ExternalLink, Unlink, Pencil, Trash2, AlertTriangle, Banknote, MapPin, CreditCard } from "lucide-react";
+import { EarningsCoveragePanel } from "@/components/settings/earnings-coverage-panel";
 import { Select } from "@/components/ui/select";
 
-/** Env vars and vendor-console setup are operator docs — only shown in the UI when running `next dev`. */
-const SHOW_DEPLOYMENT_INTEGRATION_DOCS =
-  process.env.NODE_ENV === "development";
+type LeaveCategory = "PAID" | "UNPAID" | "STATUTORY";
 
 type LeaveType = {
   id: string;
@@ -23,6 +23,11 @@ type LeaveType = {
   color: string;
   isPaid: boolean;
   defaultDays: number;
+  category: LeaveCategory;
+  requiresEvidence: boolean;
+  minNoticeDays: number;
+  applyProRata: boolean;
+  countryCode: string | null;
 };
 
 type SlackStatus = {
@@ -31,6 +36,7 @@ type SlackStatus = {
   botName: string | null;
   teamName?: string | null;
   channel: string | null;
+  connectedBy?: string | null;
   error?: string;
 };
 
@@ -54,7 +60,14 @@ type OrgSettings = {
   industry: string | null;
   hasUkEmployees: boolean;
   missingWorkLocationCount: number;
+  deletionScheduledFor: string | null;
 };
+
+const DELETION_DATE_FMT = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
 
 type LeavePolicy = {
   id: string;
@@ -85,7 +98,6 @@ type UKComplianceReport = {
 };
 
 export default function SettingsPage() {
-  const { data: session } = useSession();
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -93,23 +105,39 @@ export default function SettingsPage() {
   const [newColor, setNewColor] = useState("#6366f1");
   const [newDays, setNewDays] = useState("20");
   const [newIsPaid, setNewIsPaid] = useState(true);
+  const [newCategory, setNewCategory] = useState<LeaveCategory>("PAID");
+  const [newRequiresEvidence, setNewRequiresEvidence] = useState(false);
+  const [newMinNoticeDays, setNewMinNoticeDays] = useState("0");
+  const [newApplyProRata, setNewApplyProRata] = useState(false);
+  const [newCountryCode, setNewCountryCode] = useState("");
   const [saving, setSaving] = useState(false);
   const [slackStatus, setSlackStatus] = useState<SlackStatus | null>(null);
   const [jiraStatus, setJiraStatus] = useState<JiraStatus | null>(null);
   const [disconnectingJira, setDisconnectingJira] = useState(false);
+  const [disconnectingSlack, setDisconnectingSlack] = useState(false);
+  const [slackChannelInput, setSlackChannelInput] = useState("");
+  const [savingSlackChannel, setSavingSlackChannel] = useState(false);
   const [orgSettings, setOrgSettings] = useState<OrgSettings | null>(null);
   const [ukReport, setUkReport] = useState<UKComplianceReport | null>(null);
+  const [ukReportLoading, setUkReportLoading] = useState(false);
 
   const [editingType, setEditingType] = useState<LeaveType | null>(null);
   const [editName, setEditName] = useState("");
   const [editColor, setEditColor] = useState("#6366f1");
   const [editDays, setEditDays] = useState("20");
   const [editIsPaid, setEditIsPaid] = useState(true);
+  const [editCategory, setEditCategory] = useState<LeaveCategory>("PAID");
+  const [editRequiresEvidence, setEditRequiresEvidence] = useState(false);
+  const [editMinNoticeDays, setEditMinNoticeDays] = useState("0");
+  const [editApplyProRata, setEditApplyProRata] = useState(false);
+  const [editCountryCode, setEditCountryCode] = useState("");
   const [editSaving, setEditSaving] = useState(false);
 
   const [earningsCoverage, setEarningsCoverage] = useState<EarningsCoverage[] | null>(null);
+  const [enablingUkStatutory, setEnablingUkStatutory] = useState(false);
 
   const [confirmRegionsEnable, setConfirmRegionsEnable] = useState(false);
+  const [cancelingDeletion, setCancelingDeletion] = useState(false);
 
   const [policies, setPolicies] = useState<LeavePolicy[]>([]);
   const [showAddPolicy, setShowAddPolicy] = useState(false);
@@ -120,10 +148,29 @@ export default function SettingsPage() {
   const [savingPolicy, setSavingPolicy] = useState(false);
 
   const { toast } = useToast();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { data: session, status: sessionStatus } = useSession();
   const user = session?.user as Record<string, unknown> | undefined;
   const userRole = user?.role as string | undefined;
   const orgName = user?.organizationName as string | undefined;
   const isAdmin = userRole === "ADMIN";
+  const canManage =
+    sessionStatus === "authenticated" &&
+    (userRole === "ADMIN" || userRole === "MANAGER");
+  const userPlan = user?.plan as string | undefined;
+  // Custom leave type creation is gated on Scale+. Editing existing types
+  // is universally allowed for admins. Trial inherits Pro-bundle access.
+  const canCreateCustomLeaveType =
+    userPlan === "SCALE" || userPlan === "PRO" || userPlan === "TRIAL";
+
+  const needsUkStatutorySetup = useMemo(
+    () =>
+      Boolean(orgSettings?.hasUkEmployees) &&
+      leaveTypes.length > 0 &&
+      !leaveTypes.some((lt) => lt.name.includes("SSP")),
+    [orgSettings?.hasUkEmployees, leaveTypes]
+  );
 
   const fetchLeaveTypes = useCallback(async () => {
     setLoading(true);
@@ -135,25 +182,51 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => {
-    fetchLeaveTypes();
-  }, [fetchLeaveTypes]);
+    if (isAdmin) fetchLeaveTypes();
+  }, [isAdmin, fetchLeaveTypes]);
 
-  // Check Slack integration status
-  useEffect(() => {
-    async function checkSlack() {
-      try {
-        const res = await fetch("/api/slack/status");
-        if (res.ok) {
-          setSlackStatus(await res.json());
-        }
-      } catch {
-        // Silently fail
+  const refreshSlackStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/slack/status");
+      if (res.ok) {
+        const data = await res.json();
+        setSlackStatus(data);
+        if (data.channel) setSlackChannelInput(data.channel);
       }
+    } catch {
+      // Silently fail
     }
-    checkSlack();
   }, []);
 
   useEffect(() => {
+    void refreshSlackStatus();
+  }, [refreshSlackStatus]);
+
+  useEffect(() => {
+    if (searchParams.get("slack_connected") === "true") {
+      toast("Slack connected", "success");
+      void refreshSlackStatus();
+      router.replace("/settings");
+    }
+    const slackError = searchParams.get("slack_error");
+    if (slackError) {
+      const messages: Record<string, string> = {
+        forbidden: "Only admins can connect Slack",
+        missing_params: "Slack authorization was incomplete",
+        invalid_state: "Slack authorization expired — try again",
+        token_exchange_failed: "Could not complete Slack authorization",
+        invalid_response: "Unexpected response from Slack",
+        workspace_already_linked:
+          "This Slack workspace is already linked to another Coverboard team",
+        unknown: "Something went wrong connecting Slack",
+      };
+      toast(messages[slackError] ?? "Could not connect Slack", "error");
+      router.replace("/settings");
+    }
+  }, [searchParams, toast, refreshSlackStatus, router]);
+
+  useEffect(() => {
+    if (!canManage) return;
     async function fetchOrgSettings() {
       try {
         const res = await fetch("/api/organization/settings");
@@ -164,28 +237,43 @@ export default function SettingsPage() {
         // ignore
       }
     }
-    fetchOrgSettings();
-  }, []);
+    void fetchOrgSettings();
+  }, [canManage]);
 
   useEffect(() => {
+    if (!canManage) {
+      setUkReport(null);
+      setUkReportLoading(false);
+      return;
+    }
+    let cancelled = false;
     async function fetchUkReport() {
-      if (!orgSettings?.hasUkEmployees) {
-        setUkReport(null);
-        return;
-      }
+      setUkReportLoading(true);
       try {
         const res = await fetch("/api/reports/uk-compliance");
+        if (cancelled) return;
         if (res.ok) {
           setUkReport(await res.json());
+        } else {
+          setUkReport(null);
         }
       } catch {
-        // ignore
+        if (!cancelled) setUkReport(null);
+      } finally {
+        if (!cancelled) setUkReportLoading(false);
       }
     }
-    fetchUkReport();
-  }, [orgSettings?.hasUkEmployees]);
+    void fetchUkReport();
+    return () => {
+      cancelled = true;
+    };
+  }, [canManage]);
 
   useEffect(() => {
+    if (!canManage) {
+      setEarningsCoverage(null);
+      return;
+    }
     async function fetchCoverage() {
       if (!orgSettings?.hasUkEmployees) {
         setEarningsCoverage(null);
@@ -201,12 +289,32 @@ export default function SettingsPage() {
         // ignore
       }
     }
-    if (userRole === "ADMIN" || userRole === "MANAGER") {
-      fetchCoverage();
-    } else {
-      setEarningsCoverage(null);
+    void fetchCoverage();
+  }, [canManage, orgSettings?.hasUkEmployees]);
+
+  async function refreshOrgSettings() {
+    try {
+      const res = await fetch("/api/organization/settings");
+      if (res.ok) setOrgSettings(await res.json());
+    } catch {
+      // ignore
     }
-  }, [userRole, orgSettings?.hasUkEmployees]);
+  }
+
+  async function handleCancelDeletion() {
+    setCancelingDeletion(true);
+    try {
+      const res = await fetch("/api/account/delete/cancel", { method: "POST" });
+      if (res.ok) {
+        toast("Deletion canceled — your data is safe", "success");
+        await refreshOrgSettings();
+      } else {
+        toast("Could not cancel deletion", "error");
+      }
+    } finally {
+      setCancelingDeletion(false);
+    }
+  }
 
   async function saveOrgSettings(next: Partial<OrgSettings>) {
     if (!orgSettings) return;
@@ -257,6 +365,11 @@ export default function SettingsPage() {
     setEditColor(lt.color);
     setEditDays(String(lt.defaultDays));
     setEditIsPaid(lt.isPaid);
+    setEditCategory(lt.category);
+    setEditRequiresEvidence(lt.requiresEvidence);
+    setEditMinNoticeDays(String(lt.minNoticeDays));
+    setEditApplyProRata(lt.applyProRata);
+    setEditCountryCode(lt.countryCode ?? "");
   }
 
   async function handleEditLeaveType(e: React.FormEvent) {
@@ -271,6 +384,11 @@ export default function SettingsPage() {
         color: editColor,
         isPaid: editIsPaid,
         defaultDays: parseInt(editDays, 10),
+        category: editCategory,
+        requiresEvidence: editRequiresEvidence,
+        minNoticeDays: parseInt(editMinNoticeDays, 10) || 0,
+        applyProRata: editApplyProRata,
+        countryCode: editCountryCode.trim() || null,
       }),
     });
     if (res.ok) {
@@ -282,6 +400,21 @@ export default function SettingsPage() {
       toast(data?.error ?? "Failed to update", "error");
     }
     setEditSaving(false);
+  }
+
+  async function handleEnableUkStatutory() {
+    setEnablingUkStatutory(true);
+    try {
+      const res = await fetch("/api/organization/uk-statutory", { method: "POST" });
+      if (res.ok) {
+        toast("UK statutory leave types enabled", "success");
+        await Promise.all([fetchLeaveTypes(), fetchPolicies()]);
+      } else {
+        toast("Could not enable UK statutory leave types", "error");
+      }
+    } finally {
+      setEnablingUkStatutory(false);
+    }
   }
 
   async function handleDeleteLeaveType(lt: LeaveType) {
@@ -368,6 +501,11 @@ export default function SettingsPage() {
         color: newColor,
         isPaid: newIsPaid,
         defaultDays: parseInt(newDays),
+        category: newCategory,
+        requiresEvidence: newRequiresEvidence,
+        minNoticeDays: parseInt(newMinNoticeDays, 10) || 0,
+        applyProRata: newApplyProRata,
+        countryCode: newCountryCode.trim() || null,
       }),
     });
 
@@ -378,9 +516,15 @@ export default function SettingsPage() {
       setNewColor("#6366f1");
       setNewDays("20");
       setNewIsPaid(true);
+      setNewCategory("PAID");
+      setNewRequiresEvidence(false);
+      setNewMinNoticeDays("0");
+      setNewApplyProRata(false);
+      setNewCountryCode("");
       fetchLeaveTypes();
     } else {
-      toast("Failed to add leave type", "error");
+      const data = await res.json().catch(() => null);
+      toast(data?.error ?? "Failed to add leave type", "error");
     }
 
     setSaving(false);
@@ -388,7 +532,7 @@ export default function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div>
+      <div className="mb-6">
         <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Settings</h1>
         <p className="text-sm text-gray-500">
           Manage your organization and leave policies
@@ -415,8 +559,30 @@ export default function SettingsPage() {
         </Card>
       </Link>
 
+      {/* Billing link (admin only) */}
+      {isAdmin && (
+        <Link href="/settings/billing">
+          <Card className="hover:border-brand-200 hover:shadow-sm transition-all cursor-pointer">
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+                    <CreditCard size={18} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">Billing &amp; plan</p>
+                    <p className="text-xs text-gray-500">Manage your subscription, invoices, and payment method</p>
+                  </div>
+                </div>
+                <ChevronRight size={18} className="text-gray-400" />
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+      )}
+
       {/* Regions link */}
-      {(userRole === "ADMIN" || userRole === "MANAGER") && orgSettings?.regionsEnabled && (
+      {canManage && orgSettings?.regionsEnabled && (
         <Link href="/settings/regions">
           <Card className="hover:border-brand-200 hover:shadow-sm transition-all cursor-pointer">
             <CardContent className="py-4">
@@ -499,7 +665,7 @@ export default function SettingsPage() {
         </Card>
       )}
 
-      {orgSettings && orgSettings.missingWorkLocationCount > 0 && (
+      {orgSettings && orgSettings.missingWorkLocationCount > 0 && canManage && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           We&apos;ve added work location to employee profiles. Please update your
           team&apos;s work locations to ensure the right compliance features are
@@ -510,7 +676,7 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {orgSettings && orgSettings.hasUkEmployees && (
+      {orgSettings && orgSettings.hasUkEmployees && isAdmin && (
         <Card>
           <CardHeader>
             <CardTitle>UK compliance settings</CardTitle>
@@ -634,25 +800,49 @@ export default function SettingsPage() {
         </Card>
       )}
 
-      {orgSettings?.hasUkEmployees && ukReport && (
+      {canManage && (ukReportLoading || ukReport) && (
         <Card>
           <CardHeader>
-            <CardTitle>UK Compliance</CardTitle>
-            <CardDescription>Holiday usage, absence triggers, SSP, and parental leave tracking</CardDescription>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+              <div className="min-w-0 space-y-1.5">
+                <CardTitle>UK Compliance</CardTitle>
+                <CardDescription>
+                  Holiday usage, absence triggers, SSP, and parental leave tracking
+                </CardDescription>
+              </div>
+              {ukReport && (
+                <Link
+                  href="/reports"
+                  className="shrink-0 text-sm font-medium text-brand-600 hover:underline"
+                >
+                  Open reports →
+                </Link>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-gray-600">
-            <p>Holiday usage rows: <strong>{ukReport.holidayUsage.length}</strong></p>
-            <p>
-              Bradford triggers above {ukReport.absenceTrigger.threshold}:{" "}
-              <strong>{ukReport.absenceTrigger.rows.filter((r) => r.flagged).length}</strong>
-            </p>
-            <p>Employees currently on SSP: <strong>{ukReport.sspLiability.length}</strong></p>
-            <p>Active parental leave cases: <strong>{ukReport.parentalTracker.length}</strong></p>
+            {ukReportLoading ? (
+              <div className="space-y-2 py-2">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-4 w-2/3" />
+              </div>
+            ) : ukReport ? (
+              <>
+                <p>Holiday usage rows: <strong>{ukReport.holidayUsage.length}</strong></p>
+                <p>
+                  Bradford triggers above {ukReport.absenceTrigger.threshold}:{" "}
+                  <strong>{ukReport.absenceTrigger.rows.filter((r) => r.flagged).length}</strong>
+                </p>
+                <p>Employees currently on SSP: <strong>{ukReport.sspLiability.length}</strong></p>
+                <p>Active parental leave cases: <strong>{ukReport.parentalTracker.length}</strong></p>
+              </>
+            ) : null}
           </CardContent>
         </Card>
       )}
 
-      {orgSettings?.hasUkEmployees && earningsCoverage && (
+      {orgSettings?.hasUkEmployees && earningsCoverage && canManage && (
         <Card>
           <CardHeader>
             <div className="flex items-start justify-between gap-3">
@@ -671,108 +861,14 @@ export default function SettingsPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {earningsCoverage.length === 0 ? (
-              <p className="py-4 text-center text-sm text-gray-400">
-                No employees in this organization yet.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {earningsCoverage
-                  .filter((e) => !e.hasAnyHistory)
-                  .map((emp) => (
-                    <div
-                      key={emp.id}
-                      className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm"
-                    >
-                      <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
-                      <div className="flex-1">
-                        <p className="text-amber-900">
-                          Holiday pay for{" "}
-                          <strong>{emp.name}</strong> is based on basic
-                          salary only.{" "}
-                          <Link
-                            href={`/team/${emp.id}#earnings-history`}
-                            className="font-medium underline hover:no-underline"
-                          >
-                            Add earnings history →
-                          </Link>
-                        </p>
-                        {(emp.department || emp.countryCode) && (
-                          <p className="mt-0.5 text-xs text-amber-700">
-                            {[emp.department, emp.countryCode]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-
-
-                {earningsCoverage.every((e) => e.hasAnyHistory) && (
-                  <p className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-                    All employees have at least some earnings history on
-                    file. Keep it up to date weekly for accurate holiday
-                    pay calculations.
-                  </p>
-                )}
-
-                {earningsCoverage.some((e) => e.hasAnyHistory) && (
-                  <details className="mt-2">
-                    <summary className="cursor-pointer text-xs font-medium text-gray-600 hover:text-gray-900">
-                      Coverage per employee (
-                      {earningsCoverage.filter((e) => e.hasAnyHistory).length}{" "}
-                      of {earningsCoverage.length} with history)
-                    </summary>
-                    <div className="mt-2 overflow-x-auto">
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="border-b border-gray-100 text-left text-gray-500">
-                            <th className="py-1.5 pr-4">Employee</th>
-                            <th className="py-1.5 pr-4">Paid weeks</th>
-                            <th className="py-1.5 pr-4">Total weeks</th>
-                            <th className="py-1.5">Last week on file</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {earningsCoverage.map((e) => (
-                            <tr
-                              key={e.id}
-                              className="border-b border-gray-50"
-                            >
-                              <td className="py-1.5 pr-4 text-gray-900">
-                                {e.name}
-                              </td>
-                              <td
-                                className={`py-1.5 pr-4 ${e.paidWeeks >= 52 ? "text-emerald-700" : e.paidWeeks > 0 ? "text-amber-700" : "text-red-700"}`}
-                              >
-                                {e.paidWeeks}
-                              </td>
-                              <td className="py-1.5 pr-4 text-gray-600">
-                                {e.totalWeeks}
-                              </td>
-                              <td className="py-1.5 text-gray-600">
-                                {e.lastWeekStartDate
-                                  ? new Date(
-                                      e.lastWeekStartDate
-                                    ).toLocaleDateString("en-GB")
-                                  : "—"}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </details>
-                )}
-              </div>
-            )}
+            <EarningsCoveragePanel employees={earningsCoverage} />
           </CardContent>
         </Card>
       )}
 
-      {/* Leave types */}
-      <Card>
+      {/* Leave types (admin only) */}
+      {isAdmin && (
+        <Card>
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
             <div className="min-w-0 flex-1 space-y-1.5">
@@ -781,19 +877,56 @@ export default function SettingsPage() {
                 Configure the types of leave available in your organization
               </CardDescription>
             </div>
-            {isAdmin && (
-              <Button
-                size="sm"
-                className="shrink-0 sm:mt-0.5"
-                onClick={() => setShowAdd(true)}
-              >
-                <Plus className="mr-1 h-3.5 w-3.5" />
-                Add type
-              </Button>
-            )}
+            <Button
+              size="sm"
+              className="shrink-0 sm:mt-0.5"
+              onClick={() => setShowAdd(true)}
+              disabled={!canCreateCustomLeaveType}
+              title={
+                canCreateCustomLeaveType
+                  ? undefined
+                  : "Custom leave types are a Scale-tier feature"
+              }
+            >
+              <Plus className="mr-1 h-3.5 w-3.5" />
+              Add type
+            </Button>
           </div>
+          {!canCreateCustomLeaveType && (
+            <p className="mt-2 text-xs text-gray-500">
+              Editing the leave types below is available on every plan.
+              Creating new custom types is a{" "}
+              <Link
+                href="/settings/billing/change-plan"
+                className="font-medium text-brand-600 hover:text-brand-700"
+              >
+                Scale-plan feature
+              </Link>
+              .
+            </p>
+          )}
         </CardHeader>
         <CardContent>
+          {needsUkStatutorySetup && (
+            <div className="mb-4 flex flex-col gap-3 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex gap-3">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                <p>
+                  UK statutory leave types (SSP, maternity, paternity, and
+                  others) are not enabled yet. Enable them to match what you
+                  selected during onboarding.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                className="shrink-0"
+                disabled={enablingUkStatutory}
+                onClick={() => void handleEnableUkStatutory()}
+              >
+                {enablingUkStatutory ? "Enabling…" : "Enable UK statutory types"}
+              </Button>
+            </div>
+          )}
           {loading ? (
             <div className="space-y-2">
               {Array.from({ length: 3 }).map((_, i) => (
@@ -834,34 +967,31 @@ export default function SettingsPage() {
                     <Badge variant={lt.isPaid ? "success" : "outline"}>
                       {lt.isPaid ? "Paid" : "Unpaid"}
                     </Badge>
-                    {isAdmin && (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => openEditType(lt)}
-                          title="Edit"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleDeleteLeaveType(lt)}
-                          title="Delete"
-                          className="text-red-600 hover:bg-red-50"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </>
-                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openEditType(lt)}
+                      title="Edit"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDeleteLeaveType(lt)}
+                      title="Delete"
+                      className="text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
                 </div>
               ))}
             </div>
           )}
         </CardContent>
-      </Card>
+        </Card>
+      )}
 
       {/* Country policies */}
       {isAdmin && (
@@ -986,7 +1116,7 @@ export default function SettingsPage() {
                 Slack Integration
               </CardTitle>
               <CardDescription>
-                Connect Slack for /whosout, /requestleave, and /mybalance commands
+                Connect your team&apos;s Slack workspace for leave commands and notifications
               </CardDescription>
             </div>
             {slackStatus?.connected ? (
@@ -995,12 +1125,9 @@ export default function SettingsPage() {
                 Connected
               </Badge>
             ) : slackStatus?.configured ? (
-              <Badge variant="error" className="flex items-center gap-1">
-                <XCircle className="h-3 w-3" />
-                Error
-              </Badge>
+              <Badge variant="outline">Not connected</Badge>
             ) : (
-              <Badge variant="outline">Not configured</Badge>
+              <Badge variant="outline">Not available</Badge>
             )}
           </div>
         </CardHeader>
@@ -1017,10 +1144,65 @@ export default function SettingsPage() {
                   <span className="font-medium">{slackStatus.teamName}</span>
                 </div>
               )}
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">Notification channel</span>
-                <span className="font-medium">{slackStatus.channel}</span>
-              </div>
+              {slackStatus.connectedBy && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500">Connected by</span>
+                  <span className="font-medium">{slackStatus.connectedBy}</span>
+                </div>
+              )}
+              {isAdmin ? (
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Notification channel
+                  </label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="slackChannel"
+                      type="text"
+                      placeholder="#time-off"
+                      value={slackChannelInput}
+                      onChange={(e) => setSlackChannelInput(e.target.value)}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={savingSlackChannel || !slackChannelInput.trim()}
+                      onClick={async () => {
+                        setSavingSlackChannel(true);
+                        try {
+                          const res = await fetch("/api/slack/channel", {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ channel: slackChannelInput.trim() }),
+                          });
+                          if (res.ok) {
+                            toast("Notification channel updated", "success");
+                            await refreshSlackStatus();
+                          } else {
+                            const data = await res.json();
+                            toast(data.error ?? "Failed to update channel", "error");
+                          }
+                        } catch {
+                          toast("Failed to update channel", "error");
+                        } finally {
+                          setSavingSlackChannel(false);
+                        }
+                      }}
+                    >
+                      {savingSlackChannel ? "Saving…" : "Save"}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Invite the bot to this channel first ({`/invite @${slackStatus.botName}`}).
+                  </p>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500">Notification channel</span>
+                  <span className="font-medium">{slackStatus.channel}</span>
+                </div>
+              )}
               <div className="mt-3 rounded-lg bg-gray-50 p-3">
                 <p className="text-xs font-medium text-gray-600 mb-2">Available commands:</p>
                 <div className="space-y-1 text-xs text-gray-500">
@@ -1029,55 +1211,81 @@ export default function SettingsPage() {
                   <p><code className="rounded bg-gray-200 px-1">/requestleave</code> — Submit a leave request from Slack</p>
                 </div>
               </div>
+              {isAdmin && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  disabled={disconnectingSlack}
+                  onClick={async () => {
+                    setDisconnectingSlack(true);
+                    try {
+                      const res = await fetch("/api/slack/disconnect", { method: "POST" });
+                      if (res.ok) {
+                        toast("Slack disconnected", "success");
+                        setSlackStatus({
+                          configured: true,
+                          connected: false,
+                          botName: null,
+                          teamName: null,
+                          channel: null,
+                          connectedBy: null,
+                        });
+                      } else {
+                        toast("Failed to disconnect Slack", "error");
+                      }
+                    } catch {
+                      toast("Failed to disconnect Slack", "error");
+                    } finally {
+                      setDisconnectingSlack(false);
+                    }
+                  }}
+                >
+                  <Unlink className="mr-1 h-3.5 w-3.5" />
+                  {disconnectingSlack ? "Disconnecting…" : "Disconnect Slack"}
+                </Button>
+              )}
             </div>
-          ) : (
+          ) : slackStatus?.configured ? (
             <div className="space-y-3">
-              {SHOW_DEPLOYMENT_INTEGRATION_DOCS ? (
+              {slackStatus.error && (
+                <p className="text-sm text-red-700">{slackStatus.error}</p>
+              )}
+              <p className="text-sm text-gray-500">
+                Connect your company Slack workspace so your team can use leave commands
+                and receive approval notifications in Slack.
+              </p>
+              {isAdmin ? (
                 <>
-                  <p className="text-sm text-gray-500">
-                    To enable the Slack bot, add these environment variables to your deployment:
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      window.location.href = "/api/slack/connect";
+                    }}
+                  >
+                    Connect Slack
+                  </Button>
+                  <p className="text-xs text-gray-400">
+                    Slack may show a &ldquo;not yet reviewed&rdquo; notice during install — that&apos;s expected and safe to continue.
                   </p>
-                  <div className="rounded-lg bg-gray-50 p-3 font-mono text-xs text-gray-600 space-y-1">
-                    <p>SLACK_BOT_TOKEN=xoxb-...</p>
-                    <p>SLACK_SIGNING_SECRET=...</p>
-                    <p>SLACK_NOTIFICATION_CHANNEL=#time-off</p>
-                  </div>
-                  <div className="rounded-lg bg-blue-50 p-3">
-                    <p className="text-xs text-blue-700">
-                      <strong>Setup guide:</strong> Create a Slack app at{" "}
-                      <a
-                        href="https://api.slack.com/apps"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline"
-                      >
-                        api.slack.com/apps
-                      </a>
-                      . Add bot token scopes: <code className="rounded bg-blue-100 px-1">commands</code>,{" "}
-                      <code className="rounded bg-blue-100 px-1">chat:write</code>,{" "}
-                      <code className="rounded bg-blue-100 px-1">users:read</code>,{" "}
-                      <code className="rounded bg-blue-100 px-1">users:read.email</code>.
-                      Set slash command URLs to <code className="rounded bg-blue-100 px-1">your-domain/api/slack/commands</code>{" "}
-                      and interactivity URL to <code className="rounded bg-blue-100 px-1">your-domain/api/slack/interactions</code>.
-                    </p>
-                  </div>
                 </>
               ) : (
-                <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-4">
-                  <p className="text-sm text-gray-600">
-                    The Slack bot isn&apos;t configured for this deployment. Credentials are set on the server by whoever hosts Coverboard — not from this screen.
-                  </p>
-                  {isAdmin ? (
-                    <p className="mt-2 text-xs text-gray-500">
-                      If your team self-hosts, point a developer or DevOps engineer at the Slack section in the project README.
-                    </p>
-                  ) : (
-                    <p className="mt-2 text-xs text-gray-500">
-                      Ask an organisation admin if you need this enabled.
-                    </p>
-                  )}
-                </div>
+                <p className="text-xs text-gray-400">Ask an admin to connect Slack.</p>
               )}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-4">
+              <p className="text-sm text-gray-600">
+                Slack isn&apos;t available for your organisation yet.
+              </p>
+              <p className="mt-2 text-xs text-gray-500">
+                If Slack is included in your plan,{" "}
+                <Link href="/help" className="font-medium text-brand-600 hover:text-brand-700">
+                  contact support
+                </Link>{" "}
+                to request access. Once it&apos;s enabled, an organisation admin can connect your
+                workspace from this page.
+              </p>
             </div>
           )}
         </CardContent>
@@ -1180,52 +1388,18 @@ export default function SettingsPage() {
               )}
             </div>
           ) : (
-            <div className="space-y-3">
-              {SHOW_DEPLOYMENT_INTEGRATION_DOCS ? (
-                <>
-                  <p className="text-sm text-gray-500">
-                    To enable the Jira integration, add these environment variables to your deployment:
-                  </p>
-                  <div className="rounded-lg bg-gray-50 p-3 font-mono text-xs text-gray-600 space-y-1">
-                    <p>JIRA_CLIENT_ID=...</p>
-                    <p>JIRA_CLIENT_SECRET=...</p>
-                    <p>JIRA_REDIRECT_URI=https://your-domain/api/jira/callback</p>
-                  </div>
-                  <div className="rounded-lg bg-blue-50 p-3">
-                    <p className="text-xs text-blue-700">
-                      <strong>Setup guide:</strong> Create an OAuth 2.0 (3LO) app at{" "}
-                      <a
-                        href="https://developer.atlassian.com/console/myapps/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline"
-                      >
-                        developer.atlassian.com
-                      </a>
-                      . Add scopes: <code className="rounded bg-blue-100 px-1">read:jira-work</code>,{" "}
-                      <code className="rounded bg-blue-100 px-1">write:jira-work</code>,{" "}
-                      <code className="rounded bg-blue-100 px-1">read:jira-user</code>,{" "}
-                      <code className="rounded bg-blue-100 px-1">read:me</code>,{" "}
-                      <code className="rounded bg-blue-100 px-1">offline_access</code>.
-                    </p>
-                  </div>
-                </>
-              ) : (
-                <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-4">
-                  <p className="text-sm text-gray-600">
-                    Jira isn&apos;t configured for this deployment. OAuth credentials are set on the server by whoever hosts Coverboard — not from this screen.
-                  </p>
-                  {isAdmin ? (
-                    <p className="mt-2 text-xs text-gray-500">
-                      If your team self-hosts, point a developer or DevOps engineer at the Jira section in the project README.
-                    </p>
-                  ) : (
-                    <p className="mt-2 text-xs text-gray-500">
-                      Ask an organisation admin if you need this enabled.
-                    </p>
-                  )}
-                </div>
-              )}
+            <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-4">
+              <p className="text-sm text-gray-600">
+                Jira isn&apos;t available for your organisation yet.
+              </p>
+              <p className="mt-2 text-xs text-gray-500">
+                If Jira is included in your plan,{" "}
+                <Link href="/help" className="font-medium text-brand-600 hover:text-brand-700">
+                  contact support
+                </Link>{" "}
+                to request access. Once it&apos;s enabled, an organisation admin can connect your
+                site from this page.
+              </p>
             </div>
           )}
         </CardContent>
@@ -1280,6 +1454,68 @@ export default function SettingsPage() {
             />
             Paid leave
           </label>
+
+          <div className="space-y-3 rounded-md border border-gray-100 bg-gray-50 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              Policy rules
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Category
+                </label>
+                <select
+                  value={newCategory}
+                  onChange={(e) =>
+                    setNewCategory(e.target.value as LeaveCategory)
+                  }
+                  className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  <option value="PAID">Paid</option>
+                  <option value="UNPAID">Unpaid</option>
+                  <option value="STATUTORY">Statutory</option>
+                </select>
+              </div>
+              <Input
+                id="ltMinNotice"
+                label="Min notice (days)"
+                type="number"
+                min="0"
+                max="365"
+                value={newMinNoticeDays}
+                onChange={(e) => setNewMinNoticeDays(e.target.value)}
+              />
+            </div>
+            <Input
+              id="ltCountryCode"
+              label="Restrict to country (ISO 2-letter, optional)"
+              value={newCountryCode}
+              onChange={(e) => setNewCountryCode(e.target.value)}
+              placeholder="e.g. GB — leave blank for all countries"
+              maxLength={2}
+            />
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={newRequiresEvidence}
+                  onChange={(e) => setNewRequiresEvidence(e.target.checked)}
+                  className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                />
+                Requires evidence (fit note, certificate, etc.)
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={newApplyProRata}
+                  onChange={(e) => setNewApplyProRata(e.target.checked)}
+                  className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                />
+                Pro-rate for part-time and variable-hours
+              </label>
+            </div>
+          </div>
+
           <div className="flex items-center gap-3 pt-2">
             <Button type="submit" disabled={saving}>
               {saving ? "Adding..." : "Add leave type"}
@@ -1343,6 +1579,68 @@ export default function SettingsPage() {
             />
             Paid leave
           </label>
+
+          <div className="space-y-3 rounded-md border border-gray-100 bg-gray-50 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              Policy rules
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Category
+                </label>
+                <select
+                  value={editCategory}
+                  onChange={(e) =>
+                    setEditCategory(e.target.value as LeaveCategory)
+                  }
+                  className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  <option value="PAID">Paid</option>
+                  <option value="UNPAID">Unpaid</option>
+                  <option value="STATUTORY">Statutory</option>
+                </select>
+              </div>
+              <Input
+                id="editLtMinNotice"
+                label="Min notice (days)"
+                type="number"
+                min="0"
+                max="365"
+                value={editMinNoticeDays}
+                onChange={(e) => setEditMinNoticeDays(e.target.value)}
+              />
+            </div>
+            <Input
+              id="editLtCountryCode"
+              label="Restrict to country (ISO 2-letter, optional)"
+              value={editCountryCode}
+              onChange={(e) => setEditCountryCode(e.target.value)}
+              placeholder="e.g. GB — leave blank for all countries"
+              maxLength={2}
+            />
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={editRequiresEvidence}
+                  onChange={(e) => setEditRequiresEvidence(e.target.checked)}
+                  className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                />
+                Requires evidence (fit note, certificate, etc.)
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={editApplyProRata}
+                  onChange={(e) => setEditApplyProRata(e.target.checked)}
+                  className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                />
+                Pro-rate for part-time and variable-hours
+              </label>
+            </div>
+          </div>
+
           <div className="flex items-center gap-3 pt-2">
             <Button type="submit" disabled={editSaving}>
               {editSaving ? "Saving..." : "Save changes"}
@@ -1455,24 +1753,61 @@ export default function SettingsPage() {
         </div>
       </Dialog>
 
-      {isAdmin && (
-        <Card className="border-red-200">
-          <CardHeader>
-            <CardTitle className="text-red-900">Danger zone</CardTitle>
-            <CardDescription>
-              Permanently delete your organization and all data. A 30-day grace
-              period applies.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link
-              href="/account/delete"
-              className="inline-flex rounded-md border border-red-200 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
-            >
-              Delete account and all data →
-            </Link>
-          </CardContent>
-        </Card>
+      {isAdmin && orgSettings && (
+        orgSettings.deletionScheduledFor ? (
+          <Card id="danger-zone" className="border-red-200 scroll-mt-6">
+            <CardHeader>
+              <CardTitle className="text-red-900">
+                Account scheduled for deletion
+              </CardTitle>
+              <CardDescription>
+                Your organization is in the 30-day grace period before permanent
+                deletion.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-red-900">
+                Your account is scheduled for permanent deletion on{" "}
+                <strong>
+                  {DELETION_DATE_FMT.format(
+                    new Date(orgSettings.deletionScheduledFor)
+                  )}
+                </strong>
+                . After that date, all team data, leave records, and billing
+                history are irrecoverably deleted.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={cancelingDeletion}
+                onClick={handleCancelDeletion}
+                className="border-red-200 text-red-700 hover:bg-red-50"
+              >
+                {cancelingDeletion
+                  ? "Canceling…"
+                  : "Cancel deletion and keep my data"}
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card id="danger-zone" className="border-red-200 scroll-mt-6">
+            <CardHeader>
+              <CardTitle className="text-red-900">Danger zone</CardTitle>
+              <CardDescription>
+                Permanently delete your organization and all data. A 30-day grace
+                period applies.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Link
+                href="/account/delete"
+                className="inline-flex rounded-md border border-red-200 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+              >
+                Delete account and all data →
+              </Link>
+            </CardContent>
+          </Card>
+        )
       )}
     </div>
   );

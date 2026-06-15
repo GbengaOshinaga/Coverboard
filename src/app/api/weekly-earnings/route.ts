@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { syncUserAverageWeeklyEarnings } from "@/lib/smpCalculator";
 
 /**
  * Weekly earnings history used by the 52-week holiday pay calculator.
@@ -127,6 +128,10 @@ export async function POST(request: Request) {
         )
       );
 
+      await syncUserAverageWeeklyEarnings(parsed.data.userId).catch((err) =>
+        console.error("Failed to sync average weekly earnings:", err)
+      );
+
       return NextResponse.json(results, { status: 201 });
     }
 
@@ -168,6 +173,10 @@ export async function POST(request: Request) {
           parsed.data.isZeroPayWeek ?? parsed.data.grossEarnings === 0,
       },
     });
+
+    await syncUserAverageWeeklyEarnings(parsed.data.userId).catch((err) =>
+      console.error("Failed to sync average weekly earnings:", err)
+    );
 
     return NextResponse.json(entry, { status: 201 });
   } catch (error) {

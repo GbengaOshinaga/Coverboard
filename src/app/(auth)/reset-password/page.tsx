@@ -74,15 +74,9 @@ function ResetPasswordForm() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Set new password</CardTitle>
-        <CardDescription>
-          Choose a strong password for your account
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {success ? (
-          <div className="text-center py-4">
+      {success ? (
+        <CardContent className="py-8">
+          <div className="text-center">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 mb-4">
               <CheckCircle size={24} />
             </div>
@@ -100,8 +94,17 @@ function ResetPasswordForm() {
               Sign in
             </Link>
           </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
+        </CardContent>
+      ) : (
+        <>
+          <CardHeader>
+            <CardTitle>Set new password</CardTitle>
+            <CardDescription>
+              Choose a strong password for your account
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
               <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
                 {error}
@@ -141,9 +144,10 @@ function ResetPasswordForm() {
                 Back to sign in
               </Link>
             </div>
-          </form>
-        )}
-      </CardContent>
+            </form>
+          </CardContent>
+        </>
+      )}
     </Card>
   );
 }

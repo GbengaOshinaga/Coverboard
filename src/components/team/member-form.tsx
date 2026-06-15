@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { COUNTRY_NAMES } from "@/lib/utils";
+import { EMPLOYMENT_TYPE_OPTIONS } from "@/lib/employment-types";
 
 type MemberData = {
   id?: string;
@@ -38,12 +39,6 @@ const countryOptions = Object.entries(COUNTRY_NAMES).map(([code, name]) => ({
   label: `${name} (${code})`,
 }));
 
-const employmentTypeOptions = [
-  { value: "FULL_TIME", label: "Full-time" },
-  { value: "PART_TIME", label: "Part-time" },
-  { value: "VARIABLE_HOURS", label: "Variable hours" },
-];
-
 export function MemberForm({
   initialData,
   onSubmit,
@@ -70,7 +65,9 @@ export function MemberForm({
     initialData?.employmentType ?? "FULL_TIME"
   );
   const [daysWorkedPerWeek, setDaysWorkedPerWeek] = useState(
-    String(initialData?.daysWorkedPerWeek ?? 5)
+    initialData?.employmentType === "ZERO_HOURS"
+      ? "0"
+      : String(initialData?.daysWorkedPerWeek ?? 5)
   );
   const [fteRatio, setFteRatio] = useState(String(initialData?.fteRatio ?? 1));
   const [department, setDepartment] = useState(initialData?.department ?? "");
@@ -97,7 +94,8 @@ export function MemberForm({
         role,
         memberType,
         employmentType,
-        daysWorkedPerWeek: parseFloat(daysWorkedPerWeek),
+        daysWorkedPerWeek:
+          employmentType === "ZERO_HOURS" ? 0 : parseFloat(daysWorkedPerWeek),
         fteRatio: parseFloat(fteRatio),
         rightToWorkVerified:
           rightToWorkVerified === "unknown"
@@ -140,7 +138,7 @@ export function MemberForm({
         required
       />
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Select
           id="memberRole"
           label="Role"
@@ -173,13 +171,16 @@ export function MemberForm({
         onChange={(e) => setWorkCountry(e.target.value)}
       />
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Select
           id="employmentType"
           label="Employment"
-          options={employmentTypeOptions}
+          options={EMPLOYMENT_TYPE_OPTIONS}
           value={employmentType}
-          onChange={(e) => setEmploymentType(e.target.value)}
+          onChange={(e) => {
+            setEmploymentType(e.target.value);
+            if (e.target.value === "ZERO_HOURS") setDaysWorkedPerWeek("0");
+          }}
         />
         <Input
           id="daysWorkedPerWeek"
@@ -190,10 +191,11 @@ export function MemberForm({
           step="0.5"
           value={daysWorkedPerWeek}
           onChange={(e) => setDaysWorkedPerWeek(e.target.value)}
+          disabled={employmentType === "ZERO_HOURS"}
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Input
           id="fteRatio"
           label="FTE ratio"
@@ -225,7 +227,7 @@ export function MemberForm({
         onChange={(e) => setRightToWorkVerified(e.target.value)}
       />
 
-      <div className="flex items-center gap-3 pt-2">
+      <div className="flex flex-wrap items-center gap-2 pt-2 sm:gap-3">
         <Button type="submit" disabled={loading}>
           {loading
             ? isEdit

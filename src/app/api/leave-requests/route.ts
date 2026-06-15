@@ -12,7 +12,15 @@ import {
   calculateSspEntitlement,
   UK_SSP_WEEKLY_RATE,
 } from "@/lib/uk-compliance";
-import { recordAudit, requestAuditContext } from "@/lib/audit";
+import {
+  recordAudit,
+  recordReadAudit,
+  requestAuditContext,
+  selectSicknessAuditMeta,
+} from "@/lib/audit";
+import type { AnyPlan } from "@/lib/plans";
+import { AnalyticsEvents } from "@/lib/analytics/events";
+import { trackServer } from "@/lib/analytics/server";
 import {
   getDailyHolidayPayRateForUser,
 } from "@/lib/holidayPay";
@@ -21,6 +29,7 @@ import {
   calculateSMPPhaseRates,
   getAweForUser,
   isMaternityLeaveType,
+  resolveAverageWeeklyEarnings,
 } from "@/lib/smpCalculator";
 import { calculateBradfordFactor } from "@/lib/uk-compliance";
 import { z } from "zod";
@@ -83,6 +92,29 @@ export async function GET(request: Request) {
     orderBy: { startDate: "asc" },
   });
 
+  // Pro-only read-side audit when sensitive sickness notes were exposed to a
+  // non-subject admin/manager viewer.
+  const sicknessMeta = selectSicknessAuditMeta(
+    requests,
+    currentUserId,
+    userRole
+  );
+  if (sicknessMeta) {
+    void recordReadAudit({
+      plan: sessionUser.plan as AnyPlan | undefined,
+      organizationId: orgId,
+      action: "leave_request.sickness_viewed",
+      resource: "leave_request",
+      actor: {
+        id: currentUserId,
+        email: (session.user.email as string | null) ?? null,
+        role: userRole,
+      },
+      metadata: sicknessMeta,
+      context: requestAuditContext(request),
+    });
+  }
+
   return NextResponse.json(requests);
 }
 
@@ -120,7 +152,14 @@ export async function POST(request: Request) {
     const userId = (session.user as Record<string, unknown>).id as string;
     const leaveTypeConfig = await prisma.leaveType.findUnique({
       where: { id: leaveTypeId },
-      select: { name: true, minNoticeDays: true, requiresEvidence: true, applyProRata: true },
+      select: {
+        name: true,
+        minNoticeDays: true,
+        requiresEvidence: true,
+        applyProRata: true,
+        category: true,
+        isPaid: true,
+      },
     });
     if (!leaveTypeConfig) {
       return NextResponse.json({ error: "Leave type not found" }, { status: 404 });
@@ -133,7 +172,13 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    if (leaveTypeConfig.requiresEvidence && !evidenceProvided) {
+    const evidenceConfirmed =
+      evidenceProvided === true ||
+      (leaveTypeConfig.requiresEvidence &&
+        typeof sicknessNote === "string" &&
+        sicknessNote.trim().length > 0);
+
+    if (leaveTypeConfig.requiresEvidence && !evidenceConfirmed) {
       return NextResponse.json(
         { error: "Evidence is required for this leave type" },
         { status: 400 }
@@ -252,6 +297,10 @@ export async function POST(request: Request) {
     // leave request — the absence is still a fact — but the monetary
     // side is gated on statutory eligibility.
     const isSspLeave = leaveTypeConfig.name.includes("SSP");
+    // Bradford Factor covers any sickness-type leave, not just SSP-eligible
+    // statutory absence. We track this separately so we can keep the SSP
+    // payment branch narrow while still scoring all sickness absence.
+    const isSicknessLeave = isSspLeave || leaveTypeConfig.name.includes("Sick");
     let sspInfo:
       | {
           eligible: boolean;
@@ -304,11 +353,16 @@ export async function POST(request: Request) {
           0
         );
 
+        const averageWeeklyEarnings = await resolveAverageWeeklyEarnings(
+          userId,
+          startDate,
+          employee.averageWeeklyEarnings === null
+            ? null
+            : Number(employee.averageWeeklyEarnings)
+        );
+
         const entitlement = calculateSspEntitlement({
-          averageWeeklyEarnings:
-            employee.averageWeeklyEarnings === null
-              ? null
-              : Number(employee.averageWeeklyEarnings),
+          averageWeeklyEarnings,
           sspDaysPaidInPeriod: cumulativePrior,
           qualifyingDaysPerWeek: employee.qualifyingDaysPerWeek,
         });
@@ -364,7 +418,9 @@ export async function POST(request: Request) {
         note,
         sicknessNote: sicknessNote ?? undefined,
         userId,
-        evidenceProvided: evidenceProvided ?? false,
+        evidenceProvided: leaveTypeConfig.requiresEvidence
+          ? evidenceConfirmed
+          : (evidenceProvided ?? false),
         kitDaysUsed: kitDaysUsed ?? 0,
         splitDaysUsed: splitDaysUsed ?? 0,
         childBirthDate: childBirthDate ?? undefined,
@@ -395,20 +451,27 @@ export async function POST(request: Request) {
     });
 
     // ── Bradford Factor recalculation ─────────────────────────────────
-    // Recompute on every SSP/sickness event so reports always reflect live data.
-    if (isSspLeave) {
+    // Bradford measures *taken* absence, so only APPROVED requests count.
+    // A freshly-created request defaults to PENDING and will roll into the
+    // stored score when it's approved (handled in the [id] PATCH route).
+    // We still recompute on create so any prior APPROVED rows for this user
+    // stay consistent (e.g. cleaning up an orphaned stored value).
+    if (isSicknessLeave) {
       prisma.leaveRequest
         .findMany({
           where: {
             userId,
-            leaveType: { name: { contains: "SSP" } },
-            status: { in: ["APPROVED", "PENDING"] },
+            OR: [
+              { leaveType: { name: { contains: "SSP" } } },
+              { leaveType: { name: { contains: "Sick" } } },
+            ],
+            status: "APPROVED",
           },
           select: { startDate: true, endDate: true },
         })
-        .then((sspRequests) => {
-          const spells = sspRequests.length;
-          const days = sspRequests.reduce(
+        .then((sickRequests) => {
+          const spells = sickRequests.length;
+          const days = sickRequests.reduce(
             (sum, r) => sum + countWeekdays(r.startDate, r.endDate),
             0
           );
@@ -426,6 +489,7 @@ export async function POST(request: Request) {
     const orgId = (session.user as Record<string, unknown>).organizationId as string;
 
     notifyNewRequest({
+      organizationId: orgId,
       requestId: leaveRequest.id,
       userName: leaveRequest.user.name,
       leaveTypeName: leaveRequest.leaveType.name,
@@ -462,6 +526,22 @@ export async function POST(request: Request) {
       },
       context: requestAuditContext(request),
     });
+
+    trackServer(
+      AnalyticsEvents.LEAVE_REQUEST_CREATED,
+      {
+        days_requested: daysRequested,
+        is_statutory: /SSP|Statutory/i.test(leaveRequest.leaveType.name),
+        leave_category: leaveTypeConfig.category,
+        is_paid: leaveTypeConfig.isPaid,
+      },
+      {
+        userId,
+        organizationId: orgId,
+        role: (session.user as Record<string, unknown>).role as string,
+        plan: (session.user as Record<string, unknown>).plan as string | undefined,
+      }
+    );
 
     if (notifyCapReached && sspEmployeeSnapshot) {
       const sspEndDate = new Date(endDate);

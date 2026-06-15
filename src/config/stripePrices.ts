@@ -4,10 +4,10 @@
  * separate dev/stage/live accounts.
  */
 export const STRIPE_PRICE_IDS = {
-  starter: process.env.STRIPE_PRICE_STARTER ?? "price_starter_placeholder",
-  growth: process.env.STRIPE_PRICE_GROWTH ?? "price_growth_placeholder",
-  scale: process.env.STRIPE_PRICE_SCALE ?? "price_scale_placeholder",
-  pro: process.env.STRIPE_PRICE_PRO ?? "price_pro_placeholder",
+  starter: process.env.STRIPE_PRICE_STARTER ?? "price_1TWGnPJ8H7ToYeAQzN5Yn2Um",
+  growth: process.env.STRIPE_PRICE_GROWTH ?? "price_1TWGnQJ8H7ToYeAQBfeGBO7a",
+  scale: process.env.STRIPE_PRICE_SCALE ?? "price_1TWGnRJ8H7ToYeAQFCnvapuu",
+  pro: process.env.STRIPE_PRICE_PRO ?? "price_1TWGnSJ8H7ToYeAQhZyBXslK",
 } as const;
 
 export type StripePlanKey = keyof typeof STRIPE_PRICE_IDS;

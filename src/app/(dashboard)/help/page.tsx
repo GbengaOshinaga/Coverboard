@@ -26,11 +26,11 @@ import {
 } from "@/lib/plans";
 
 const CONTACT_EMAIL =
-  process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "hello@coverboard.app";
+  process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "support@coverboard.io";
 const PRIORITY_EMAIL =
-  process.env.NEXT_PUBLIC_PRIORITY_SUPPORT_EMAIL ?? "priority@coverboard.app";
+  process.env.NEXT_PUBLIC_PRIORITY_SUPPORT_EMAIL ?? "support@coverboard.io";
 const SLA_EMAIL =
-  process.env.NEXT_PUBLIC_SLA_SUPPORT_EMAIL ?? "pro@coverboard.app";
+  process.env.NEXT_PUBLIC_SLA_SUPPORT_EMAIL ?? "support@coverboard.io";
 
 type OrgSettings = {
   plan?: AnyPlan;

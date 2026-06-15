@@ -7,6 +7,9 @@ import {
   getCountryPolicies,
   getHolidaysForYear,
 } from "@/lib/country-policies";
+import { enableUkStatutoryLeaveTypes } from "@/lib/uk-statutory";
+import { AnalyticsEvents } from "@/lib/analytics/events";
+import { trackServer } from "@/lib/analytics/server";
 import { sendTeamInviteEmail } from "@/lib/email-notifications";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { z } from "zod";
@@ -58,8 +61,6 @@ export async function POST(request: Request) {
       data: { countryCode: countries[0], workCountry: countries[0] },
     });
 
-    // New organizations start with neutral leave types; UK statutory types are
-    // enabled only when a UK-based employee is added.
     const defaultLeaveTypes = [
       { name: "Annual Leave", color: "#3b82f6", isPaid: true, defaultDays: 20 },
       { name: "Sick Leave", color: "#ef4444", isPaid: true, defaultDays: 10 },
@@ -85,8 +86,20 @@ export async function POST(request: Request) {
       )
     );
 
-    // Create non-UK country-specific leave policies for selected countries.
-    // UK statutory policies are gated by UK workforce presence.
+    if (countries.includes("GB")) {
+      await enableUkStatutoryLeaveTypes(orgId);
+      trackServer(
+        AnalyticsEvents.UK_STATUTORY_ENABLED,
+        { source: "onboarding" },
+        {
+          userId,
+          organizationId: orgId,
+          role: userRole,
+        }
+      );
+    }
+
+    // Non-UK country policies only; GB statutory types/policies come from enableUkStatutoryLeaveTypes.
     const countryPolicies = getCountryPolicies(countries.filter((c) => c !== "GB"));
 
     for (const cp of countryPolicies) {
@@ -208,6 +221,18 @@ export async function POST(request: Request) {
         ...(regionsEnabled !== undefined ? { regionsEnabled } : {}),
       },
     });
+
+    trackServer(
+      AnalyticsEvents.ONBOARDING_COMPLETED,
+      {
+        country_count: countries.length,
+        countries,
+        regions_enabled: regionsEnabled ?? false,
+        invite_count: invites?.length ?? 0,
+        has_gb: countries.includes("GB"),
+      },
+      { userId, organizationId: orgId, role: userRole }
+    );
 
     recordAudit({
       organizationId: orgId,

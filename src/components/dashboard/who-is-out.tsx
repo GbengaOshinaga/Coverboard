@@ -71,7 +71,7 @@ export function WhoIsOut({ absences }: { absences: AbsentPerson[] }) {
                 </p>
               </div>
               <div
-                className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium text-white"
+                className="flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium text-white"
                 style={{ backgroundColor: absence.leaveType.color }}
               >
                 {absence.leaveType.name.replace(" Leave", "")}

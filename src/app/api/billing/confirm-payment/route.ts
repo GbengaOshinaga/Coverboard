@@ -1,14 +1,28 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
 import { cancelScheduledDeletion } from "@/lib/deletionScheduler";
 import { emailDeletionCanceled } from "@/lib/billing-emails";
+import { planKeyForBilling } from "@/lib/billing-plan";
+import { ensureStripeCustomer } from "@/lib/billing-customer";
+import { STRIPE_PRICE_IDS } from "@/config/stripePrices";
+import { AnalyticsEvents } from "@/lib/analytics/events";
+import { trackServer } from "@/lib/analytics/server";
 import { z } from "zod";
 
 const schema = z.object({
   paymentMethodId: z.string().min(1),
+  /**
+   * Optional plan-key override used by the Free → Paid upgrade flow. When a
+   * Free org adds a card AND wants to subscribe to a specific tier in the
+   * same step, the client passes the tier here. Only honoured when there's
+   * no existing Stripe subscription — for already-subscribed customers we
+   * never want to silently switch tiers as a side-effect of "Update card".
+   */
+  planKey: z.enum(["starter", "growth", "scale", "pro"]).optional(),
 });
 
 export async function POST(request: Request) {
@@ -36,31 +50,88 @@ export async function POST(request: Request) {
   const org = await prisma.organization.findUnique({
     where: { id: orgId },
     select: {
+      id: true,
+      name: true,
+      plan: true,
       stripeCustomerId: true,
       stripeSubscriptionId: true,
+      stripePriceId: true,
+      trialEndsAt: true,
     },
   });
 
-  if (!org?.stripeCustomerId || !org.stripeSubscriptionId) {
-    return NextResponse.json({ error: "Missing Stripe IDs" }, { status: 400 });
+  if (!org) {
+    return NextResponse.json({ error: "Organization not found" }, { status: 404 });
   }
 
   try {
-    await stripe.paymentMethods.attach(parsed.data.paymentMethodId, {
-      customer: org.stripeCustomerId,
+    const stripeCustomerId = await ensureStripeCustomer({
+      stripeClient: stripe,
+      organizationId: org.id,
+      organizationName: org.name,
+      stripeCustomerId: org.stripeCustomerId,
     });
 
-    await stripe.customers.update(org.stripeCustomerId, {
+    await stripe.paymentMethods.attach(parsed.data.paymentMethodId, {
+      customer: stripeCustomerId,
+    });
+
+    await stripe.customers.update(stripeCustomerId, {
       invoice_settings: { default_payment_method: parsed.data.paymentMethodId },
     });
 
-    await stripe.subscriptions.update(org.stripeSubscriptionId, {
-      default_payment_method: parsed.data.paymentMethodId,
-    });
+    let stripeSubscriptionId = org.stripeSubscriptionId;
+    let stripePriceId = org.stripePriceId;
+    if (stripeSubscriptionId) {
+      await stripe.subscriptions.update(stripeSubscriptionId, {
+        default_payment_method: parsed.data.paymentMethodId,
+        // Belt-and-braces: re-assert Stripe Tax in case this customer's
+        // subscription pre-dates the rollout.
+        automatic_tax: { enabled: true },
+      });
+    } else {
+      // Free → Paid: caller chose a tier. Otherwise fall back to whatever
+      // tier the org last had stored (recovery path for orgs whose
+      // subscription creation failed at signup).
+      const planKey = parsed.data.planKey ?? planKeyForBilling(org);
+      stripePriceId = STRIPE_PRICE_IDS[planKey];
+      // Free upgrades intentionally do NOT get another trial — they've
+      // already been using the product. We only honour an existing trial
+      // window when one is in flight (recovery flow for a paid signup
+      // whose subscription failed and is being repaired).
+      const trialEnd =
+        !parsed.data.planKey &&
+        org.trialEndsAt &&
+        org.trialEndsAt.getTime() > Date.now()
+          ? Math.floor(org.trialEndsAt.getTime() / 1000)
+          : undefined;
+      const subscription = await stripe.subscriptions.create({
+        customer: stripeCustomerId,
+        items: [{ price: stripePriceId }],
+        default_payment_method: parsed.data.paymentMethodId,
+        payment_settings: {
+          save_default_payment_method: "on_subscription",
+        },
+        automatic_tax: { enabled: true },
+        ...(trialEnd ? { trial_end: trialEnd } : {}),
+        metadata: {
+          organization_id: orgId,
+          plan_key: planKey,
+          ...(parsed.data.planKey ? { upgrade_path: "free_to_paid" } : {}),
+        },
+      });
+      stripeSubscriptionId = subscription.id;
+    }
 
     await prisma.organization.update({
       where: { id: orgId },
-      data: { cardAdded: true, trialExpiredGraceEndsAt: null },
+      data: {
+        stripeCustomerId,
+        stripeSubscriptionId,
+        stripePriceId,
+        cardAdded: true,
+        trialExpiredGraceEndsAt: null,
+      },
     });
 
     const { wasScheduled } = await cancelScheduledDeletion({
@@ -75,6 +146,28 @@ export async function POST(request: Request) {
         );
       }
     }
+
+    // Invalidate the dashboard layout so the trial banner (server component)
+    // re-renders with the updated cardAdded flag on the next navigation.
+    revalidatePath("/", "layout");
+
+    const orgPlan = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { plan: true },
+    });
+    trackServer(
+      AnalyticsEvents.BILLING_CARD_ADDED,
+      {
+        plan_key: planKeyForBilling(org),
+        deletion_canceled: wasScheduled,
+      },
+      {
+        userId: sessionUser.id as string,
+        organizationId: orgId,
+        role: "ADMIN",
+        plan: orgPlan?.plan,
+      }
+    );
 
     return NextResponse.json({ success: true, deletionCanceled: wasScheduled });
   } catch (err: unknown) {

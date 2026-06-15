@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { hasAuditTrail } from "@/lib/plans";
+import { hasAuditTrail, type AnyPlan } from "@/lib/plans";
+import { recordReadAudit, requestAuditContext } from "@/lib/audit";
 
 /**
  * Paginated audit log listing. Admin-only, Pro-plan-gated.
@@ -69,6 +70,32 @@ export async function GET(request: Request) {
 
   const hasMore = logs.length > limit;
   const page = hasMore ? logs.slice(0, limit) : logs;
+
+  // Self-referential audit: record who viewed the audit log and with which
+  // filters. The plan was already verified above, so this will always write.
+  void recordReadAudit({
+    plan: sessionUser.plan as AnyPlan | undefined,
+    organizationId: orgId,
+    action: "audit_log.viewed",
+    resource: "audit_log",
+    actor: {
+      id: sessionUser.id as string,
+      email: (session.user.email as string | null) ?? null,
+      role: sessionUser.role as string,
+    },
+    metadata: {
+      filters: {
+        action: action ?? null,
+        resource: resource ?? null,
+        actorId: actorId ?? null,
+        from: from ?? null,
+        to: to ?? null,
+      },
+      returned: page.length,
+      paginated: cursor !== null,
+    },
+    context: requestAuditContext(request),
+  });
 
   return NextResponse.json({
     logs: page,

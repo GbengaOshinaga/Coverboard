@@ -30,6 +30,7 @@ enum EmploymentType {
   FULL_TIME
   PART_TIME
   VARIABLE_HOURS
+  ZERO_HOURS
 }
 
 enum LeaveCategory {
@@ -52,6 +53,7 @@ enum DataResidency {
 
 enum SubscriptionPlan {
   TRIAL
+  FREE
   STARTER
   GROWTH
   SCALE
@@ -70,7 +72,7 @@ model Organization {
   ukCarryOverMax          Int               @default(0)
   ukCarryOverExpiryMonth  Int               @default(3)
   ukCarryOverExpiryDay    Int               @default(31)
-  dataResidency           DataResidency     @default(EU)
+  dataResidency           DataResidency     @default(UK)
   maxAdminUsers           Int               @default(2)
   plan                    SubscriptionPlan  @default(TRIAL)
   fullTimeHoursPerWeek    Decimal           @default(37.5) @db.Decimal(4, 1)
@@ -89,6 +91,10 @@ model Organization {
   deletionScheduledFor    DateTime?
   deletionConfirmedAt     DateTime?
   deletionReason          String?
+  // Timestamp of the one-off founder outreach email. Used to (a) gate the
+  // limited-volume outreach (first N orgs only) and (b) prevent
+  // double-sends on re-verification.
+  founderEmailSentAt      DateTime?
   createdAt               DateTime          @default(now())
   updatedAt               DateTime          @updatedAt
 
@@ -96,9 +102,10 @@ model Organization {
   leaveTypes       LeaveType[]
   publicHolidays   PublicHoliday[]
   bankHolidays     BankHoliday[]
-  jiraIntegration  JiraIntegration?
-  jiraUserMappings JiraUserMapping[]
-  regions          Region[]
+  jiraIntegration   JiraIntegration?
+  jiraUserMappings  JiraUserMapping[]
+  slackIntegration  SlackIntegration?
+  regions           Region[]
 
   @@index([deletionScheduledFor])
   @@index([trialExpiredGraceEndsAt])
@@ -107,6 +114,7 @@ model Organization {
 model User {
   id                        String         @id @default(cuid())
   email                     String         @unique
+  emailVerified             DateTime?
   name                      String
   passwordHash              String
   role                      Role           @default(MEMBER)
@@ -135,8 +143,10 @@ model User {
   leaveRequests       LeaveRequest[]          @relation("UserLeaveRequests")
   reviewedLeaves      LeaveRequest[]          @relation("ReviewerLeaveRequests")
   passwordResetTokens PasswordResetToken[]
-  jiraUserMapping     JiraUserMapping?
-  jiraConnections     JiraIntegration[]       @relation("JiraConnectedBy")
+  emailVerificationTokens EmailVerificationToken[]
+  jiraUserMapping      JiraUserMapping?
+  jiraConnections      JiraIntegration[]       @relation("JiraConnectedBy")
+  slackConnections     SlackIntegration[]      @relation("SlackConnectedBy")
   weeklyHours         UserWeeklyHours[]
   carryOverBalances   LeaveCarryOverBalance[]
   weeklyEarnings      WeeklyEarning[]
@@ -259,6 +269,24 @@ model JiraUserMapping {
   @@unique([userId, organizationId])
 }
 
+model SlackIntegration {
+  id                  String   @id @default(cuid())
+  teamId              String   @unique
+  teamName            String
+  botToken            String
+  botUserId           String?
+  notificationChannel String   @default("#time-off")
+  organizationId      String   @unique
+  connectedByUserId   String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connectedBy  User         @relation("SlackConnectedBy", fields: [connectedByUserId], references: [id])
+
+  @@index([organizationId])
+}
+
 model PasswordResetToken {
   id        String    @id @default(cuid())
   token     String    @unique
@@ -268,6 +296,19 @@ model PasswordResetToken {
   createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  userId    String
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model PublicHoliday {

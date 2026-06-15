@@ -2,18 +2,57 @@ import { WebClient } from "@slack/web-api";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 
-// Singleton Slack Web API client
-const slackToken = process.env.SLACK_BOT_TOKEN;
-const slackSigningSecret = process.env.SLACK_SIGNING_SECRET;
+const slackClientId = process.env.SLACK_CLIENT_ID ?? "";
+const slackClientSecret = process.env.SLACK_CLIENT_SECRET ?? "";
+const slackSigningSecret = process.env.SLACK_SIGNING_SECRET ?? "";
 
-export const slack = slackToken ? new WebClient(slackToken) : null;
+export const SLACK_BOT_SCOPES = [
+  "commands",
+  "chat:write",
+  "users:read",
+  "users:read.email",
+] as const;
 
-export function isSlackConfigured(): boolean {
-  return !!slackToken && !!slackSigningSecret;
+/** Platform-level Slack app credentials (one Coverboard app for all customers). */
+export function isSlackAppConfigured(): boolean {
+  return !!slackClientId && !!slackClientSecret && !!slackSigningSecret;
 }
 
-export function getNotificationChannel(): string {
+export function getSlackClientId(): string {
+  return slackClientId;
+}
+
+export function getSlackClientSecret(): string {
+  return slackClientSecret;
+}
+
+export function defaultNotificationChannel(): string {
   return process.env.SLACK_NOTIFICATION_CHANNEL ?? "#time-off";
+}
+
+export function createSlackClient(botToken: string): WebClient {
+  return new WebClient(botToken);
+}
+
+export async function getSlackIntegrationByOrgId(organizationId: string) {
+  return prisma.slackIntegration.findUnique({
+    where: { organizationId },
+  });
+}
+
+export async function getSlackIntegrationByTeamId(teamId: string) {
+  return prisma.slackIntegration.findUnique({
+    where: { teamId },
+  });
+}
+
+export async function getSlackClientForOrg(organizationId: string): Promise<{
+  client: WebClient;
+  integration: NonNullable<Awaited<ReturnType<typeof getSlackIntegrationByOrgId>>>;
+} | null> {
+  const integration = await getSlackIntegrationByOrgId(organizationId);
+  if (!integration) return null;
+  return { client: createSlackClient(integration.botToken), integration };
 }
 
 /**
@@ -27,9 +66,8 @@ export function verifySlackRequest(
 ): boolean {
   if (!slackSigningSecret) return false;
 
-  // Reject requests older than 5 minutes
   const now = Math.floor(Date.now() / 1000);
-  if (Math.abs(now - parseInt(timestamp)) > 300) {
+  if (Math.abs(now - parseInt(timestamp, 10)) > 300) {
     return false;
   }
 
@@ -40,28 +78,48 @@ export function verifySlackRequest(
     .digest("hex");
   const expectedSignature = `v0=${hmac}`;
 
+  if (!signature.startsWith("v0=") || signature.length !== expectedSignature.length) {
+    return false;
+  }
+
   return crypto.timingSafeEqual(
     Buffer.from(signature),
     Buffer.from(expectedSignature)
   );
 }
 
-/**
- * Look up a Coverboard user by their Slack email.
- * Slack sends a user_id; we call users.info to get their email,
- * then match against our User table.
- */
-export async function resolveSlackUser(slackUserId: string) {
-  if (!slack) return null;
+/** Post a follow-up message to Slack's slash-command `response_url`. */
+export async function postSlackCommandResponse(
+  responseUrl: string,
+  body: Record<string, unknown>
+): Promise<void> {
+  const res = await fetch(responseUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    console.error("Slack response_url failed:", res.status, text);
+  }
+}
 
+/**
+ * Look up a Coverboard user by their Slack email within an organization.
+ */
+export async function resolveSlackUser(
+  slackUserId: string,
+  client: WebClient,
+  organizationId: string
+) {
   try {
-    const result = await slack.users.info({ user: slackUserId });
+    const result = await client.users.info({ user: slackUserId });
     const email = result.user?.profile?.email;
 
     if (!email) return null;
 
-    const user = await prisma.user.findUnique({
-      where: { email },
+    const user = await prisma.user.findFirst({
+      where: { email, organizationId },
       include: { organization: true },
     });
 
@@ -72,16 +130,12 @@ export async function resolveSlackUser(slackUserId: string) {
   }
 }
 
-/**
- * Look up a Slack user ID by their email address.
- */
 export async function findSlackUserByEmail(
-  email: string
+  email: string,
+  client: WebClient
 ): Promise<string | null> {
-  if (!slack) return null;
-
   try {
-    const result = await slack.users.lookupByEmail({ email });
+    const result = await client.users.lookupByEmail({ email });
     return result.user?.id ?? null;
   } catch {
     return null;

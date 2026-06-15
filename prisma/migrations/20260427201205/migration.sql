@@ -1,2 +1,5 @@
--- CreateIndex
-CREATE INDEX "User_organizationId_workCountry_isActive_idx" ON "User"("organizationId", "workCountry", "isActive");
+-- No-op.
+--
+-- This migration previously attempted to create an index on User.workCountry
+-- before the workCountry column existed. The index is now created in
+-- 20260427210000_work_country_gate after the column is added.
