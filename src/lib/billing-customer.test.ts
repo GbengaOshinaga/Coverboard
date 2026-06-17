@@ -9,7 +9,7 @@ import { ensureStripeCustomer } from "./billing-customer";
  * the real Stripe client (which would need an API key).
  *
  * The full DB-persist path is exercised via real integration smoke tests
- * (see docs/launch-smoke-test.md); this suite covers only the in-memory
+ * (see docs/internal/launch-smoke-test.md); this suite covers only the in-memory
  * decisions the helper makes before/after the Stripe call.
  */
 type CreateCall = {

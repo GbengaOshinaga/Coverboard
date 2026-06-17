@@ -1,7 +1,7 @@
 <!-- Last updated: 2026-05-11 — auto-updated from codebase review -->
 # Coverboard help & guidance
 
-Plain-English guides to the leave management, compliance and admin features in Coverboard. These pages are written for the people who actually use the product — managers, HR, and the occasional curious employee — not for engineers. For implementation detail, see the root-level `README.md`, `BILLING.md` and `UK_COMPLIANCE.md`.
+Plain-English guides to the leave management, compliance and admin features in Coverboard. These pages are written for the people who actually use the product — managers, HR, and the occasional curious employee.
 
 ## UK statutory leave
 
@@ -14,8 +14,6 @@ Plain-English guides to the leave management, compliance and admin features in C
 - [Bradford Factor reporting](bradford-factor-reporting.md) — what the score means, where to find it, and how to use it well
 - [Right to work tracking](right-to-work-tracking.md) — recording verification on team profiles and the unverified-employees report
 - [GDPR & your leave data](gdpr-leave-data.md) — what Coverboard stores, how it's protected, and your obligations as the data controller
-- [Annual statutory rate update (each April)](april-statutory-rate-update.md) — step-by-step procedure for payroll to refresh SSP, SMP and LEL rates when HMRC publishes new tax-year figures
-- [Launch smoke-test runbook](launch-smoke-test.md) — internal end-to-end check against staging covering signup → trial → card → leave → approve → SSP cap → change plan → SAR → read-audit → cancel → reactivate → delete → cron purge
 
 ## Workforce management
 

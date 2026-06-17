@@ -62,8 +62,8 @@ If anything fails, fix the file and re-paste/upload — nothing is created until
 When you commit, Coverboard:
 
 1. Creates each member in a single database transaction (so it's all-or-nothing)
-2. Generates a random temporary password and stores the bcrypt hash
-3. Sends each new member a welcome email with their temporary password and a link to sign in
+2. Generates a random temporary password for each member (stored only as a secure hash, never in plain text)
+3. Sends each new member a welcome email with a temporary password and a link to sign in
 4. Records a `team_member.bulk_imported` audit log entry plus one `team_member.created` entry per row, so the bulk import shows up cleanly in your audit trail
 5. Suggests adding UK statutory leave types if you've just imported your first UK employee and don't have them set up yet
 
@@ -74,4 +74,4 @@ When you commit, Coverboard:
 - **100 rows per request.** For larger lists, split the file into chunks of 100. The cap is there to keep email delivery and database write latency predictable.
 - **Email collisions block the whole batch.** If even one row has a duplicate or already-registered email, the request fails — fix the file and try again. Use Preview first to catch this without rolling back partial writes.
 - **Admin seat caps apply.** If you're on Starter and try to bulk-import three admins, the whole batch is rejected with an upgrade prompt — drop or downgrade the offending rows, or move to Growth first.
-- **Temporary passwords are sent in plaintext over email.** Members should change their password on first login from **Settings → Profile → Change password**.
+- **Each member receives a temporary password.** They should set their own password on first login from **Settings → Profile → Change password**.

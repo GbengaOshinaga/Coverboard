@@ -24,14 +24,14 @@ export type BankHolidayRegion =
   (typeof BankHolidayRegion)[keyof typeof BankHolidayRegion];
 
 // Statutory Sick Pay weekly rate for 2026/27 (as of 6 April 2026).
-// Update each April — see docs/april-statutory-rate-update.md.
+// Update each April — see docs/internal/april-statutory-rate-update.md.
 const DEFAULT_SSP_WEEKLY_RATE = 123.25;
 // Statutory Maternity Pay flat weekly rate for 2026/27 (as of 6 April 2026).
-// Update each April — see docs/april-statutory-rate-update.md.
+// Update each April — see docs/internal/april-statutory-rate-update.md.
 const DEFAULT_SMP_WEEKLY_RATE = 194.32;
 // Lower Earnings Limit for Class 1 NICs — £125 for 2026/27 (held from 2025/26).
 // Employees below this weekly average earnings threshold are not entitled to SSP.
-// Update each April via HMRC guidance — see docs/april-statutory-rate-update.md.
+// Update each April via HMRC guidance — see docs/internal/april-statutory-rate-update.md.
 const DEFAULT_LEL_WEEKLY = 125;
 
 export const UK_SSP_WEEKLY_RATE = Number(

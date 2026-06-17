@@ -37,7 +37,7 @@ When an employee is too ill to work, you must pay SSP — provided they qualify.
 
 **How it works:**
 - Days 1 to 3 are called waiting days — no SSP is paid
-- SSP starts from day 4 at £123.25 per week (2026/27 default; configurable via the `SSP_WEEKLY_RATE` environment variable, which payroll updates each April)
+- SSP starts from day 4 at £123.25 per week (the 2026/27 rate, refreshed each April)
 - The daily rate is calculated as the weekly rate divided by the employee's **Qualifying days per week** (the contracted working days, not 7) — a 3-day-a-week employee earns a higher daily rate than a 5-day-a-week employee
 - SSP can be paid for a maximum of 28 weeks in any one period of incapacity
 - Linked sickness spells joined by a 56-day window count towards the same 28-week limit
@@ -138,4 +138,4 @@ Coverboard supports both. Statutory leave types are added automatically when you
 | Parental Bereavement | 2 weeks | Yes (SPBP) | Child death under 18 |
 | Unpaid Parental Leave | 18 weeks per child | No | After 1 year service |
 
-> Statutory pay rates change every April. Coverboard reads the current rates from the `SSP_WEEKLY_RATE`, `SMP_WEEKLY_RATE` (or `SMP_FLAT_RATE`) and `LEL_WEEKLY` environment variables. If you don't set these, the values shown above (the 2026/27 defaults) are used. See **[april-statutory-rate-update.md](april-statutory-rate-update.md)** for the step-by-step procedure payroll should follow each April.
+> Statutory pay rates change every April when HMRC publishes the new tax-year figures. The rates shown above are the current 2026/27 values, and Coverboard keeps them up to date so your calculations stay accurate.
