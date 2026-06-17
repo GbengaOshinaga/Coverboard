@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { trackClient, AnalyticsEvents } from "@/lib/analytics";
 
@@ -57,7 +58,7 @@ export default function LoginPage() {
             CB
           </div>
           <h1 className="mt-4 text-2xl font-bold text-gray-900">
-            Welcome to Coverboard
+            Welcome back
           </h1>
           <p className="mt-1 text-sm text-gray-500">
             See who&apos;s out, plan coverage, manage leave.
@@ -82,15 +83,17 @@ export default function LoginPage() {
                 id="email"
                 label="Email"
                 type="email"
+                autoComplete="email"
                 placeholder="you@company.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                autoFocus
                 required
               />
-              <Input
+              <PasswordInput
                 id="password"
                 label="Password"
-                type="password"
+                autoComplete="current-password"
                 placeholder="Enter your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

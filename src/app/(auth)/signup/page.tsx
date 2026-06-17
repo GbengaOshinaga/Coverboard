@@ -6,13 +6,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { PRICING } from "@/config/pricing";
 import { trackClient, AnalyticsEvents } from "@/lib/analytics";
-import {
-  BILLING_COUNTRIES,
-  DEFAULT_BILLING_COUNTRY,
-} from "@/config/billing-countries";
 
 type PlanKey = "free" | "starter" | "growth" | "scale" | "pro";
 
@@ -47,7 +44,6 @@ function SignupInner() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [plan, setPlan] = useState<PlanKey>(initialPlan);
-  const [billingCountry, setBillingCountry] = useState(DEFAULT_BILLING_COUNTRY);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -66,7 +62,6 @@ function SignupInner() {
           password,
           orgName,
           plan,
-          billingCountry,
         }),
       });
 
@@ -186,36 +181,12 @@ function SignupInner() {
                 id="orgName"
                 label="Team / company name"
                 type="text"
+                autoComplete="organization"
                 placeholder="e.g. Acme Inc."
                 value={orgName}
                 onChange={(e) => setOrgName(e.target.value)}
                 required
               />
-              <div>
-                <label
-                  htmlFor="billingCountry"
-                  className="mb-1.5 block text-sm font-medium text-gray-700"
-                >
-                  Billing country
-                </label>
-                <select
-                  id="billingCountry"
-                  value={billingCountry}
-                  onChange={(e) => setBillingCountry(e.target.value)}
-                  className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  required
-                >
-                  {BILLING_COUNTRIES.map((c) => (
-                    <option key={c.code} value={c.code}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1 text-xs text-gray-500">
-                  Used for VAT calculation. You can add a VAT number after
-                  signup in billing settings.
-                </p>
-              </div>
               <div className="border-t border-gray-100 pt-4">
                 <p className="mb-3 text-xs font-medium text-gray-500 uppercase tracking-wide">
                   Your account
@@ -225,6 +196,7 @@ function SignupInner() {
                     id="name"
                     label="Full name"
                     type="text"
+                    autoComplete="name"
                     placeholder="Your full name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
@@ -234,15 +206,16 @@ function SignupInner() {
                     id="email"
                     label="Work email"
                     type="email"
+                    autoComplete="email"
                     placeholder="you@company.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
                   />
-                  <Input
+                  <PasswordInput
                     id="password"
                     label="Password"
-                    type="password"
+                    autoComplete="new-password"
                     placeholder="At least 8 characters"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
