@@ -34,6 +34,23 @@ export async function middleware(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
 
+  // A user who authenticated via Google but hasn't created a team yet has no
+  // organizationId in their token. Send them to /welcome to finish signup;
+  // everything else (the page itself, NextAuth routes, signout) is allowed.
+  if (!token.organizationId) {
+    const allowedWithoutOrg =
+      /^\/welcome(\/|$)/.test(path) ||
+      /^\/api\/auth(\/|$)/.test(path) ||
+      /^\/logout(\/|$)/.test(path);
+    if (!allowedWithoutOrg) {
+      const welcomeUrl = request.nextUrl.clone();
+      welcomeUrl.pathname = "/welcome";
+      welcomeUrl.search = "";
+      return NextResponse.redirect(welcomeUrl);
+    }
+    return NextResponse.next();
+  }
+
   const plan = token.plan as string | undefined;
   if (plan === "LOCKED") {
     if (ALLOWED_WHEN_LOCKED.some((re) => re.test(path))) {

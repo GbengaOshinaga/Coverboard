@@ -11,7 +11,6 @@ import {
   Check,
   ArrowRight,
   MessageSquare,
-  Zap,
   Building2,
 } from "lucide-react";
 import { LandingNavbar } from "./navbar";
@@ -24,8 +23,10 @@ function HeroSection() {
       <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[800px] h-[800px] rounded-full bg-brand-100/40 blur-3xl -z-10" />
 
       <div className="mx-auto max-w-4xl px-6 text-center">
-        <div className="inline-flex items-center gap-2 rounded-full bg-brand-50 border border-brand-200 px-4 py-1.5 text-sm text-brand-700 mb-8">
-          <Zap size={14} />
+        <div className="inline-flex items-center gap-2 rounded-full bg-brand-50 border border-brand-200 px-3 py-1.5 text-sm text-brand-700 mb-8">
+          <span className="rounded-full bg-brand-600 px-2 py-0.5 text-xs font-semibold text-white">
+            New
+          </span>
           From lean teams to People Ops — UK compliant
         </div>
 
@@ -36,9 +37,11 @@ function HeroSection() {
         </h1>
 
         <p className="mt-6 text-lg md:text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
-          Coverboard is the leave management tool for distributed teams.
-          Country-specific rules, overlap detection, and a single &ldquo;Who&apos;s out today?&rdquo;
-          view &mdash; with the UK compliance depth a spreadsheet can&apos;t give you.
+          Coverboard is the leave management tool for teams that work across
+          countries. One &ldquo;Who&apos;s out today?&rdquo; view, overlap
+          detection, and each country&apos;s leave rules applied automatically
+          &mdash; with the UK statutory compliance depth a spreadsheet can&apos;t
+          give you.
         </p>
 
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -65,6 +68,26 @@ function HeroSection() {
             See Scale &amp; Pro
           </a>
         </p>
+
+        {/* Trust bar — credibility + risk-reversal signals (all factual). */}
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-gray-500">
+          <span className="inline-flex items-center gap-1.5">
+            <ShieldCheck size={15} className="text-brand-600" aria-hidden />
+            UK GDPR compliant
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <Globe size={15} className="text-brand-600" aria-hidden />
+            UK data residency
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <Check size={15} className="text-brand-600" aria-hidden />
+            No card required
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <Check size={15} className="text-brand-600" aria-hidden />
+            Cancel anytime
+          </span>
+        </div>
       </div>
 
       {/* Dashboard Preview */}
@@ -144,7 +167,7 @@ const features = [
     icon: Globe,
     title: "Multi-country leave rules",
     description:
-      "Statutory allowances and public holidays for the UK, Nigeria, Kenya, South Africa, Ghana, Egypt, Brazil, Colombia, Mexico, Philippines, and Indonesia — and growing.",
+      "Leave entitlements and public holidays for nine countries — the UK, Nigeria, Kenya, South Africa, Ghana, Brazil, Mexico, Philippines, and Indonesia — applied automatically per country, and growing.",
   },
   {
     icon: Users,
@@ -162,7 +185,7 @@ const features = [
     icon: MessageSquare,
     title: "Slack & Jira integrations",
     description:
-      "Run /whosout, /mybalance, and /requestleave from Slack. Auto-reassign Jira tickets when someone's out, so engineering work doesn't stall.",
+      "Run /whosout, /mybalance, and /requestleave from Slack. Reassign Jira tickets when someone's out, so engineering work doesn't stall.",
   },
   {
     icon: Bell,
@@ -330,9 +353,9 @@ const steps = [
   },
   {
     step: "3",
-    title: "See who's out, approve in seconds",
+    title: "The spreadsheet becomes unnecessary",
     description:
-      "Your dashboard shows absences at a glance. Review and approve requests from the web app, email, or Slack.",
+      "The first request gets approved, the balance updates in real time, and the calendar reflects it instantly — no chasing, no manual updates, no one texting their manager to ask how many days they have left.",
   },
 ];
 
@@ -377,8 +400,10 @@ function CTASection() {
           Stop guessing who&apos;s available
         </h2>
         <p className="mt-4 text-lg text-brand-100 max-w-xl mx-auto">
-          Join teams across the UK, Africa, LATAM, and Southeast Asia who use Coverboard to
-          manage leave without the spreadsheet chaos — and People teams who rely on Scale and Pro for audit-ready statutory depth.
+          Whether you&apos;re running a 10-person team in Lagos, a healthcare
+          agency in London, or a team spread across several countries —
+          Coverboard handles each country&apos;s leave rules so you don&apos;t
+          have to.
         </p>
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
           <Link
@@ -458,12 +483,67 @@ function Footer() {
   );
 }
 
+const COUNTRIES = [
+  { flag: "🇬🇧", name: "United Kingdom" },
+  { flag: "🇳🇬", name: "Nigeria" },
+  { flag: "🇰🇪", name: "Kenya" },
+  { flag: "🇿🇦", name: "South Africa" },
+  { flag: "🇬🇭", name: "Ghana" },
+  { flag: "🇧🇷", name: "Brazil" },
+  { flag: "🇲🇽", name: "Mexico" },
+  { flag: "🇵🇭", name: "Philippines" },
+  { flag: "🇮🇩", name: "Indonesia" },
+];
+
+function CountriesSection() {
+  return (
+    <section className="py-20 md:py-28 bg-white border-t border-gray-100">
+      <div className="mx-auto max-w-4xl px-6 text-center">
+        <p className="text-sm font-semibold text-brand-600 mb-3">
+          Built for your country
+        </p>
+        <h2 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight">
+          Leave rules for 9 countries and growing
+        </h2>
+        <p className="mt-4 text-gray-600 text-lg">
+          Pick the countries your team works in — Coverboard applies each one&apos;s
+          leave entitlements and public holidays automatically, not bolted on.
+        </p>
+
+        <div className="mt-10 flex flex-wrap justify-center gap-3">
+          {COUNTRIES.map((c) => (
+            <span
+              key={c.name}
+              className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-medium text-gray-700"
+            >
+              <span aria-hidden className="text-base">{c.flag}</span>
+              {c.name}
+            </span>
+          ))}
+        </div>
+
+        <p className="mt-8 text-sm text-gray-500">
+          Plus deep UK statutory compliance — SSP, SMP, Bradford Factor,
+          right-to-work and more.{" "}
+          <a
+            href="#features"
+            className="font-medium text-brand-600 hover:text-brand-700 underline underline-offset-2"
+          >
+            See the UK depth
+          </a>
+        </p>
+      </div>
+    </section>
+  );
+}
+
 export function LandingPage() {
   return (
     <div className="min-h-screen">
       <LandingNavbar />
       <HeroSection />
       <FeaturesSection />
+      <CountriesSection />
       <ScaleAndProSection />
       <HowItWorksSection />
       <PricingSection />

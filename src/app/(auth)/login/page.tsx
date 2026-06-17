@@ -1,21 +1,54 @@
 "use client";
 
-import { useState } from "react";
-import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { signIn, getProviders } from "next-auth/react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
+import { GoogleButton } from "@/components/ui/google-button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { trackClient, AnalyticsEvents } from "@/lib/analytics";
 
+const OAUTH_ERROR_MESSAGES: Record<string, string> = {
+  GoogleEmail:
+    "We couldn't verify your Google email. Try signing in with your email and password.",
+};
+
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginInner />
+    </Suspense>
+  );
+}
+
+function LoginInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleAvailable, setGoogleAvailable] = useState(false);
+
+  // Show the Google button only when the provider is configured server-side.
+  useEffect(() => {
+    getProviders()
+      .then((providers) => setGoogleAvailable(Boolean(providers?.google)))
+      .catch(() => setGoogleAvailable(false));
+  }, []);
+
+  // Surface OAuth errors redirected back to /login (e.g. no account found).
+  useEffect(() => {
+    const code = searchParams.get("error");
+    if (!code) return;
+    setError(
+      OAUTH_ERROR_MESSAGES[code] ??
+        "Couldn't sign in with Google. Try again or use your email and password."
+    );
+  }, [searchParams]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -73,6 +106,20 @@ export default function LoginPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {googleAvailable && (
+              <div className="mb-4 space-y-4">
+                <GoogleButton
+                  label="Continue with Google"
+                  onClick={() => signIn("google", { callbackUrl: "/" })}
+                  disabled={loading}
+                />
+                <div className="flex items-center gap-3">
+                  <div className="h-px flex-1 bg-gray-200" />
+                  <span className="text-xs text-gray-400">or</span>
+                  <div className="h-px flex-1 bg-gray-200" />
+                </div>
+              </div>
+            )}
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
                 <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
