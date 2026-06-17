@@ -12,12 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { trackClient, AnalyticsEvents } from "@/lib/analytics";
 
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
-  NoAccount:
-    "No Coverboard account found for that Google account. Create a team first, then sign in with Google.",
   GoogleEmail:
     "We couldn't verify your Google email. Try signing in with your email and password.",
-  OAuthAccountNotLinked:
-    "That email is already registered. Sign in with your email and password.",
 };
 
 export default function LoginPage() {
