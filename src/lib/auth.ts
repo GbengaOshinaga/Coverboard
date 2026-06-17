@@ -1,11 +1,40 @@
 import type { NextAuthOptions } from "next-auth";
+import type { JWT } from "next-auth/jwt";
 import CredentialsProvider from "next-auth/providers/credentials";
+import GoogleProvider from "next-auth/providers/google";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import {
   checkAuthRateLimit,
   getClientIpFromAuthorizeReq,
 } from "@/lib/rate-limit";
+
+// Google sign-in is opt-in: the provider is only registered when both env
+// vars are present, so the "Continue with Google" button (which checks
+// /api/auth/providers) simply doesn't appear until it's configured.
+const googleEnabled =
+  !!process.env.GOOGLE_CLIENT_ID && !!process.env.GOOGLE_CLIENT_SECRET;
+
+/**
+ * Populates the JWT with our domain fields from the DB user matching `email`.
+ * Used for Google sign-ins (whose OAuth profile lacks org/role/plan) and to
+ * pick up a freshly-created org after Google sign-up completes. No-op when no
+ * matching account exists yet (a brand-new Google user pre-team-creation).
+ */
+async function hydrateTokenFromEmail(token: JWT, email?: string | null) {
+  if (!email) return;
+  const dbUser = await prisma.user.findUnique({
+    where: { email },
+    include: { organization: true },
+  });
+  if (!dbUser) return;
+  token.id = dbUser.id;
+  token.role = dbUser.role;
+  token.memberType = dbUser.memberType;
+  token.organizationId = dbUser.organizationId;
+  token.organizationName = dbUser.organization.name;
+  token.plan = dbUser.organization.plan;
+}
 
 export const authOptions: NextAuthOptions = {
   session: {
@@ -70,22 +99,67 @@ export const authOptions: NextAuthOptions = {
         };
       },
     }),
-    // Google OAuth — uncomment and add env vars to enable
-    // GoogleProvider({
-    //   clientId: process.env.GOOGLE_CLIENT_ID!,
-    //   clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    // }),
+    // Google OAuth — registered only when GOOGLE_CLIENT_ID/SECRET are set.
+    ...(googleEnabled
+      ? [
+          GoogleProvider({
+            clientId: process.env.GOOGLE_CLIENT_ID!,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+          }),
+        ]
+      : []),
   ],
   callbacks: {
-    async jwt({ token, user, trigger }) {
+    async signIn({ user, account, profile }) {
+      // The credentials flow is fully validated in authorize() above.
+      if (account?.provider !== "google") return true;
+
+      // Only trust an email Google has itself verified.
+      const email = user.email;
+      const verifiedByGoogle = (
+        profile as { email_verified?: boolean } | undefined
+      )?.email_verified;
+      if (!email || verifiedByGoogle === false) {
+        return "/login?error=GoogleEmail";
+      }
+
+      // Existing account → sign in (and backfill verification for invited
+      // members who never clicked the email link). Brand-new Google users are
+      // allowed through too; middleware routes them to /welcome to create a
+      // team, after which their account exists.
+      const dbUser = await prisma.user.findUnique({
+        where: { email },
+        select: { id: true, emailVerified: true },
+      });
+      if (dbUser && !dbUser.emailVerified) {
+        await prisma.user.update({
+          where: { id: dbUser.id },
+          data: { emailVerified: new Date() },
+        });
+      }
+
+      return true;
+    },
+    async jwt({ token, user, account, trigger }) {
       if (user) {
-        const u = user as unknown as Record<string, unknown>;
-        token.id = u.id;
-        token.role = u.role;
-        token.memberType = u.memberType;
-        token.organizationId = u.organizationId;
-        token.organizationName = u.organizationName;
-        token.plan = u.plan;
+        if (account?.provider === "google") {
+          // The OAuth `user` carries Google's profile, not our domain fields.
+          // For a brand-new Google user there's no DB record yet, so the token
+          // stays org-less and middleware routes them to /welcome.
+          await hydrateTokenFromEmail(token, user.email);
+        } else {
+          const u = user as unknown as Record<string, unknown>;
+          token.id = u.id;
+          token.role = u.role;
+          token.memberType = u.memberType;
+          token.organizationId = u.organizationId;
+          token.organizationName = u.organizationName;
+          token.plan = u.plan;
+        }
+      } else if (trigger === "update" && !token.organizationId && token.email) {
+        // A Google user who just created their team via /welcome calls
+        // update() — pick up the new org so the session carries it.
+        await hydrateTokenFromEmail(token, token.email as string);
       }
       // Refresh plan from DB on explicit update() or once per hour so the
       // lock/middleware sees current state without forcing a re-login.
