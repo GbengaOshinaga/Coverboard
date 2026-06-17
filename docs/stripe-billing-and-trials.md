@@ -3,7 +3,7 @@
 
 Coverboard uses Stripe for monthly subscription billing in GBP. Every new signup gets a 14-day free trial — no card required to start. When the trial ends, the account either auto-charges (if a card has been added) or pauses until one is.
 
-This page covers what admins need to know day-to-day. The full implementation runbook (webhook contract, env variables, lifecycle internals) is in `BILLING.md` at the repository root.
+This page covers what admins need to know day-to-day.
 
 ---
 

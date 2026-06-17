@@ -133,7 +133,7 @@ Since the 2020 Working Time Regulations amendments (and Harpur Trust v Brazel), 
 SSP is gated on three HMRC rules that were previously approximated; the calculator in `src/lib/uk-compliance.ts` now enforces each one:
 
 - **Qualifying-day daily rate** — `calculateSspDailyRate(qualifyingDaysPerWeek)` divides the weekly rate by the employee's contracted working days (`User.qualifyingDaysPerWeek`, default 5). A 3-day-a-week employee earns `123.25 / 3` per sick day — **not** `123.25 / 7`.
-- **Lower Earnings Limit** — `calculateSspEntitlement` returns `{ eligible: false, reason: "Below Lower Earnings Limit" }` when `User.averageWeeklyEarnings < LEL_WEEKLY` (£125 for 2026/27, held from 2025/26 — overridable via `LEL_WEEKLY` env; see **[docs/april-statutory-rate-update.md](docs/april-statutory-rate-update.md)** for the annual refresh).
+- **Lower Earnings Limit** — `calculateSspEntitlement` returns `{ eligible: false, reason: "Below Lower Earnings Limit" }` when `User.averageWeeklyEarnings < LEL_WEEKLY` (£125 for 2026/27, held from 2025/26 — overridable via `LEL_WEEKLY` env; see **[docs/internal/april-statutory-rate-update.md](docs/internal/april-statutory-rate-update.md)** for the annual refresh).
 - **28-week cumulative cap** — `LeaveRequest.sspDaysPaid` and `LeaveRequest.sspLimitReached` track the statutory 28-week ceiling per PIW (linked with a 56-day window). When the cap is first hit, org admins/managers get an email and an `leave_request.ssp_cap_reached` audit entry is written.
 
 `POST /api/leave-requests` returns an `sspInfo` block with `eligible`, `reason`, `dailyRate`, `sspDaysPaidThisRequest`, `cumulativeSspDaysPaid`, `remainingDaysAfter`, and `limitReached`. Full details and test coverage in **`UK_COMPLIANCE.md`**.
@@ -146,7 +146,7 @@ SMP runs in two phases: **weeks 1–6 at 90% of Average Weekly Earnings**, then 
 - **Persisted on `LeaveRequest`**: `smpAverageWeeklyEarnings`, `smpPhase1EndDate`, `smpPhase2EndDate`, `smpPhase1WeeklyRate`, `smpPhase2WeeklyRate`.
 - **UK compliance report** (`/api/reports/uk-compliance`): the **parental tracker** row now includes an `smp` object with the current phase label ("Phase 1 (90% AWE)" / "Phase 2 (flat rate)"), weekly rate, and both phase end dates.
 - **Payroll export** (`/api/reports/payroll`): maternity rows include an `smp` block (AWE + current phase + current weekly rate + both phase rates) so the export CSV can drive payroll without manual lookups.
-- **Env override**: `SMP_WEEKLY_RATE` or `SMP_FLAT_RATE` (same value, update each April — see **[docs/april-statutory-rate-update.md](docs/april-statutory-rate-update.md)**).
+- **Env override**: `SMP_WEEKLY_RATE` or `SMP_FLAT_RATE` (same value, update each April — see **[docs/internal/april-statutory-rate-update.md](docs/internal/april-statutory-rate-update.md)**).
 - **Tests**: `src/lib/smpCalculator.test.ts` — AWE math, both phase-2 branches (low earner and high earner), phase date/rate edge cases.
 
 ### Help & Contact

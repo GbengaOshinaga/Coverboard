@@ -94,7 +94,7 @@ Added `src/lib/uk-compliance.ts` with:
 
 ## Environment Constants
 
-Added optional env keys in `.env.example`. **Update each April via HMRC guidance — see [docs/april-statutory-rate-update.md](docs/april-statutory-rate-update.md) for the step-by-step procedure.**
+Added optional env keys in `.env.example`. **Update each April via HMRC guidance — see [docs/internal/april-statutory-rate-update.md](docs/internal/april-statutory-rate-update.md) for the step-by-step procedure.**
 
 - `SSP_WEEKLY_RATE` (default `123.25` — 2026/27)
 - `SMP_WEEKLY_RATE` (default `194.32` — 2026/27)
