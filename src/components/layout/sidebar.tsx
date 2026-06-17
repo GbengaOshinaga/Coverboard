@@ -68,7 +68,7 @@ export function Sidebar({
         {onMobileClose && (
           <button
             onClick={onMobileClose}
-            className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 md:hidden"
+            className="rounded-md p-2.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 md:hidden"
             aria-label="Close menu"
           >
             <X className="h-5 w-5" />

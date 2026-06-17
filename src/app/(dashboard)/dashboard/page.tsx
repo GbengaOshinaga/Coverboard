@@ -100,6 +100,32 @@ export default async function DashboardPage() {
 
   const outTodayCount = outToday.length;
   const availableCount = teamCount - outTodayCount;
+  const showTeamAbsencesFirst =
+    userRole === "ADMIN" || userRole === "MANAGER";
+
+  const absenceCards = (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <WhoIsOut
+        absences={outToday.map((r: any) => ({
+          id: r.id,
+          user: { name: r.user.name, memberType: r.user.memberType },
+          leaveType: r.leaveType,
+          startDate: r.startDate.toISOString(),
+          endDate: r.endDate.toISOString(),
+        }))}
+      />
+      <UpcomingAbsences
+        absences={upcoming.map((r: any) => ({
+          id: r.id,
+          user: { name: r.user.name, memberType: r.user.memberType },
+          leaveType: r.leaveType,
+          startDate: r.startDate.toISOString(),
+          endDate: r.endDate.toISOString(),
+          status: r.status,
+        }))}
+      />
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -115,6 +141,8 @@ export default async function DashboardPage() {
           })}
         </p>
       </div>
+
+      {showTeamAbsencesFirst && absenceCards}
 
       {/* Stats cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -198,28 +226,7 @@ export default async function DashboardPage() {
 
       <RegionCoverWidget organizationId={orgId} today={today} />
 
-      {/* Main content */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <WhoIsOut
-          absences={outToday.map((r: any) => ({
-            id: r.id,
-            user: { name: r.user.name, memberType: r.user.memberType },
-            leaveType: r.leaveType,
-            startDate: r.startDate.toISOString(),
-            endDate: r.endDate.toISOString(),
-          }))}
-        />
-        <UpcomingAbsences
-          absences={upcoming.map((r: any) => ({
-            id: r.id,
-            user: { name: r.user.name, memberType: r.user.memberType },
-            leaveType: r.leaveType,
-            startDate: r.startDate.toISOString(),
-            endDate: r.endDate.toISOString(),
-            status: r.status,
-          }))}
-        />
-      </div>
+      {!showTeamAbsencesFirst && absenceCards}
     </div>
   );
 }

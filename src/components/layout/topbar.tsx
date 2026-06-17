@@ -15,7 +15,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
         {onMenuClick && (
           <button
             onClick={onMenuClick}
-            className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 md:hidden"
+            className="rounded-md p-2.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 md:hidden"
             aria-label="Open menu"
           >
             <Menu className="h-5 w-5" />
@@ -40,10 +40,11 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
             </Link>
             <button
               onClick={() => signOut({ callbackUrl: "/login" })}
-              className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+              className="rounded-md p-2.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
               title="Sign out"
+              aria-label="Sign out"
             >
-              <LogOut className="h-4 w-4" />
+              <LogOut className="h-5 w-5" />
             </button>
           </div>
         )}

@@ -51,7 +51,7 @@ export const PRICING: PricingConfig = {
     },
     {
       name: "Starter",
-      tagline: "For growing UK teams",
+      tagline: "For growing teams",
       price_monthly: 19,
       headcount: "Up to 15 employees",
       cta: "Start free trial",

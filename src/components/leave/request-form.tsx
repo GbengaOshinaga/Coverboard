@@ -246,7 +246,7 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
         <textarea
           id="note"
           rows={3}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+          className="w-full rounded-md border border-gray-300 px-3 py-2 text-base sm:text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
           placeholder="Reason for leave..."
           value={note}
           onChange={(e) => setNote(e.target.value)}
@@ -275,7 +275,7 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
                 id="sicknessNote"
                 rows={3}
                 required
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-base sm:text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                 placeholder="e.g. Fit note reference, diagnosis summary, or dates covered..."
                 value={sicknessNote}
                 onChange={(e) => setSicknessNote(e.target.value)}
