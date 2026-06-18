@@ -123,7 +123,7 @@ export function hasPrioritySupport(
   return planAtLeast(normalizeForFeatureGate(plan), "SCALE");
 }
 
-/** Whether the plan unlocks the SLA-backed response tier (1-hour target). */
+/** Whether the plan unlocks the priority email support tier (same-day target). */
 export function hasSlaSupport(
   plan: AnyPlan | null | undefined
 ): boolean {
