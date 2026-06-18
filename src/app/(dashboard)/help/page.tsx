@@ -84,7 +84,7 @@ export default function HelpPage() {
               <p className="text-sm font-medium text-gray-900">Your plan</p>
               <p className="text-xs text-gray-500">
                 {sla
-                  ? "Same-day response (UK business hours) is included"
+                  ? "Priority email support is included"
                   : priority
                     ? "Priority response is included"
                     : "Standard response is included"}
@@ -115,16 +115,16 @@ export default function HelpPage() {
                   Response target
                 </div>
                 <p className="mt-1 text-sm font-semibold text-gray-900">
-                  Same business day
+                  Within 2 working days
                 </p>
               </div>
               <div className="rounded-lg border border-brand-200 bg-white p-3">
                 <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500">
                   <CheckCircle2 className="h-3.5 w-3.5" />
-                  Coverage
+                  Priority
                 </div>
                 <p className="mt-1 text-sm font-semibold text-gray-900">
-                  Mon–Fri, 9am–6pm UK
+                  Front of the queue
                 </p>
               </div>
               <div className="rounded-lg border border-brand-200 bg-white p-3">
@@ -141,8 +141,7 @@ export default function HelpPage() {
               </div>
             </div>
             <p className="text-xs text-gray-500">
-              Response times are targets during UK business hours, not
-              contractual guarantees.
+              Response times are targets, not contractual guarantees.
             </p>
           </CardContent>
         </Card>
@@ -166,16 +165,16 @@ export default function HelpPage() {
                   Response target
                 </div>
                 <p className="mt-1 text-sm font-semibold text-gray-900">
-                  Within 1 business day
+                  Within 3 working days
                 </p>
               </div>
               <div className="rounded-lg border border-brand-200 bg-white p-3">
                 <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500">
                   <CheckCircle2 className="h-3.5 w-3.5" />
-                  Coverage
+                  Priority
                 </div>
                 <p className="mt-1 text-sm font-semibold text-gray-900">
-                  Mon–Fri, 9am–6pm GMT
+                  Queued ahead of standard
                 </p>
               </div>
               <div className="rounded-lg border border-brand-200 bg-white p-3">
@@ -205,9 +204,8 @@ export default function HelpPage() {
               Standard contact
             </CardTitle>
             <CardDescription>
-              Replies typically arrive within 1–2 business days. Upgrade to
-              Scale for priority response, or Pro for same-day priority email
-              support (UK business hours).
+              Replies typically arrive within a week. Upgrade to Scale or Pro
+              for priority email support with a faster target.
             </CardDescription>
           </CardHeader>
           <CardContent>

@@ -211,7 +211,7 @@ const scaleHighlights = [
 const proHighlights = [
   "Activity log — see who viewed each profile, sickness note, and report",
   "Audit trail exports for governance and investigations",
-  "Same-day priority email support (UK business hours) — everything in Scale included",
+  "Priority email support (2 working-day target) — everything in Scale included",
 ];
 
 function ScaleAndProSection() {
@@ -272,7 +272,7 @@ function ScaleAndProSection() {
             <p className="mt-1 text-sm text-gray-500">Enterprise-ready</p>
             <p className="mt-4 text-sm text-gray-700 leading-relaxed">
               For employers who need a tamper-evident activity trail, SAR
-              exports, and same-day priority support (UK business hours) alongside the same leave
+              exports, and priority email support alongside the same leave
               engine your managers already use.
             </p>
             <ul className="mt-6 space-y-3">
