@@ -297,6 +297,38 @@ export async function PATCH(
               role: userRole,
             }
           );
+
+          // Activation milestone (time-to-value): the first approved request in
+          // an org with a real team means it's experienced the full loop.
+          // approvedCount === 1 is only ever true for that first approval, so
+          // this fires at most once per org. Fire-and-forget.
+          void (async () => {
+            try {
+              const [approvedCount, memberCount, org] = await Promise.all([
+                prisma.leaveRequest.count({
+                  where: { user: { organizationId: orgId }, status: "APPROVED" },
+                }),
+                prisma.user.count({ where: { organizationId: orgId } }),
+                prisma.organization.findUnique({
+                  where: { id: orgId },
+                  select: { createdAt: true },
+                }),
+              ]);
+              if (approvedCount === 1 && memberCount > 1 && org) {
+                trackServer(
+                  AnalyticsEvents.ORG_ACTIVATED,
+                  {
+                    time_to_activate_hours: Math.round(
+                      (Date.now() - org.createdAt.getTime()) / 3_600_000
+                    ),
+                  },
+                  { userId, organizationId: orgId, role: userRole }
+                );
+              }
+            } catch (err) {
+              console.error("Activation milestone tracking failed:", err);
+            }
+          })();
         }
         if (status === "CANCELLED") {
           trackServer(

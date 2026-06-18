@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { EmploymentType } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -11,7 +12,7 @@ import { RegionCoverWidget } from "@/components/dashboard/region-cover-widget";
 import { ActivationChecklist } from "@/components/dashboard/activation-checklist";
 import { ActivationCelebration } from "@/components/dashboard/activation-celebration";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, CalendarDays, Clock, AlertTriangle } from "lucide-react";
+import { Users, CalendarDays, Clock, AlertTriangle, Plus } from "lucide-react";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -150,17 +151,26 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Dashboard</h1>
-        <p className="text-sm text-gray-500">
-          Team overview for{" "}
-          {today.toLocaleDateString("en-US", {
-            weekday: "long",
-            month: "long",
-            day: "numeric",
-            year: "numeric",
-          })}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Dashboard</h1>
+          <p className="text-sm text-gray-500">
+            Team overview for{" "}
+            {today.toLocaleDateString("en-US", {
+              weekday: "long",
+              month: "long",
+              day: "numeric",
+              year: "numeric",
+            })}
+          </p>
+        </div>
+        <Link
+          href="/requests/new"
+          className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-700"
+        >
+          <Plus className="h-4 w-4" />
+          Request time off
+        </Link>
       </div>
 
       {isAdmin && !activationComplete && (
