@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { EmploymentType } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -6,10 +7,11 @@ import { prisma } from "@/lib/prisma";
 import { getUserLeaveBalances } from "@/lib/leave-balances";
 import { WhoIsOut } from "@/components/dashboard/who-is-out";
 import { UpcomingAbsences } from "@/components/dashboard/upcoming-absences";
-import { LeaveBalances } from "@/components/dashboard/leave-balances";
 import { RegionCoverWidget } from "@/components/dashboard/region-cover-widget";
+import { ActivationChecklist } from "@/components/dashboard/activation-checklist";
+import { ActivationCelebration } from "@/components/dashboard/activation-celebration";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, CalendarDays, Clock, AlertTriangle } from "lucide-react";
+import { Users, CalendarDays, Clock, AlertTriangle, Plus, Wallet } from "lucide-react";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -19,6 +21,7 @@ export default async function DashboardPage() {
   const currentUserId = (session!.user as Record<string, unknown>).id as string;
   const userRole = (session!.user as Record<string, unknown>).role as string;
   const canSeeComplianceAlerts = userRole === "ADMIN" || userRole === "MANAGER";
+  const isAdmin = userRole === "ADMIN";
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -37,6 +40,8 @@ export default async function DashboardPage() {
     myBalances,
     rightToWorkRiskCount,
     zeroHoursRightToWorkRiskCount,
+    anyRequestCount,
+    anyApprovedCount,
   ] = await Promise.all([
     // Who's out today
     prisma.leaveRequest.findMany({
@@ -96,7 +101,23 @@ export default async function DashboardPage() {
           },
         })
       : Promise.resolve(0),
+    // Activation checklist state (admins only): has any request / approval yet.
+    isAdmin
+      ? prisma.leaveRequest.count({
+          where: { user: { organizationId: orgId } },
+        })
+      : Promise.resolve(0),
+    isAdmin
+      ? prisma.leaveRequest.count({
+          where: { user: { organizationId: orgId }, status: "APPROVED" },
+        })
+      : Promise.resolve(0),
   ]);
+
+  // First-run activation: show the checklist to admins until the core loop
+  // (invite → request → approve) is complete.
+  const activationComplete =
+    teamCount > 1 && anyRequestCount > 0 && anyApprovedCount > 0;
 
   const outTodayCount = outToday.length;
   const availableCount = teamCount - outTodayCount;
@@ -129,18 +150,37 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Dashboard</h1>
-        <p className="text-sm text-gray-500">
-          Team overview for{" "}
-          {today.toLocaleDateString("en-US", {
-            weekday: "long",
-            month: "long",
-            day: "numeric",
-            year: "numeric",
-          })}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Dashboard</h1>
+          <p className="text-sm text-gray-500">
+            Team overview for{" "}
+            {today.toLocaleDateString("en-US", {
+              weekday: "long",
+              month: "long",
+              day: "numeric",
+              year: "numeric",
+            })}
+          </p>
+        </div>
+        <Link
+          href="/requests/new"
+          className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-700"
+        >
+          <Plus className="h-4 w-4" />
+          Request time off
+        </Link>
       </div>
+
+      {isAdmin && !activationComplete && (
+        <ActivationChecklist
+          team={teamCount > 1}
+          request={anyRequestCount > 0}
+          approve={anyApprovedCount > 0}
+        />
+      )}
+
+      {isAdmin && activationComplete && <ActivationCelebration />}
 
       {showTeamAbsencesFirst && absenceCards}
 
@@ -204,8 +244,38 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      {/* Leave balances */}
-      <LeaveBalances balances={myBalances} />
+      {/* Personal leave lives on "My time off" now — nudge through to it. */}
+      <Link href="/my-time-off" className="block">
+        <Card className="transition-colors hover:border-brand-200">
+          <CardContent className="flex items-center justify-between gap-3 py-4">
+            <div className="flex items-center gap-3">
+              <Wallet className="h-5 w-5 shrink-0 text-brand-500" />
+              <p className="text-sm text-gray-700">
+                {(() => {
+                  const annual = myBalances.find((b) =>
+                    /annual/i.test(b.leaveTypeName)
+                  );
+                  return typeof annual?.remaining === "number" ? (
+                    <>
+                      You have{" "}
+                      <span className="font-semibold text-gray-900">
+                        {annual.remaining} day
+                        {annual.remaining === 1 ? "" : "s"}
+                      </span>{" "}
+                      of annual leave left.
+                    </>
+                  ) : (
+                    "View your leave balance and request time off."
+                  );
+                })()}
+              </p>
+            </div>
+            <span className="shrink-0 text-sm font-medium text-brand-600">
+              My time off →
+            </span>
+          </CardContent>
+        </Card>
+      </Link>
 
       {canSeeComplianceAlerts && rightToWorkRiskCount > 0 && (
         <Card className="border-amber-200 bg-amber-50">

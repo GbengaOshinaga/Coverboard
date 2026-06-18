@@ -92,10 +92,20 @@ export async function GET(request: Request) {
     orderBy: { startDate: "asc" },
   });
 
-  // Pro-only read-side audit when sensitive sickness notes were exposed to a
-  // non-subject admin/manager viewer.
+  // Sickness notes are sensitive medical data: only the request's owner and
+  // admins (the org's data controllers) receive the free text. Managers and
+  // other viewers get it redacted — they still see leave type, dates and the
+  // evidenceProvided flag.
+  const visibleRequests = requests.map((r) =>
+    r.userId === currentUserId || userRole === "ADMIN"
+      ? r
+      : { ...r, sicknessNote: null }
+  );
+
+  // Pro-only read-side audit, computed on the redacted set so managers (who no
+  // longer receive notes) don't generate spurious "sickness_viewed" entries.
   const sicknessMeta = selectSicknessAuditMeta(
-    requests,
+    visibleRequests,
     currentUserId,
     userRole
   );
@@ -115,7 +125,7 @@ export async function GET(request: Request) {
     });
   }
 
-  return NextResponse.json(requests);
+  return NextResponse.json(visibleRequests);
 }
 
 const createSchema = z.object({
@@ -410,6 +420,20 @@ export async function POST(request: Request) {
       }
     }
 
+    const orgId = (session.user as Record<string, unknown>).organizationId as string;
+    // When the requester is the sole approver (no other admin/manager exists),
+    // there's no one else to review their request — auto-approve it rather than
+    // parking it in PENDING with nobody able to action it. Mirrors the
+    // self-approval guard in /api/leave-requests/[id].
+    const otherApprovers = await prisma.user.count({
+      where: {
+        organizationId: orgId,
+        id: { not: userId },
+        role: { in: ["ADMIN", "MANAGER"] },
+      },
+    });
+    const autoApprove = otherApprovers === 0;
+
     const leaveRequest = await prisma.leaveRequest.create({
       data: {
         startDate,
@@ -433,6 +457,13 @@ export async function POST(request: Request) {
         smpPhase2EndDate: smpPhase2EndDate ?? undefined,
         smpPhase1WeeklyRate: smpPhase1WeeklyRate ?? undefined,
         smpPhase2WeeklyRate: smpPhase2WeeklyRate ?? undefined,
+        ...(autoApprove
+          ? {
+              status: "APPROVED" as const,
+              reviewedById: userId,
+              reviewedAt: new Date(),
+            }
+          : {}),
       },
       include: {
         user: {
@@ -452,10 +483,10 @@ export async function POST(request: Request) {
 
     // ── Bradford Factor recalculation ─────────────────────────────────
     // Bradford measures *taken* absence, so only APPROVED requests count.
-    // A freshly-created request defaults to PENDING and will roll into the
-    // stored score when it's approved (handled in the [id] PATCH route).
-    // We still recompute on create so any prior APPROVED rows for this user
-    // stay consistent (e.g. cleaning up an orphaned stored value).
+    // A pending request rolls into the score when approved (in the [id] PATCH
+    // route); an auto-approved one (sole approver) is already APPROVED and is
+    // picked up by the query below. We recompute on create either way so the
+    // stored score stays consistent.
     if (isSicknessLeave) {
       prisma.leaveRequest
         .findMany({
@@ -484,29 +515,32 @@ export async function POST(request: Request) {
         .catch((err) => console.error("Bradford Factor update error:", err));
     }
 
-    // Send notifications (fire and forget)
+    // Notify approvers of the new request (fire and forget). Skipped when
+    // auto-approved — there's no one else to review it and it's already done,
+    // so notifying would just email the requester about their own request.
     const daysRequested = countWeekdays(startDate, endDate);
-    const orgId = (session.user as Record<string, unknown>).organizationId as string;
 
-    notifyNewRequest({
-      organizationId: orgId,
-      requestId: leaveRequest.id,
-      userName: leaveRequest.user.name,
-      leaveTypeName: leaveRequest.leaveType.name,
-      startDate,
-      endDate,
-      note: note ?? null,
-      daysRequested,
-    }).catch((err) => console.error("Slack notification error:", err));
+    if (!autoApprove) {
+      notifyNewRequest({
+        organizationId: orgId,
+        requestId: leaveRequest.id,
+        userName: leaveRequest.user.name,
+        leaveTypeName: leaveRequest.leaveType.name,
+        startDate,
+        endDate,
+        note: note ?? null,
+        daysRequested,
+      }).catch((err) => console.error("Slack notification error:", err));
 
-    emailNewRequest({
-      requesterName: leaveRequest.user.name,
-      leaveTypeName: leaveRequest.leaveType.name,
-      startDate,
-      endDate,
-      note: note ?? null,
-      organizationId: orgId,
-    }).catch((err) => console.error("Email notification error:", err));
+      emailNewRequest({
+        requesterName: leaveRequest.user.name,
+        leaveTypeName: leaveRequest.leaveType.name,
+        startDate,
+        endDate,
+        note: note ?? null,
+        organizationId: orgId,
+      }).catch((err) => console.error("Email notification error:", err));
+    }
 
     recordAudit({
       organizationId: orgId,
@@ -526,6 +560,28 @@ export async function POST(request: Request) {
       },
       context: requestAuditContext(request),
     });
+
+    // Keep the audit trail accurate when the request was auto-approved.
+    if (autoApprove) {
+      recordAudit({
+        organizationId: orgId,
+        action: "leave_request.approved",
+        resource: "leave_request",
+        resourceId: leaveRequest.id,
+        actor: {
+          id: userId,
+          email: leaveRequest.user.email,
+          role: (session.user as Record<string, unknown>).role as string,
+        },
+        metadata: {
+          leaveType: leaveRequest.leaveType.name,
+          startDate,
+          endDate,
+          autoApproved: true,
+        },
+        context: requestAuditContext(request),
+      });
+    }
 
     trackServer(
       AnalyticsEvents.LEAVE_REQUEST_CREATED,
@@ -572,7 +628,16 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json({ ...leaveRequest, balanceWarning, sspInfo }, { status: 201 });
+    // Flag the very first request so the UI can acknowledge the milestone.
+    const userRequestCount = await prisma.leaveRequest.count({
+      where: { userId },
+    });
+    const firstRequest = userRequestCount === 1;
+
+    return NextResponse.json(
+      { ...leaveRequest, balanceWarning, sspInfo, firstRequest },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("Create leave request error:", error);
     return NextResponse.json(

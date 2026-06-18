@@ -23,5 +23,9 @@ export default async function Home() {
     redirect("/onboarding");
   }
 
-  redirect("/dashboard");
+  // Employees land on their personal hub; admins/managers on the team overview.
+  const role = (session.user as Record<string, unknown>).role as
+    | string
+    | undefined;
+  redirect(role === "MEMBER" ? "/my-time-off" : "/dashboard");
 }

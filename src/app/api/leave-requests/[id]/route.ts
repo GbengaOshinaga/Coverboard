@@ -88,6 +88,30 @@ export async function PATCH(
           { status: 403 }
         );
       }
+      // Segregation of duties: you can't approve or reject your own request
+      // when another approver exists. A sole admin/manager may, to avoid a
+      // deadlock (e.g. a solo owner with no one else to approve).
+      if (
+        (status === "APPROVED" || status === "REJECTED") &&
+        leaveRequest.userId === userId
+      ) {
+        const otherApprovers = await prisma.user.count({
+          where: {
+            organizationId: orgId,
+            id: { not: userId },
+            role: { in: ["ADMIN", "MANAGER"] },
+          },
+        });
+        if (otherApprovers > 0) {
+          return NextResponse.json(
+            {
+              error:
+                "You can't approve or reject your own request — ask another admin or manager.",
+            },
+            { status: 403 }
+          );
+        }
+      }
     }
 
     if ((kitDaysUsed !== undefined || splitDaysUsed !== undefined || evidenceProvided !== undefined || splCurtailmentConfirmed !== undefined) && !status) {
@@ -273,6 +297,38 @@ export async function PATCH(
               role: userRole,
             }
           );
+
+          // Activation milestone (time-to-value): the first approved request in
+          // an org with a real team means it's experienced the full loop.
+          // approvedCount === 1 is only ever true for that first approval, so
+          // this fires at most once per org. Fire-and-forget.
+          void (async () => {
+            try {
+              const [approvedCount, memberCount, org] = await Promise.all([
+                prisma.leaveRequest.count({
+                  where: { user: { organizationId: orgId }, status: "APPROVED" },
+                }),
+                prisma.user.count({ where: { organizationId: orgId } }),
+                prisma.organization.findUnique({
+                  where: { id: orgId },
+                  select: { createdAt: true },
+                }),
+              ]);
+              if (approvedCount === 1 && memberCount > 1 && org) {
+                trackServer(
+                  AnalyticsEvents.ORG_ACTIVATED,
+                  {
+                    time_to_activate_hours: Math.round(
+                      (Date.now() - org.createdAt.getTime()) / 3_600_000
+                    ),
+                  },
+                  { userId, organizationId: orgId, role: userRole }
+                );
+              }
+            } catch (err) {
+              console.error("Activation milestone tracking failed:", err);
+            }
+          })();
         }
         if (status === "CANCELLED") {
           trackServer(
@@ -318,7 +374,13 @@ export async function PATCH(
       });
     }
 
-    return NextResponse.json(updated);
+    // Sickness notes are sensitive: only the owner and admins receive the free
+    // text. A manager acting on someone else's request gets it redacted.
+    const responsePayload =
+      updated.userId === userId || userRole === "ADMIN"
+        ? updated
+        : { ...updated, sicknessNote: null };
+    return NextResponse.json(responsePayload);
   } catch (error) {
     console.error("Update leave request error:", error);
     return NextResponse.json(

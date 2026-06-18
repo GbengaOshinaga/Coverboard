@@ -5,6 +5,9 @@ export const AnalyticsEvents = {
   TEAM_MEMBER_ADDED: "team_member_added",
   LEAVE_REQUEST_CREATED: "leave_request_created",
   LEAVE_REQUEST_APPROVED: "leave_request_approved",
+  // Fired once per org when it first completes the full loop (a real team +
+  // a request approved). Carries time_to_activate_hours for TTV tracking.
+  ORG_ACTIVATED: "org_activated",
   UK_STATUTORY_ENABLED: "uk_statutory_enabled",
   BILLING_CARD_ADDED: "billing_card_added",
   SUBSCRIPTION_CANCELED: "subscription_canceled",

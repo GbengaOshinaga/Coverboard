@@ -84,7 +84,7 @@ export default function HelpPage() {
               <p className="text-sm font-medium text-gray-900">Your plan</p>
               <p className="text-xs text-gray-500">
                 {sla
-                  ? "1-hour response target is included"
+                  ? "Priority email support is included"
                   : priority
                     ? "Priority response is included"
                     : "Standard response is included"}
@@ -101,11 +101,10 @@ export default function HelpPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BadgeCheck className="h-5 w-5 text-brand-700" />
-              SLA-backed response
+              Priority email support
             </CardTitle>
             <CardDescription>
-              Direct contact channel with agreed response targets and 24×7
-              critical-incident coverage.
+              A direct, priority email channel for urgent product questions.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -116,16 +115,16 @@ export default function HelpPage() {
                   Response target
                 </div>
                 <p className="mt-1 text-sm font-semibold text-gray-900">
-                  Within 1 business hour
+                  Within 2 working days
                 </p>
               </div>
               <div className="rounded-lg border border-brand-200 bg-white p-3">
                 <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500">
                   <CheckCircle2 className="h-3.5 w-3.5" />
-                  Coverage
+                  Priority
                 </div>
                 <p className="mt-1 text-sm font-semibold text-gray-900">
-                  24×7 for P1 incidents
+                  Front of the queue
                 </p>
               </div>
               <div className="rounded-lg border border-brand-200 bg-white p-3">
@@ -142,9 +141,7 @@ export default function HelpPage() {
               </div>
             </div>
             <p className="text-xs text-gray-500">
-              We target 99.9% uptime. This is an availability objective, not a
-              guarantee. Formal SLA terms and remedies apply only where agreed
-              in writing.
+              Response times are targets, not contractual guarantees.
             </p>
           </CardContent>
         </Card>
@@ -168,16 +165,16 @@ export default function HelpPage() {
                   Response target
                 </div>
                 <p className="mt-1 text-sm font-semibold text-gray-900">
-                  Within 4 business hours
+                  Within 3 working days
                 </p>
               </div>
               <div className="rounded-lg border border-brand-200 bg-white p-3">
                 <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500">
                   <CheckCircle2 className="h-3.5 w-3.5" />
-                  Coverage
+                  Priority
                 </div>
                 <p className="mt-1 text-sm font-semibold text-gray-900">
-                  Mon–Fri, 9am–6pm GMT
+                  Queued ahead of standard
                 </p>
               </div>
               <div className="rounded-lg border border-brand-200 bg-white p-3">
@@ -207,8 +204,8 @@ export default function HelpPage() {
               Standard contact
             </CardTitle>
             <CardDescription>
-              Replies typically arrive within 1 business day. Upgrade to Scale
-              for priority response, or Pro for a 1-hour SLA.
+              Replies typically arrive within a week. Upgrade to Scale or Pro
+              for priority email support with a faster target.
             </CardDescription>
           </CardHeader>
           <CardContent>

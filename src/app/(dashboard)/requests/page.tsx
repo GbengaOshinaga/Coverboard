@@ -52,13 +52,17 @@ export default function RequestsPage() {
   const [loading, setLoading] = useState(true);
   const [userBalances, setUserBalances] = useState<Record<string, LeaveBalance[]>>({});
   const [regionsEnabled, setRegionsEnabled] = useState(false);
+  const [soleApprover, setSoleApprover] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     fetch("/api/organization/settings")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (!cancelled && data) setRegionsEnabled(Boolean(data.regionsEnabled));
+        if (!cancelled && data) {
+          setRegionsEnabled(Boolean(data.regionsEnabled));
+          setSoleApprover(Boolean(data.soleApprover));
+        }
       })
       .catch(() => undefined);
     return () => {
@@ -265,7 +269,10 @@ export default function RequestsPage() {
               <RequestCard
                 key={request.id}
                 request={request}
-                canReview={isReviewer && request.user.id !== userId}
+                canReview={
+                  isReviewer &&
+                  (request.user.id !== userId || soleApprover)
+                }
                 canCancel={request.user.id === userId}
                 regionsEnabled={regionsEnabled}
                 onAction={handleAction}

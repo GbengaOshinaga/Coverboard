@@ -23,35 +23,50 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const orgId = (session.user as Record<string, unknown>).organizationId as string;
-  const [settings, hasUkEmployeesFlag, missingWorkLocationCount] =
-    await Promise.all([
-      prisma.organization.findUnique({
-        where: { id: orgId },
-        select: {
-          id: true,
-          ukBankHolidayInclusive: true,
-          ukBankHolidayRegion: true,
-          ukCarryOverEnabled: true,
-          ukCarryOverMax: true,
-          ukCarryOverExpiryMonth: true,
-          ukCarryOverExpiryDay: true,
-          dataResidency: true,
-          maxAdminUsers: true,
-          plan: true,
-          regionsEnabled: true,
-          industry: true,
-          deletionScheduledFor: true,
-        },
-      }),
-      hasUKEmployees(orgId),
-      prisma.user.count({
-        where: { organizationId: orgId, isActive: true, workCountry: null },
-      }),
-    ]);
+  const userId = (session.user as Record<string, unknown>).id as string;
+  const [
+    settings,
+    hasUkEmployeesFlag,
+    missingWorkLocationCount,
+    otherApproverCount,
+  ] = await Promise.all([
+    prisma.organization.findUnique({
+      where: { id: orgId },
+      select: {
+        id: true,
+        ukBankHolidayInclusive: true,
+        ukBankHolidayRegion: true,
+        ukCarryOverEnabled: true,
+        ukCarryOverMax: true,
+        ukCarryOverExpiryMonth: true,
+        ukCarryOverExpiryDay: true,
+        dataResidency: true,
+        maxAdminUsers: true,
+        plan: true,
+        regionsEnabled: true,
+        industry: true,
+        deletionScheduledFor: true,
+      },
+    }),
+    hasUKEmployees(orgId),
+    prisma.user.count({
+      where: { organizationId: orgId, isActive: true, workCountry: null },
+    }),
+    // Mirrors the self-approval guard in /api/leave-requests/[id]: when no other
+    // admin/manager exists, the lone approver may approve their own requests.
+    prisma.user.count({
+      where: {
+        organizationId: orgId,
+        id: { not: userId },
+        role: { in: ["ADMIN", "MANAGER"] },
+      },
+    }),
+  ]);
   return NextResponse.json({
     ...settings,
     hasUkEmployees: hasUkEmployeesFlag,
     missingWorkLocationCount,
+    soleApprover: otherApproverCount === 0,
   });
 }
 

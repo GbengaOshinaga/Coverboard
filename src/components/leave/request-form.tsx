@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { useToast } from "@/components/ui/toast";
 import { OverlapWarning } from "./overlap-warning";
 import { BalanceIndicator } from "./balance-indicator";
 import { CoverageWarning } from "./coverage-warning";
@@ -46,6 +48,7 @@ type LeaveBalance = {
 
 export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveType[]; currentUserId?: string }) {
   const router = useRouter();
+  const { toast } = useToast();
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [leaveTypeId, setLeaveTypeId] = useState("");
@@ -80,6 +83,19 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
     () => leaveTypes.find((lt) => lt.id === leaveTypeId) ?? null,
     [leaveTypes, leaveTypeId]
   );
+
+  // Gentle, context-aware message for sensitive leave types. Leave management
+  // deals with real human situations — the UI shouldn't feel transactional.
+  const sensitiveTone = useMemo(() => {
+    const n = selectedLeaveType?.name?.toLowerCase() ?? "";
+    if (n.includes("bereavement"))
+      return "We're sorry for your loss. Take the time you need — submit what you can now and adjust the dates later if things change.";
+    if (n.includes("compassionate"))
+      return "We hope everything's okay. Just the essentials below — you can add more later if you need to.";
+    if (n.includes("ssp") || n.includes("sick"))
+      return "Hope you feel better soon. Only the essentials below — you don't need to share a diagnosis.";
+    return null;
+  }, [selectedLeaveType]);
 
   const selectedBalance = useMemo(
     () => balances.find((b) => b.leaveTypeId === leaveTypeId) ?? null,
@@ -160,11 +176,18 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
         }),
       });
 
+      const data = await res.json();
       if (!res.ok) {
-        const data = await res.json();
         setError(data.error || "Failed to submit request");
         setLoading(false);
         return;
+      }
+
+      if (data.firstRequest) {
+        toast(
+          "🎉 Your first request is in! You'll hear back once it's reviewed.",
+          "success"
+        );
       }
 
       router.push("/requests");
@@ -227,6 +250,13 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
         required
       />
 
+      {sensitiveTone && (
+        <div className="flex items-start gap-2 rounded-lg border border-brand-100 bg-brand-50/60 p-3 text-sm text-gray-700">
+          <Heart className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" aria-hidden />
+          <span>{sensitiveTone}</span>
+        </div>
+      )}
+
       {/* Balance indicator */}
       {leaveTypeId && (
         <BalanceIndicator
@@ -276,13 +306,13 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
                 rows={3}
                 required
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-base sm:text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-                placeholder="e.g. Fit note reference, diagnosis summary, or dates covered..."
+                placeholder="e.g. fit note reference and the dates it covers"
                 value={sicknessNote}
                 onChange={(e) => setSicknessNote(e.target.value)}
               />
               <p className="text-xs text-gray-500">
-                Required for SSP. Visible to admins and managers reviewing your
-                request.
+                Required for SSP. Visible only to you and your admin — you
+                don&apos;t need to include a diagnosis.
               </p>
             </div>
           ) : (

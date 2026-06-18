@@ -79,7 +79,7 @@ const PLANS: ReadonlyArray<{
       "Everything in Scale",
       "Activity log — see who viewed each profile, sickness note, and report",
       "Audit trail + SAR exports",
-      "1-hour support response (UK hours)",
+      "Priority email support (2 working-day target)",
     ],
   },
 ];
