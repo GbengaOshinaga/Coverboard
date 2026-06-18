@@ -6,9 +6,10 @@ import { useEffect, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { MEMBER_HIDDEN_NAV_HREFS } from "@/lib/member-route-access";
-import { X, LayoutDashboard, Calendar, FileText, Users, BarChart3, Settings, LifeBuoy, ScrollText } from "lucide-react";
+import { X, LayoutDashboard, Calendar, FileText, Users, BarChart3, Settings, LifeBuoy, ScrollText, CalendarHeart } from "lucide-react";
 
 const navigation = [
+  { name: "My time off", href: "/my-time-off", icon: CalendarHeart },
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Calendar", href: "/calendar", icon: Calendar },
   { name: "Requests", href: "/requests", icon: FileText },

@@ -7,12 +7,11 @@ import { prisma } from "@/lib/prisma";
 import { getUserLeaveBalances } from "@/lib/leave-balances";
 import { WhoIsOut } from "@/components/dashboard/who-is-out";
 import { UpcomingAbsences } from "@/components/dashboard/upcoming-absences";
-import { LeaveBalances } from "@/components/dashboard/leave-balances";
 import { RegionCoverWidget } from "@/components/dashboard/region-cover-widget";
 import { ActivationChecklist } from "@/components/dashboard/activation-checklist";
 import { ActivationCelebration } from "@/components/dashboard/activation-celebration";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, CalendarDays, Clock, AlertTriangle, Plus } from "lucide-react";
+import { Users, CalendarDays, Clock, AlertTriangle, Plus, Wallet } from "lucide-react";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -245,8 +244,38 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      {/* Leave balances */}
-      <LeaveBalances balances={myBalances} />
+      {/* Personal leave lives on "My time off" now — nudge through to it. */}
+      <Link href="/my-time-off" className="block">
+        <Card className="transition-colors hover:border-brand-200">
+          <CardContent className="flex items-center justify-between gap-3 py-4">
+            <div className="flex items-center gap-3">
+              <Wallet className="h-5 w-5 shrink-0 text-brand-500" />
+              <p className="text-sm text-gray-700">
+                {(() => {
+                  const annual = myBalances.find((b) =>
+                    /annual/i.test(b.leaveTypeName)
+                  );
+                  return typeof annual?.remaining === "number" ? (
+                    <>
+                      You have{" "}
+                      <span className="font-semibold text-gray-900">
+                        {annual.remaining} day
+                        {annual.remaining === 1 ? "" : "s"}
+                      </span>{" "}
+                      of annual leave left.
+                    </>
+                  ) : (
+                    "View your leave balance and request time off."
+                  );
+                })()}
+              </p>
+            </div>
+            <span className="shrink-0 text-sm font-medium text-brand-600">
+              My time off →
+            </span>
+          </CardContent>
+        </Card>
+      </Link>
 
       {canSeeComplianceAlerts && rightToWorkRiskCount > 0 && (
         <Card className="border-amber-200 bg-amber-50">
