@@ -9,6 +9,7 @@ import { UpcomingAbsences } from "@/components/dashboard/upcoming-absences";
 import { LeaveBalances } from "@/components/dashboard/leave-balances";
 import { RegionCoverWidget } from "@/components/dashboard/region-cover-widget";
 import { ActivationChecklist } from "@/components/dashboard/activation-checklist";
+import { ActivationCelebration } from "@/components/dashboard/activation-celebration";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, CalendarDays, Clock, AlertTriangle } from "lucide-react";
 
@@ -169,6 +170,8 @@ export default async function DashboardPage() {
           approve={anyApprovedCount > 0}
         />
       )}
+
+      {isAdmin && activationComplete && <ActivationCelebration />}
 
       {showTeamAbsencesFirst && absenceCards}
 

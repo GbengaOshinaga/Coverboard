@@ -29,6 +29,10 @@ export function ActivationChecklist({ team, request, approve }: Props) {
   useEffect(() => {
     setMounted(true);
     try {
+      // Mark that this admin has seen the (incomplete) checklist, so the
+      // one-time completion celebration only shows to people who went through
+      // it — not to orgs that were already activated.
+      localStorage.setItem("cb_activation_seen", "1");
       if (localStorage.getItem(DISMISS_KEY) === "1") setDismissed(true);
     } catch {
       // localStorage unavailable (private mode etc.) — just show the card.

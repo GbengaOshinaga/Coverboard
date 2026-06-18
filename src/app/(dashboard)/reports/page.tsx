@@ -790,6 +790,39 @@ export default function ReportsPage() {
                 </div>
               </CardHeader>
               <CardContent>
+                {sortedBradford.length > 0 && (
+                  <div
+                    className={`mb-4 rounded-lg border p-3 text-sm ${
+                      flaggedCount > 0
+                        ? "border-amber-200 bg-amber-50 text-amber-900"
+                        : "border-green-200 bg-green-50 text-green-900"
+                    }`}
+                  >
+                    {flaggedCount > 0 ? (
+                      <>
+                        <span className="font-medium">
+                          {flaggedCount}{" "}
+                          {flaggedCount === 1 ? "person is" : "people are"} above
+                          your threshold of {threshold}.
+                        </span>{" "}
+                        A high score usually points to a pattern of frequent
+                        short absences rather than one long illness. Most
+                        managers find it helpful to have a supportive, informal
+                        return-to-work chat at this point — not a disciplinary
+                        one. Open someone&apos;s profile to see the breakdown
+                        before the conversation.
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-medium">
+                          Nobody is above your threshold of {threshold}.
+                        </span>{" "}
+                        Your team&apos;s short-term absence is in a healthy range
+                        — nothing needs your attention right now.
+                      </>
+                    )}
+                  </div>
+                )}
                 {sortedBradford.length === 0 ? (
                   <p className="py-4 text-center text-sm text-gray-400">
                     No UK employees found.

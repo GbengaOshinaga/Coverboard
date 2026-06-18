@@ -582,7 +582,16 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json({ ...leaveRequest, balanceWarning, sspInfo }, { status: 201 });
+    // Flag the very first request so the UI can acknowledge the milestone.
+    const userRequestCount = await prisma.leaveRequest.count({
+      where: { userId },
+    });
+    const firstRequest = userRequestCount === 1;
+
+    return NextResponse.json(
+      { ...leaveRequest, balanceWarning, sspInfo, firstRequest },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("Create leave request error:", error);
     return NextResponse.json(
