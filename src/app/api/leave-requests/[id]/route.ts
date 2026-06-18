@@ -88,6 +88,30 @@ export async function PATCH(
           { status: 403 }
         );
       }
+      // Segregation of duties: you can't approve or reject your own request
+      // when another approver exists. A sole admin/manager may, to avoid a
+      // deadlock (e.g. a solo owner with no one else to approve).
+      if (
+        (status === "APPROVED" || status === "REJECTED") &&
+        leaveRequest.userId === userId
+      ) {
+        const otherApprovers = await prisma.user.count({
+          where: {
+            organizationId: orgId,
+            id: { not: userId },
+            role: { in: ["ADMIN", "MANAGER"] },
+          },
+        });
+        if (otherApprovers > 0) {
+          return NextResponse.json(
+            {
+              error:
+                "You can't approve or reject your own request — ask another admin or manager.",
+            },
+            { status: 403 }
+          );
+        }
+      }
     }
 
     if ((kitDaysUsed !== undefined || splitDaysUsed !== undefined || evidenceProvided !== undefined || splCurtailmentConfirmed !== undefined) && !status) {
@@ -318,7 +342,13 @@ export async function PATCH(
       });
     }
 
-    return NextResponse.json(updated);
+    // Sickness notes are sensitive: only the owner and admins receive the free
+    // text. A manager acting on someone else's request gets it redacted.
+    const responsePayload =
+      updated.userId === userId || userRole === "ADMIN"
+        ? updated
+        : { ...updated, sicknessNote: null };
+    return NextResponse.json(responsePayload);
   } catch (error) {
     console.error("Update leave request error:", error);
     return NextResponse.json(

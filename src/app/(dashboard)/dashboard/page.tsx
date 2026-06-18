@@ -8,6 +8,7 @@ import { WhoIsOut } from "@/components/dashboard/who-is-out";
 import { UpcomingAbsences } from "@/components/dashboard/upcoming-absences";
 import { LeaveBalances } from "@/components/dashboard/leave-balances";
 import { RegionCoverWidget } from "@/components/dashboard/region-cover-widget";
+import { ActivationChecklist } from "@/components/dashboard/activation-checklist";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, CalendarDays, Clock, AlertTriangle } from "lucide-react";
 
@@ -19,6 +20,7 @@ export default async function DashboardPage() {
   const currentUserId = (session!.user as Record<string, unknown>).id as string;
   const userRole = (session!.user as Record<string, unknown>).role as string;
   const canSeeComplianceAlerts = userRole === "ADMIN" || userRole === "MANAGER";
+  const isAdmin = userRole === "ADMIN";
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -37,6 +39,8 @@ export default async function DashboardPage() {
     myBalances,
     rightToWorkRiskCount,
     zeroHoursRightToWorkRiskCount,
+    anyRequestCount,
+    anyApprovedCount,
   ] = await Promise.all([
     // Who's out today
     prisma.leaveRequest.findMany({
@@ -96,7 +100,23 @@ export default async function DashboardPage() {
           },
         })
       : Promise.resolve(0),
+    // Activation checklist state (admins only): has any request / approval yet.
+    isAdmin
+      ? prisma.leaveRequest.count({
+          where: { user: { organizationId: orgId } },
+        })
+      : Promise.resolve(0),
+    isAdmin
+      ? prisma.leaveRequest.count({
+          where: { user: { organizationId: orgId }, status: "APPROVED" },
+        })
+      : Promise.resolve(0),
   ]);
+
+  // First-run activation: show the checklist to admins until the core loop
+  // (invite → request → approve) is complete.
+  const activationComplete =
+    teamCount > 1 && anyRequestCount > 0 && anyApprovedCount > 0;
 
   const outTodayCount = outToday.length;
   const availableCount = teamCount - outTodayCount;
@@ -141,6 +161,14 @@ export default async function DashboardPage() {
           })}
         </p>
       </div>
+
+      {isAdmin && !activationComplete && (
+        <ActivationChecklist
+          team={teamCount > 1}
+          request={anyRequestCount > 0}
+          approve={anyApprovedCount > 0}
+        />
+      )}
 
       {showTeamAbsencesFirst && absenceCards}
 

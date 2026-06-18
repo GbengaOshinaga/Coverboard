@@ -92,10 +92,20 @@ export async function GET(request: Request) {
     orderBy: { startDate: "asc" },
   });
 
-  // Pro-only read-side audit when sensitive sickness notes were exposed to a
-  // non-subject admin/manager viewer.
+  // Sickness notes are sensitive medical data: only the request's owner and
+  // admins (the org's data controllers) receive the free text. Managers and
+  // other viewers get it redacted — they still see leave type, dates and the
+  // evidenceProvided flag.
+  const visibleRequests = requests.map((r) =>
+    r.userId === currentUserId || userRole === "ADMIN"
+      ? r
+      : { ...r, sicknessNote: null }
+  );
+
+  // Pro-only read-side audit, computed on the redacted set so managers (who no
+  // longer receive notes) don't generate spurious "sickness_viewed" entries.
   const sicknessMeta = selectSicknessAuditMeta(
-    requests,
+    visibleRequests,
     currentUserId,
     userRole
   );
@@ -115,7 +125,7 @@ export async function GET(request: Request) {
     });
   }
 
-  return NextResponse.json(requests);
+  return NextResponse.json(visibleRequests);
 }
 
 const createSchema = z.object({
