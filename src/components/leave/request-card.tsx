@@ -70,6 +70,15 @@ export function RequestCard({
 
   const [showCover, setShowCover] = useState(false);
 
+  const isUpcoming = new Date(request.startDate) > new Date();
+  const showReview = canReview && request.status === "PENDING";
+  // Pending leave can always be withdrawn; approved leave only while upcoming
+  // (you can't un-take leave that's already started).
+  const showCancel =
+    canCancel &&
+    (request.status === "PENDING" ||
+      (request.status === "APPROVED" && isUpcoming));
+
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-3 sm:p-4">
       <div className="flex items-start gap-3 sm:gap-4">
@@ -138,9 +147,9 @@ export function RequestCard({
         </div>
 
         {/* Actions — inline on desktop */}
-        {request.status === "PENDING" && (canReview || canCancel) && (
+        {(showReview || showCancel) && (
           <div className="hidden sm:flex items-center gap-1.5 shrink-0">
-            {canReview && (
+            {showReview && (
               <>
                 <Button
                   size="sm"
@@ -160,7 +169,7 @@ export function RequestCard({
                 </Button>
               </>
             )}
-            {canCancel && (
+            {showCancel && (
               <Button
                 size="sm"
                 variant="outline"
@@ -174,9 +183,9 @@ export function RequestCard({
       </div>
 
       {/* Actions — stacked below on mobile */}
-      {request.status === "PENDING" && (canReview || canCancel) && (
+      {(showReview || showCancel) && (
         <div className="mt-2 flex items-center gap-1.5 sm:hidden">
-          {canReview && (
+          {showReview && (
             <>
               <Button
                 size="sm"
@@ -198,7 +207,7 @@ export function RequestCard({
               </Button>
             </>
           )}
-          {canCancel && (
+          {showCancel && (
             <Button
               size="sm"
               variant="outline"
