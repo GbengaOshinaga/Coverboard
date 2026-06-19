@@ -23,6 +23,20 @@
     @apply bg-[hsl(var(--background))] text-[hsl(var(--foreground))];
     font-feature-settings: "rlig" 1, "calt" 1;
   }
+
+  /* iOS Safari/Chrome render <input type="date"> with native chrome that
+     ignores our horizontal padding, pushing the value flush to the right edge.
+     Reset the native appearance and the value box so the field's padding
+     applies consistently (the calendar picker indicator still shows on desktop). */
+  input[type="date"] {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  input[type="date"]::-webkit-date-and-time-value {
+    text-align: left;
+    margin: 0;
+  }
 }
 
 @layer utilities {
