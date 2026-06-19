@@ -161,6 +161,10 @@ export async function POST(request: Request) {
         countryCode,
         workCountry,
         organizationId: orgId,
+        // Invited members get their temp password emailed to this address, so
+        // logging in already proves control of it — no separate verification
+        // step needed (and no "verify your email" banner to confuse them).
+        emailVerified: new Date(),
       },
       select: {
         id: true,

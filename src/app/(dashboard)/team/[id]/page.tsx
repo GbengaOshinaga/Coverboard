@@ -466,6 +466,10 @@ function CsvImport({
       setShowPreview(true);
     };
     reader.readAsText(file);
+    // Reset the input now that we've captured the file. Browsers don't fire
+    // `change` when the same file is re-selected, so without this the modal
+    // wouldn't reopen after closing it (until a page refresh).
+    e.target.value = "";
   }
 
   async function handleConfirm() {

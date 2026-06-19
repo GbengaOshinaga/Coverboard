@@ -129,7 +129,7 @@ export function RequestCard({
           </p>
         )}
 
-          {balance && canReview && request.status === "PENDING" && (
+          {balance && balance.allowance > 0 && canReview && request.status === "PENDING" && (
             <div className="mt-2 flex flex-wrap items-center gap-1 rounded bg-gray-50 px-2 py-1 sm:gap-2">
               <span className="text-[11px] text-gray-500">
                 Balance: {balance.used} used / {balance.allowance} allowed

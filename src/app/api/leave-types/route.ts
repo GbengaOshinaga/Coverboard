@@ -39,7 +39,7 @@ export async function POST(request: Request) {
   // still edit the seeded defaults (annual leave, SSP, etc) via PATCH —
   // only NEW types are gated.
   const plan = sessionUser.plan as AnyPlan | undefined;
-  if (!hasFeatureForEnum(plan ?? null, "custom_leave_policies")) {
+  if (!hasFeatureForEnum(plan ?? null, "custom_leave_types")) {
     return NextResponse.json(
       {
         error:

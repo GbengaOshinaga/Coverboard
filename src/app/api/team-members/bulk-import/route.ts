@@ -207,6 +207,9 @@ export async function POST(request: Request) {
           countryCode: data.countryCode,
           workCountry: data.workCountry,
           organizationId: orgId,
+          // Invited members receive their temp password at this address, so
+          // logging in proves control — no separate verification needed.
+          emailVerified: new Date(),
         },
         select: {
           id: true,

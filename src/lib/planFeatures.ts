@@ -56,7 +56,7 @@ const SCALE_FEATURES = [
   "absence_analytics",
   "compliance_reports",
   "priority_support",
-  "custom_leave_policies",
+  "custom_leave_types",
 ] as const;
 
 const PRO_FEATURES = [

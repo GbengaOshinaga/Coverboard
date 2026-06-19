@@ -39,6 +39,20 @@
   }
 }
 
+/* iOS Safari/Chrome auto-zoom the page whenever a focused form control has a
+   font-size below 16px. The shared Input/Select components bump to 16px on
+   mobile, but raw <input>/<select>/<textarea> elsewhere (settings, modals)
+   can still trigger it — so enforce a 16px minimum on phones for all of them.
+   `!important` is needed to beat Tailwind's `text-sm` utility on those fields;
+   it only applies below the `sm` breakpoint, so desktop sizing is untouched. */
+@media (max-width: 639.98px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 @layer utilities {
   .scrollbar-thin {
     scrollbar-width: thin;

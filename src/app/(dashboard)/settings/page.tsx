@@ -14,6 +14,7 @@ import { useToast } from "@/components/ui/toast";
 import { Plus, MessageSquare, CheckCircle, XCircle, User, ChevronRight, SquareKanban, ExternalLink, Unlink, Pencil, Trash2, AlertTriangle, Banknote, MapPin, CreditCard } from "lucide-react";
 import { EarningsCoveragePanel } from "@/components/settings/earnings-coverage-panel";
 import { Select } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 type LeaveCategory = "PAID" | "UNPAID" | "STATUTORY";
 
@@ -118,6 +119,11 @@ export default function SettingsPage() {
   const [slackChannelInput, setSlackChannelInput] = useState("");
   const [savingSlackChannel, setSavingSlackChannel] = useState(false);
   const [orgSettings, setOrgSettings] = useState<OrgSettings | null>(null);
+  // Local draft strings for number inputs in the UK compliance section so
+  // the user can freely edit (delete digits, etc.) without triggering a save
+  // on every keystroke. Values are committed on blur.
+  const [carryOverMaxDraft, setCarryOverMaxDraft] = useState<string | null>(null);
+  const [expiryDayDraft, setExpiryDayDraft] = useState<string | null>(null);
   const [ukReport, setUkReport] = useState<UKComplianceReport | null>(null);
   const [ukReportLoading, setUkReportLoading] = useState(false);
 
@@ -231,7 +237,10 @@ export default function SettingsPage() {
       try {
         const res = await fetch("/api/organization/settings");
         if (res.ok) {
-          setOrgSettings(await res.json());
+          const data = await res.json();
+          setOrgSettings(data);
+          setCarryOverMaxDraft(String(data.ukCarryOverMax));
+          setExpiryDayDraft(String(data.ukCarryOverExpiryDay));
         }
       } catch {
         // ignore
@@ -295,7 +304,12 @@ export default function SettingsPage() {
   async function refreshOrgSettings() {
     try {
       const res = await fetch("/api/organization/settings");
-      if (res.ok) setOrgSettings(await res.json());
+      if (res.ok) {
+        const data = await res.json();
+        setOrgSettings(data);
+        setCarryOverMaxDraft(String(data.ukCarryOverMax));
+        setExpiryDayDraft(String(data.ukCarryOverExpiryDay));
+      }
     } catch {
       // ignore
     }
@@ -683,13 +697,20 @@ export default function SettingsPage() {
             <CardDescription>Company-level UK leave and residency controls</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <label className="flex items-center justify-between gap-3 text-sm">
-              <span>Annual leave includes bank holidays</span>
-              <input
-                type="checkbox"
-                checked={orgSettings.ukBankHolidayInclusive}
-                onChange={(e) => saveOrgSettings({ ukBankHolidayInclusive: e.target.checked })}
-              />
+            <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border border-gray-200 p-4 transition-colors hover:bg-gray-50">
+              <span className="text-sm font-semibold text-gray-900">
+                Annual leave includes bank holidays
+              </span>
+              <span className="relative inline-flex shrink-0">
+                <input
+                  type="checkbox"
+                  className="peer sr-only"
+                  checked={orgSettings.ukBankHolidayInclusive}
+                  onChange={(e) => saveOrgSettings({ ukBankHolidayInclusive: e.target.checked })}
+                />
+                <span className="h-6 w-11 rounded-full bg-gray-300 transition-colors peer-checked:bg-brand-600 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-500 peer-focus-visible:ring-offset-2" />
+                <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-5" />
+              </span>
             </label>
             <Select
               id="ukRegion"
@@ -702,80 +723,124 @@ export default function SettingsPage() {
                 { value: "NORTHERN_IRELAND", label: "Northern Ireland" },
               ]}
             />
-            <label className="flex items-center justify-between gap-3 text-sm">
-              <span>Enable carry-over</span>
-              <input
-                type="checkbox"
-                checked={orgSettings.ukCarryOverEnabled}
-                onChange={(e) =>
-                  saveOrgSettings({
-                    ukCarryOverEnabled: e.target.checked,
-                    ukCarryOverMax: e.target.checked ? Math.min(8, Math.max(orgSettings.ukCarryOverMax, 1)) : 0,
-                  })
-                }
-              />
-            </label>
-            <Input
-              id="carryOverMax"
-              label="Carry-over max days (0-8)"
-              type="number"
-              min="0"
-              max="8"
-              value={String(orgSettings.ukCarryOverMax)}
-              onChange={(e) => saveOrgSettings({ ukCarryOverMax: parseInt(e.target.value || "0", 10) })}
-            />
-            <div className="grid grid-cols-2 gap-3">
-              <Select
-                id="carryOverExpiryMonth"
-                label="Expiry month"
-                value={String(orgSettings.ukCarryOverExpiryMonth)}
-                onChange={(e) =>
-                  saveOrgSettings({
-                    ukCarryOverExpiryMonth: parseInt(e.target.value, 10),
-                  })
-                }
-                options={[
-                  { value: "1", label: "January" },
-                  { value: "2", label: "February" },
-                  { value: "3", label: "March" },
-                  { value: "4", label: "April" },
-                  { value: "5", label: "May" },
-                  { value: "6", label: "June" },
-                  { value: "7", label: "July" },
-                  { value: "8", label: "August" },
-                  { value: "9", label: "September" },
-                  { value: "10", label: "October" },
-                  { value: "11", label: "November" },
-                  { value: "12", label: "December" },
-                ]}
-              />
-              <Input
-                id="carryOverExpiryDay"
-                label="Expiry day"
-                type="number"
-                min="1"
-                max="31"
-                value={String(orgSettings.ukCarryOverExpiryDay)}
-                onChange={(e) =>
-                  saveOrgSettings({
-                    ukCarryOverExpiryDay: parseInt(e.target.value || "1", 10),
-                  })
-                }
-              />
+            <div
+              className={cn(
+                "rounded-lg border transition-colors",
+                orgSettings.ukCarryOverEnabled
+                  ? "border-brand-200 bg-brand-50/40"
+                  : "border-gray-200 bg-gray-50/60"
+              )}
+            >
+              <label
+                className={cn(
+                  "flex cursor-pointer items-center justify-between gap-4 rounded-lg p-4 transition-colors",
+                  orgSettings.ukCarryOverEnabled
+                    ? "hover:bg-brand-50"
+                    : "hover:bg-gray-100"
+                )}
+              >
+                <div className="space-y-0.5">
+                  <p className="text-sm font-semibold text-gray-900">
+                    Enable carry-over
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Let employees roll unused annual leave into the next leave
+                    year. Turn on to configure the limit and expiry below.
+                  </p>
+                </div>
+                <span className="relative inline-flex shrink-0">
+                  <input
+                    type="checkbox"
+                    className="peer sr-only"
+                    checked={orgSettings.ukCarryOverEnabled}
+                    onChange={(e) =>
+                      saveOrgSettings({
+                        ukCarryOverEnabled: e.target.checked,
+                        ukCarryOverMax: e.target.checked ? Math.min(8, Math.max(orgSettings.ukCarryOverMax, 1)) : 0,
+                      })
+                    }
+                  />
+                  <span className="h-6 w-11 rounded-full bg-gray-300 transition-colors peer-checked:bg-brand-600 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-500 peer-focus-visible:ring-offset-2" />
+                  <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-5" />
+                </span>
+              </label>
+
+              {orgSettings.ukCarryOverEnabled && (
+                <div className="space-y-4 border-t border-brand-200/60 p-4">
+                  <Input
+                    id="carryOverMax"
+                    label="Carry-over max days (0-8)"
+                    type="number"
+                    min="0"
+                    max="8"
+                    value={carryOverMaxDraft ?? String(orgSettings.ukCarryOverMax)}
+                    onChange={(e) => setCarryOverMaxDraft(e.target.value)}
+                    onBlur={(e) => {
+                      const val = Math.min(8, Math.max(0, parseInt(e.target.value || "0", 10) || 0));
+                      setCarryOverMaxDraft(String(val));
+                      if (val !== orgSettings.ukCarryOverMax) {
+                        saveOrgSettings({ ukCarryOverMax: val });
+                      }
+                    }}
+                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <Select
+                      id="carryOverExpiryMonth"
+                      label="Expiry month"
+                      value={String(orgSettings.ukCarryOverExpiryMonth)}
+                      onChange={(e) =>
+                        saveOrgSettings({
+                          ukCarryOverExpiryMonth: parseInt(e.target.value, 10),
+                        })
+                      }
+                      options={[
+                        { value: "1", label: "January" },
+                        { value: "2", label: "February" },
+                        { value: "3", label: "March" },
+                        { value: "4", label: "April" },
+                        { value: "5", label: "May" },
+                        { value: "6", label: "June" },
+                        { value: "7", label: "July" },
+                        { value: "8", label: "August" },
+                        { value: "9", label: "September" },
+                        { value: "10", label: "October" },
+                        { value: "11", label: "November" },
+                        { value: "12", label: "December" },
+                      ]}
+                    />
+                    <Input
+                      id="carryOverExpiryDay"
+                      label="Expiry day"
+                      type="number"
+                      min="1"
+                      max="31"
+                      value={expiryDayDraft ?? String(orgSettings.ukCarryOverExpiryDay)}
+                      onChange={(e) => setExpiryDayDraft(e.target.value)}
+                      onBlur={(e) => {
+                        const val = Math.min(31, Math.max(1, parseInt(e.target.value || "1", 10) || 1));
+                        setExpiryDayDraft(String(val));
+                        if (val !== orgSettings.ukCarryOverExpiryDay) {
+                          saveOrgSettings({ ukCarryOverExpiryDay: val });
+                        }
+                      }}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Carried-over days expire on{" "}
+                    {new Date(
+                      2000,
+                      orgSettings.ukCarryOverExpiryMonth - 1,
+                      orgSettings.ukCarryOverExpiryDay
+                    ).toLocaleDateString("en-GB", {
+                      day: "numeric",
+                      month: "long",
+                    })}{" "}
+                    of the new leave year. Run year-end rollover from the Reports
+                    page when the leave year closes.
+                  </p>
+                </div>
+              )}
             </div>
-            <p className="text-xs text-gray-500">
-              Carried-over days expire on{" "}
-              {new Date(
-                2000,
-                orgSettings.ukCarryOverExpiryMonth - 1,
-                orgSettings.ukCarryOverExpiryDay
-              ).toLocaleDateString("en-GB", {
-                day: "numeric",
-                month: "long",
-              })}{" "}
-              of the new leave year. Run year-end rollover from the Reports
-              page when the leave year closes.
-            </p>
             <Select
               id="dataResidency"
               label="Data residency"

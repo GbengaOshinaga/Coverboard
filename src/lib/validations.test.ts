@@ -60,7 +60,7 @@ test("leaveTypeSchema enforces hex color format", () => {
   assert.equal(result.success, false);
 });
 
-// ---------- Scale-tier custom leave policy builder fields ----------
+// ---------- Scale-tier custom leave type fields ----------
 
 test("leaveTypeSchema accepts the policy-builder fields when supplied", () => {
   const result = leaveTypeSchema.safeParse({

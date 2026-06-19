@@ -31,6 +31,25 @@ export function BalanceIndicator({
 
   if (!balance) return null;
 
+  // Non-accruing types (SSP, unpaid leave) aren't deducted from an allowance,
+  // so there's no balance to "exceed" — show a neutral note rather than a
+  // spurious over-balance warning.
+  if (balance.allowance === 0) {
+    return (
+      <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+        <p className="text-sm font-medium text-gray-700">
+          Not tracked against an allowance
+        </p>
+        <p className="mt-1 text-xs text-gray-500">
+          This leave type isn&apos;t deducted from a set number of days.
+          {requestedDays > 0
+            ? ` This request: ${requestedDays} day${requestedDays !== 1 ? "s" : ""}.`
+            : ""}
+        </p>
+      </div>
+    );
+  }
+
   const wouldExceed = requestedDays > balance.remaining;
   const afterRequest = balance.remaining - requestedDays;
 

@@ -2,8 +2,8 @@
  * Pricing tiers shown on the marketing pages and signup form.
  *
  * Feature lists here are MARKETING COPY — they describe the post-launch
- * intent. Several features (scheduled reports, custom policy builder,
- * leave operations dashboard, multi-format export) are not yet built.
+ * intent. Several features (scheduled reports, leave operations dashboard,
+ * multi-format export) are not yet built.
  * They will land before public launch; runtime feature gates in
  * `planFeatures.ts` only cover features actually wired into the codebase
  * today.
@@ -94,7 +94,7 @@ export const PRICING: PricingConfig = {
         "Everything in Growth",
         "Absence trend analysis",
         "Regional cover analytics",
-        "Custom leave policy builder",
+        "Custom leave types",
         "Scheduled report delivery (email)",
         "Data export in multiple formats",
         "Leave operations dashboard",

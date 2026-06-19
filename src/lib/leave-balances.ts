@@ -15,6 +15,7 @@ export type LeaveBalance = {
     carried: number;
     remaining: number;
     expiresAt: string | null;
+    expired: boolean;
   };
 };
 
@@ -142,7 +143,15 @@ export async function getUserLeaveBalances(
     }
 
     const carryOver = carryOverBalances.find((c) => c.leaveTypeId === lt.id);
-    const carryOverRemaining = carryOver?.daysRemaining ?? 0;
+    // Carry-over only counts toward the allowance until it expires. Once the
+    // expiry date has passed, the leftover days lapse and must not inflate the
+    // allowance (or show as available on the balance page).
+    const carryOverExpired = carryOver?.expiresAt
+      ? carryOver.expiresAt.getTime() < Date.now()
+      : false;
+    const carryOverRemaining = carryOverExpired
+      ? 0
+      : carryOver?.daysRemaining ?? 0;
     allowance += carryOverRemaining;
 
     let used = 0;
@@ -175,6 +184,7 @@ export async function getUserLeaveBalances(
         carried: carryOver?.daysCarried ?? 0,
         remaining: carryOverRemaining,
         expiresAt: carryOver?.expiresAt?.toISOString() ?? null,
+        expired: carryOverExpired,
       },
     };
   });
