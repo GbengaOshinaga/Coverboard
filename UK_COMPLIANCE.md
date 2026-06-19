@@ -116,7 +116,10 @@ Added optional env keys in `.env.example`. **Update each April via HMRC guidance
 
 - UK pro-rated annual entitlement
 - bank holiday inclusive/exclusive allowance adjustment
-- separate carry-over balance + expiry display
+- separate carry-over balance with **enforced** expiry: once a carry-over row's
+  `expiresAt` has passed, the leftover days no longer count toward the allowance
+  and the balance shows "carry-over expired" instead of a (now past) date.
+  Expiry is checked against the current date in `getUserLeaveBalances`.
 
 ## Team Profile + Compliance Signal
 
@@ -169,6 +172,14 @@ Added APIs:
 
 - Admin-only; uses org UK carry-over settings (max days, expiry date)
 - Supports `dryRun` to preview who would receive carried days for a given `fromYear`
+- `expiresAt` is stamped per row as `new Date(leaveYear, expiryMonth-1, expiryDay)`
+
+**Changing the expiry policy** (`src/app/api/organization/settings/route.ts`):
+carry-over expiry is org-wide policy, not a per-employee value. When an admin
+changes `ukCarryOverExpiryMonth`/`Day`, the route re-stamps `expiresAt` on all
+**un-expired** carry-over rows (grouped by `leaveYear`) so live balances follow
+the new policy. Already-expired rows are left untouched — lapsed days are never
+resurrected.
 
 **Parental leave / KIT**: admins and managers can update `kitDaysUsed` on a leave request (PATCH `/api/leave-requests/[id]`) and see usage in compliance exports.
 

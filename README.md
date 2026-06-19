@@ -155,7 +155,7 @@ SMP runs in two phases: **weeks 1–6 at 90% of Average Weekly Earnings**, then 
 
 ### Audit trail (Pro)
 
-**`/audit`** lists organization activity for **admins** on **Pro** plans. Entries are written through **`src/lib/audit.ts`** (`recordAudit`) from key API routes (leave requests, team members, leave types/policies, org settings, carry-over runs, onboarding completion). **`GET /api/audit-logs`** supports filters and cursor pagination; the page can **export CSV**.
+**`/audit`** lists organization activity for **admins** on **Pro** plans. Entries are written through **`src/lib/audit.ts`** (`recordAudit`) from key API routes (leave requests, team members, leave types/policies, org settings, carry-over runs, onboarding completion). Leave requests submitted or approved/rejected **via Slack** are audited identically — both Slack and the web app go through the same shared cores (`src/lib/leave-requests/create.ts` and `review.ts`), so nothing done in Slack is invisible in the log. **`GET /api/audit-logs`** supports filters and cursor pagination; the page can **export CSV**.
 
 ### Billing (Stripe)
 

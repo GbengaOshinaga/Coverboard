@@ -135,6 +135,32 @@ You'll need one admin and one member. The admin is created by signup; the member
 **Verify (email):**
 - [ ] Member received approval notification.
 
+### 5b. Approve via Slack (parity check)
+
+Skip if Slack isn't connected on staging. Web and Slack approvals share one core
+(`src/lib/leave-requests/review.ts`), so this guards against the two drifting.
+
+**Do:**
+1. Submit a fresh request (web or `/requestleave`) so a pending one exists.
+2. In the Slack notification channel, click **Approve** on the posted message.
+
+**Verify:**
+- [ ] The Slack message updates in place to "Approved by <name>".
+- [ ] `LeaveRequest.status = "APPROVED"`, `reviewedById` set to the approver.
+- [ ] **`AuditLog` entry `leave_request.approved` exists** (the gap this closed —
+      Slack approvals used to skip audit entirely).
+- [ ] Requester received the decision DM/email.
+- [ ] **Self-approval blocked:** as a non-sole admin/manager, approving your *own*
+      `/requestleave` request in Slack returns "You can't approve or reject your
+      own request" (ephemeral), and the DB row stays `PENDING`.
+
+### 5c. Carry-over expiry (if testing year-end rollover)
+
+- [ ] A carry-over row whose `expiresAt` is in the past shows **"carry-over
+      expired"** on the My Time Off page and does **not** inflate the allowance.
+- [ ] Changing the expiry month/day in **Settings** re-stamps `expiresAt` on
+      un-expired carry-over rows; already-expired rows are unchanged.
+
 ---
 
 ## 6. SSP cap

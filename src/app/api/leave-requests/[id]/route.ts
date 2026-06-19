@@ -2,12 +2,8 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { notifyRequestStatusChange } from "@/lib/slack-notifications";
-import {
-  emailRequestStatusChange,
-  emailApprovedLeaveCancelled,
-} from "@/lib/email-notifications";
-import { recordAudit, requestAuditContext, type AuditAction } from "@/lib/audit";
+import { emailApprovedLeaveCancelled } from "@/lib/email-notifications";
+import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
 import {
@@ -18,6 +14,7 @@ import {
 } from "@/lib/smpCalculator";
 import { calculateBradfordFactor } from "@/lib/uk-compliance";
 import { countWeekdays } from "@/lib/utils";
+import { reviewLeaveRequest } from "@/lib/leave-requests/review";
 import { z } from "zod";
 
 const updateSchema = z.object({
@@ -43,7 +40,27 @@ export async function PATCH(
   const userId = sessionUser.id as string;
   const userRole = sessionUser.role as string;
   const actorEmail = sessionUser.email as string | undefined;
+  const actorName =
+    (sessionUser.name as string | undefined) ?? actorEmail ?? "Unknown";
   const orgId = sessionUser.organizationId as string;
+
+  const fullInclude = {
+    user: {
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        countryCode: true,
+        memberType: true,
+      },
+    },
+    leaveType: {
+      select: { id: true, name: true, color: true, category: true, isPaid: true },
+    },
+    reviewedBy: {
+      select: { id: true, name: true },
+    },
+  } as const;
 
   try {
     const body = await request.json();
@@ -65,12 +82,66 @@ export async function PATCH(
       );
     }
 
+    // Approve/reject share their core with the Slack interactive buttons — the
+    // segregation-of-duties guard, SMP backfill, Bradford recompute,
+    // notifications, audit, and analytics all live in reviewLeaveRequest.
+    if (status === "APPROVED" || status === "REJECTED") {
+      const result = await reviewLeaveRequest({
+        requestId: id,
+        decision: status,
+        reviewer: {
+          id: userId,
+          name: actorName,
+          email: actorEmail ?? null,
+          role: userRole,
+        },
+        organizationId: orgId,
+        coverOverride,
+        context: requestAuditContext(request),
+      });
+
+      if (!result.ok) {
+        const httpStatus =
+          result.code === "not_found"
+            ? 404
+            : result.code === "forbidden" || result.code === "wrong_org"
+              ? 403
+              : 400;
+        return NextResponse.json({ error: result.message }, { status: httpStatus });
+      }
+
+      const updated = await prisma.leaveRequest.findUnique({
+        where: { id },
+        include: fullInclude,
+      });
+      if (!updated) {
+        return NextResponse.json(
+          { error: "Leave request not found" },
+          { status: 404 }
+        );
+      }
+      const responsePayload =
+        updated.userId === userId || userRole === "ADMIN"
+          ? updated
+          : { ...updated, sicknessNote: null };
+      return NextResponse.json(responsePayload);
+    }
+
+    // Remaining paths: CANCELLED (by the requester) and admin/manager field
+    // edits (KIT days, evidence). These don't go through the review core.
     const leaveRequest = await prisma.leaveRequest.findUnique({
       where: { id },
       include: { user: true, leaveType: { select: { name: true } } },
     });
 
     if (!leaveRequest) {
+      return NextResponse.json(
+        { error: "Leave request not found" },
+        { status: 404 }
+      );
+    }
+
+    if (leaveRequest.user.organizationId !== orgId) {
       return NextResponse.json(
         { error: "Leave request not found" },
         { status: 404 }
@@ -99,37 +170,6 @@ export async function PATCH(
           { status: 403 }
         );
       }
-    } else if (status) {
-      if (userRole !== "ADMIN" && userRole !== "MANAGER") {
-        return NextResponse.json(
-          { error: "Only admins and managers can approve or reject leave" },
-          { status: 403 }
-        );
-      }
-      // Segregation of duties: you can't approve or reject your own request
-      // when another approver exists. A sole admin/manager may, to avoid a
-      // deadlock (e.g. a solo owner with no one else to approve).
-      if (
-        (status === "APPROVED" || status === "REJECTED") &&
-        leaveRequest.userId === userId
-      ) {
-        const otherApprovers = await prisma.user.count({
-          where: {
-            organizationId: orgId,
-            id: { not: userId },
-            role: { in: ["ADMIN", "MANAGER"] },
-          },
-        });
-        if (otherApprovers > 0) {
-          return NextResponse.json(
-            {
-              error:
-                "You can't approve or reject your own request — ask another admin or manager.",
-            },
-            { status: 403 }
-          );
-        }
-      }
     }
 
     if ((kitDaysUsed !== undefined || splitDaysUsed !== undefined || evidenceProvided !== undefined || splCurtailmentConfirmed !== undefined) && !status) {
@@ -142,27 +182,16 @@ export async function PATCH(
     }
 
     const updateData: Record<string, unknown> = {};
-    if (status) {
-      updateData.status = status;
-      if (status !== "CANCELLED") {
-        updateData.reviewedById = userId;
-        updateData.reviewedAt = new Date();
-      }
+    if (status === "CANCELLED") {
+      updateData.status = "CANCELLED";
     }
     if (kitDaysUsed !== undefined) updateData.kitDaysUsed = kitDaysUsed;
     if (splitDaysUsed !== undefined) updateData.splitDaysUsed = splitDaysUsed;
     if (evidenceProvided !== undefined) updateData.evidenceProvided = evidenceProvided;
     if (splCurtailmentConfirmed !== undefined) updateData.splCurtailmentConfirmed = splCurtailmentConfirmed;
 
-    if (status === "APPROVED" && coverOverride === true) {
-      updateData.coverOverride = true;
-      updateData.coverOverrideById = userId;
-      updateData.coverOverrideAt = new Date();
-    }
-
     // Back-fill SMP phase data for maternity requests created before the
-    // SMP phase-tracking feature landed. Runs on any approval/rejection/
-    // admin edit as a safety-net; no-ops when fields are already set.
+    // SMP phase-tracking feature landed; no-ops when fields are already set.
     if (
       isMaternityLeaveType(leaveRequest.leaveType.name) &&
       leaveRequest.smpPhase1EndDate === null
@@ -191,32 +220,14 @@ export async function PATCH(
     const updated = await prisma.leaveRequest.update({
       where: { id },
       data: updateData,
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            countryCode: true,
-            memberType: true,
-          },
-        },
-        leaveType: {
-          select: { id: true, name: true, color: true, category: true, isPaid: true },
-        },
-        reviewedBy: {
-          select: { id: true, name: true },
-        },
-      },
+      include: fullInclude,
     });
 
-    // ── Bradford Factor recalculation on any sickness status change ───
-    // Recompute whenever a sickness/SSP request changes status — not just
-    // on APPROVED — so downgrades (APPROVED → REJECTED/CANCELLED) also
-    // clear stale score contributions. The query itself filters to
-    // APPROVED rows, so the recount stays correct.
+    // ── Bradford Factor recalculation on a sickness status change ─────
+    // Recompute on CANCELLED so a downgrade clears stale score contributions.
+    // The query filters to APPROVED rows, so the recount stays correct.
     if (
-      status !== undefined &&
+      status === "CANCELLED" &&
       /SSP|Sick/i.test(leaveRequest.leaveType.name)
     ) {
       prisma.leaveRequest
@@ -246,29 +257,6 @@ export async function PATCH(
         .catch((err) => console.error("Bradford Factor update error:", err));
     }
 
-    // Send notifications (fire and forget)
-    if (status === "APPROVED" || status === "REJECTED") {
-      notifyRequestStatusChange({
-        organizationId: leaveRequest.user.organizationId,
-        requesterEmail: updated.user.email,
-        status,
-        leaveTypeName: updated.leaveType.name,
-        startDate: updated.startDate,
-        endDate: updated.endDate,
-        reviewerName: updated.reviewedBy?.name ?? "Unknown",
-      }).catch((err) => console.error("Slack notification error:", err));
-
-      emailRequestStatusChange({
-        requesterEmail: updated.user.email,
-        requesterName: updated.user.name,
-        status,
-        leaveTypeName: updated.leaveType.name,
-        startDate: updated.startDate,
-        endDate: updated.endDate,
-        reviewerName: updated.reviewedBy?.name ?? "Unknown",
-      }).catch((err) => console.error("Email notification error:", err));
-    }
-
     // When someone cancels leave that was already approved, let the other
     // approvers know — it frees up coverage they'd planned around.
     if (status === "CANCELLED" && leaveRequest.status === "APPROVED") {
@@ -290,110 +278,33 @@ export async function PATCH(
       role: userRole,
     };
     const ctx = requestAuditContext(request);
-    if (status) {
-      const action = (
+    if (status === "CANCELLED") {
+      recordAudit({
+        organizationId: orgId,
+        action: "leave_request.cancelled",
+        resource: "leave_request",
+        resourceId: id,
+        actor,
+        metadata: {
+          requesterEmail: updated.user.email,
+          leaveType: updated.leaveType.name,
+          startDate: updated.startDate,
+          endDate: updated.endDate,
+        },
+        context: ctx,
+      });
+      trackServer(
+        AnalyticsEvents.LEAVE_REQUEST_CANCELLED,
         {
-          APPROVED: "leave_request.approved",
-          REJECTED: "leave_request.rejected",
-          CANCELLED: "leave_request.cancelled",
-        } as Record<string, AuditAction>
-      )[status];
-      if (action) {
-        recordAudit({
+          is_statutory: /SSP|Statutory/i.test(updated.leaveType.name),
+          leave_category: updated.leaveType.category,
+        },
+        {
+          userId,
           organizationId: orgId,
-          action,
-          resource: "leave_request",
-          resourceId: id,
-          actor,
-          metadata: {
-            requesterEmail: updated.user.email,
-            leaveType: updated.leaveType.name,
-            startDate: updated.startDate,
-            endDate: updated.endDate,
-            ...(status === "APPROVED" && coverOverride === true
-              ? { coverOverride: true }
-              : {}),
-          },
-          context: ctx,
-        });
-        if (status === "APPROVED") {
-          trackServer(
-            AnalyticsEvents.LEAVE_REQUEST_APPROVED,
-            {
-              cover_override: coverOverride === true,
-              is_statutory: /SSP|Statutory/i.test(updated.leaveType.name),
-              leave_category: updated.leaveType.category,
-            },
-            {
-              userId,
-              organizationId: orgId,
-              role: userRole,
-            }
-          );
-
-          // Activation milestone (time-to-value): the first approved request in
-          // an org with a real team means it's experienced the full loop.
-          // approvedCount === 1 is only ever true for that first approval, so
-          // this fires at most once per org. Fire-and-forget.
-          void (async () => {
-            try {
-              const [approvedCount, memberCount, org] = await Promise.all([
-                prisma.leaveRequest.count({
-                  where: { user: { organizationId: orgId }, status: "APPROVED" },
-                }),
-                prisma.user.count({ where: { organizationId: orgId } }),
-                prisma.organization.findUnique({
-                  where: { id: orgId },
-                  select: { createdAt: true },
-                }),
-              ]);
-              if (approvedCount === 1 && memberCount > 1 && org) {
-                trackServer(
-                  AnalyticsEvents.ORG_ACTIVATED,
-                  {
-                    time_to_activate_hours: Math.round(
-                      (Date.now() - org.createdAt.getTime()) / 3_600_000
-                    ),
-                  },
-                  { userId, organizationId: orgId, role: userRole }
-                );
-              }
-            } catch (err) {
-              console.error("Activation milestone tracking failed:", err);
-            }
-          })();
+          role: userRole,
         }
-        if (status === "CANCELLED") {
-          trackServer(
-            AnalyticsEvents.LEAVE_REQUEST_CANCELLED,
-            {
-              is_statutory: /SSP|Statutory/i.test(updated.leaveType.name),
-              leave_category: updated.leaveType.category,
-            },
-            {
-              userId,
-              organizationId: orgId,
-              role: userRole,
-            }
-          );
-        }
-      }
-      if (status === "APPROVED" && coverOverride === true) {
-        recordAudit({
-          organizationId: orgId,
-          action: "leave_request.cover_overridden",
-          resource: "leave_request",
-          resourceId: id,
-          actor,
-          metadata: {
-            requesterEmail: updated.user.email,
-            leaveType: updated.leaveType.name,
-            startDate: updated.startDate,
-            endDate: updated.endDate,
-          },
-          context: ctx,
-        });
-      }
+      );
     }
     if ((kitDaysUsed !== undefined || splitDaysUsed !== undefined) && !status) {
       recordAudit({
