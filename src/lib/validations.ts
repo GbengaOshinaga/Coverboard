@@ -55,9 +55,10 @@ export type TeamMemberInput = z.infer<typeof teamMemberSchema>;
  *
  * `name`/`color`/`isPaid`/`defaultDays` are the "basics" any tier can edit.
  * The remaining fields (`category`, `requiresEvidence`, `minNoticeDays`,
- * `applyProRata`, `countryCode`) are the Scale-tier "custom leave policy
- * builder" surface. They're all optional here so partial updates work; the
- * route layer is what gates *creation* of leave types on Scale+.
+ * `applyProRata`, `countryCode`) are the Scale-tier "custom leave types"
+ * surface. They're all optional here so partial updates work; the route layer
+ * is what gates *creation* of leave types on Scale+. (Overriding allowances on
+ * existing types via leave policies is free on every plan.)
  */
 export const leaveTypeSchema = z.object({
   name: z.string().min(1, "Name is required"),

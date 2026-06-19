@@ -64,7 +64,7 @@ const PLANS: ReadonlyArray<{
     features: [
       "Everything in Growth",
       "Absence trend analysis",
-      "Custom leave policy builder",
+      "Custom leave types",
       "Scheduled compliance reports",
       "Leave operations dashboard",
       "Unlimited admins",

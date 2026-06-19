@@ -16,6 +16,7 @@ type LeaveBalance = {
     carried: number;
     remaining: number;
     expiresAt: string | null;
+    expired: boolean;
   };
 };
 
@@ -123,15 +124,19 @@ function BalanceCard({
           {balance.proRatedEntitlement !== undefined && (
             <span>pro-rated {balance.proRatedEntitlement} days</span>
           )}
-          {balance.carryOver.remaining > 0 && (
-            <span>
-              carry-over {balance.carryOver.remaining}
-              {balance.carryOver.expiresAt
-                ? ` (expires ${new Date(
-                    balance.carryOver.expiresAt
-                  ).toLocaleDateString()})`
-                : ""}
-            </span>
+          {balance.carryOver.expired ? (
+            <span className="text-gray-400">carry-over expired</span>
+          ) : (
+            balance.carryOver.remaining > 0 && (
+              <span>
+                carry-over {balance.carryOver.remaining}
+                {balance.carryOver.expiresAt
+                  ? ` (expires ${new Date(
+                      balance.carryOver.expiresAt
+                    ).toLocaleDateString()})`
+                  : ""}
+              </span>
+            )
           )}
       </div>
     </div>

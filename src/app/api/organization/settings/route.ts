@@ -118,6 +118,44 @@ export async function PATCH(request: Request) {
     },
   });
 
+  // Carry-over expiry is an org-wide policy, not a per-employee value. If the
+  // admin changes the expiry month/day, re-stamp existing carry-over rows that
+  // haven't expired yet so live balances follow the new policy instead of a
+  // stale date. Already-expired rows are left alone — we never resurrect days
+  // that have already lapsed.
+  if (
+    data.ukCarryOverExpiryMonth !== undefined ||
+    data.ukCarryOverExpiryDay !== undefined
+  ) {
+    const now = new Date();
+    const liveYears = await prisma.leaveCarryOverBalance.findMany({
+      where: { user: { organizationId: orgId }, expiresAt: { gt: now } },
+      select: { leaveYear: true },
+      distinct: ["leaveYear"],
+    });
+    for (const { leaveYear } of liveYears) {
+      // Matches the expiry computation in /api/carry-over/process (leaveYear
+      // there is fromYear + 1).
+      const newExpiry = new Date(
+        leaveYear,
+        updated.ukCarryOverExpiryMonth - 1,
+        updated.ukCarryOverExpiryDay,
+        23,
+        59,
+        59,
+        999
+      );
+      await prisma.leaveCarryOverBalance.updateMany({
+        where: {
+          user: { organizationId: orgId },
+          leaveYear,
+          expiresAt: { gt: now },
+        },
+        data: { expiresAt: newExpiry },
+      });
+    }
+  }
+
   recordAudit({
     organizationId: orgId,
     action: "organization.settings_updated",
