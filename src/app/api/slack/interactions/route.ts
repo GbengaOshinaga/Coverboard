@@ -1,16 +1,12 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import {
   verifySlackRequest,
   resolveSlackUser,
   isSlackAppConfigured,
   getSlackIntegrationByTeamId,
   createSlackClient,
-  findSlackUserByEmail,
 } from "@/lib/slack";
-import { buildStatusUpdateMessage } from "@/lib/slack-messages";
-import { countWeekdays } from "@/lib/utils";
-import { notifyRequestStatusChange } from "@/lib/slack-notifications";
+import { reviewLeaveRequest } from "@/lib/leave-requests/review";
 
 export async function POST(request: Request) {
   if (!isSlackAppConfigured()) {
@@ -82,66 +78,33 @@ async function handleBlockAction(payload: {
     });
   }
 
-  if (reviewer.role !== "ADMIN" && reviewer.role !== "MANAGER") {
-    return NextResponse.json({
-      response_type: "ephemeral",
-      text: "Only admins and managers can approve or reject leave requests.",
-      replace_original: false,
-    });
-  }
+  const decision = action_id === "approve_leave" ? "APPROVED" : "REJECTED";
 
-  const newStatus = action_id === "approve_leave" ? "APPROVED" : "REJECTED";
-
-  const leaveRequest = await prisma.leaveRequest.findUnique({
-    where: { id: requestId },
-    include: {
-      user: {
-        select: { name: true, email: true, organizationId: true },
-      },
-      leaveType: { select: { name: true } },
+  // Shared core: same segregation-of-duties guard, notifications, audit, and
+  // analytics as the web approval path.
+  const result = await reviewLeaveRequest({
+    requestId,
+    decision,
+    reviewer: {
+      id: reviewer.id,
+      name: reviewer.name,
+      email: reviewer.email,
+      role: reviewer.role,
     },
+    organizationId: integration.organizationId,
+    context: { userAgent: "slack" },
   });
 
-  if (!leaveRequest) {
+  if (!result.ok) {
     return NextResponse.json({
       response_type: "ephemeral",
-      text: "Leave request not found.",
+      text: result.message,
       replace_original: false,
     });
   }
 
-  if (leaveRequest.user.organizationId !== integration.organizationId) {
-    return NextResponse.json({
-      response_type: "ephemeral",
-      text: "This leave request does not belong to your organization.",
-      replace_original: false,
-    });
-  }
-
-  if (leaveRequest.status !== "PENDING") {
-    return NextResponse.json({
-      response_type: "ephemeral",
-      text: `This request has already been ${leaveRequest.status.toLowerCase()}.`,
-      replace_original: false,
-    });
-  }
-
-  await prisma.leaveRequest.update({
-    where: { id: requestId },
-    data: {
-      status: newStatus as "APPROVED" | "REJECTED",
-      reviewedById: reviewer.id,
-      reviewedAt: new Date(),
-    },
-  });
-
-  const daysRequested = countWeekdays(
-    leaveRequest.startDate,
-    leaveRequest.endDate
-  );
-
-  const statusEmoji = newStatus === "APPROVED" ? ":white_check_mark:" : ":x:";
-  const statusText = newStatus === "APPROVED" ? "Approved" : "Rejected";
+  const statusEmoji = decision === "APPROVED" ? ":white_check_mark:" : ":x:";
+  const statusText = decision === "APPROVED" ? "Approved" : "Rejected";
 
   try {
     await slack.chat.update({
@@ -152,7 +115,7 @@ async function handleBlockAction(payload: {
           type: "section",
           text: {
             type: "mrkdwn",
-            text: `${statusEmoji} *${leaveRequest.user.name}*'s leave request — *${statusText}* by ${reviewer.name}`,
+            text: `${statusEmoji} *${result.request.userName}*'s leave request — *${statusText}* by ${reviewer.name}`,
           },
         },
         {
@@ -160,30 +123,20 @@ async function handleBlockAction(payload: {
           fields: [
             {
               type: "mrkdwn",
-              text: `*Type:*\n${leaveRequest.leaveType.name}`,
+              text: `*Type:*\n${result.request.leaveTypeName}`,
             },
             {
               type: "mrkdwn",
-              text: `*Days:*\n${daysRequested}`,
+              text: `*Days:*\n${result.request.daysRequested}`,
             },
           ],
         },
       ],
-      text: `${leaveRequest.user.name}'s leave request ${statusText.toLowerCase()} by ${reviewer.name}`,
+      text: `${result.request.userName}'s leave request ${statusText.toLowerCase()} by ${reviewer.name}`,
     });
   } catch (err) {
     console.error("Failed to update Slack message:", err);
   }
-
-  notifyRequestStatusChange({
-    organizationId: integration.organizationId,
-    requesterEmail: leaveRequest.user.email,
-    status: newStatus as "APPROVED" | "REJECTED",
-    leaveTypeName: leaveRequest.leaveType.name,
-    startDate: leaveRequest.startDate,
-    endDate: leaveRequest.endDate,
-    reviewerName: reviewer.name,
-  }).catch((err) => console.error("Failed to DM requester:", err));
 
   return new Response("", { status: 200 });
 }

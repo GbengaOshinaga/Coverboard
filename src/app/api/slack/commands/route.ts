@@ -10,14 +10,13 @@ import {
   postSlackCommandResponse,
 } from "@/lib/slack";
 import { getUserLeaveBalances } from "@/lib/leave-balances";
-import { countWeekdays } from "@/lib/utils";
 import {
   buildWhosOutMessage,
   buildBalanceMessage,
   buildRequestConfirmation,
   summarizeWhosOutText,
 } from "@/lib/slack-messages";
-import { notifyNewRequest } from "@/lib/slack-notifications";
+import { createLeaveRequest } from "@/lib/leave-requests/create";
 
 type SlackCommandResponse = {
   response_type: "ephemeral" | "in_channel";
@@ -130,27 +129,9 @@ async function buildCommandResponse(input: {
         return handleMyBalance(user.id, user.name);
       }
       return handleRequestLeave(
-        user.id,
+        { id: user.id, email: user.email, role: user.role },
         organizationId,
-        text,
-        (leaveRequest) => {
-          const daysRequested = countWeekdays(
-            leaveRequest.startDate,
-            leaveRequest.endDate
-          );
-          notifyNewRequest({
-            organizationId,
-            requestId: leaveRequest.id,
-            userName: leaveRequest.user.name,
-            leaveTypeName: leaveRequest.leaveType.name,
-            startDate: leaveRequest.startDate,
-            endDate: leaveRequest.endDate,
-            note: leaveRequest.note,
-            daysRequested,
-          }).catch((err) =>
-            console.error("Failed to send Slack notification:", err)
-          );
-        }
+        text
       );
     }
 
@@ -232,17 +213,9 @@ async function handleMyBalance(
 }
 
 async function handleRequestLeave(
-  userId: string,
+  user: { id: string; email: string; role: string },
   organizationId: string,
-  text: string,
-  onCreated: (leaveRequest: {
-    id: string;
-    startDate: Date;
-    endDate: Date;
-    note: string | null;
-    user: { name: string };
-    leaveType: { name: string };
-  }) => void
+  text: string
 ): Promise<SlackCommandResponse> {
   const parts = text.trim().split(/\s+/);
 
@@ -271,17 +244,16 @@ async function handleRequestLeave(
     );
   }
 
-  if (endDate < startDate) {
-    return ephemeral("End date must be on or after the start date.");
-  }
-
   const leaveTypes = await prisma.leaveType.findMany({
     where: { organizationId },
   });
 
-  const leaveType = leaveTypes.find((lt) =>
-    lt.name.toLowerCase().includes(leaveTypeName.toLowerCase())
-  );
+  const search = leaveTypeName.toLowerCase();
+  // Prefer an exact name match, then fall back to a substring match. Avoids
+  // silently picking the wrong type when several share a word.
+  const leaveType =
+    leaveTypes.find((lt) => lt.name.toLowerCase() === search) ??
+    leaveTypes.find((lt) => lt.name.toLowerCase().includes(search));
 
   if (!leaveType) {
     const available = leaveTypes.map((lt) => lt.name).join(", ");
@@ -290,33 +262,37 @@ async function handleRequestLeave(
     );
   }
 
-  const leaveRequest = await prisma.leaveRequest.create({
-    data: {
-      startDate,
-      endDate,
-      leaveTypeId: leaveType.id,
-      note: note ?? null,
-      userId,
-    },
-    include: {
-      user: { select: { name: true, email: true } },
-      leaveType: { select: { name: true, color: true } },
-    },
-  });
-
-  const daysRequested = countWeekdays(startDate, endDate);
-  onCreated(leaveRequest);
-
-  const blocks = buildRequestConfirmation({
-    leaveTypeName: leaveRequest.leaveType.name,
+  // Route through the shared create core so the Slack path enforces the same
+  // notice/evidence/statutory rules, auto-approval, audit, and analytics as
+  // the web app.
+  const result = await createLeaveRequest({
+    actor: { id: user.id, email: user.email, role: user.role },
+    organizationId,
+    leaveTypeId: leaveType.id,
     startDate,
     endDate,
-    daysRequested,
+    note,
+    context: { userAgent: "slack" },
   });
+
+  if (!result.ok) {
+    return ephemeral(result.error);
+  }
+
+  const blocks = buildRequestConfirmation({
+    leaveTypeName: result.request.leaveType.name,
+    startDate,
+    endDate,
+    daysRequested: result.daysRequested,
+  });
+
+  const headline = result.autoApproved
+    ? `Leave request auto-approved: ${result.request.leaveType.name}, ${result.daysRequested} day(s).`
+    : `Leave request submitted: ${result.request.leaveType.name}, ${result.daysRequested} day(s).`;
 
   return {
     response_type: "ephemeral",
-    text: `Leave request submitted: ${leaveRequest.leaveType.name}, ${daysRequested} day(s).`,
+    text: result.balanceWarning ? `${headline}\n⚠️ ${result.balanceWarning}` : headline,
     blocks,
   };
 }
