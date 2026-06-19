@@ -783,6 +783,8 @@ export default function ReportsPage() {
                       size="sm"
                       variant="outline"
                       onClick={() => exportCsv("bradford")}
+                      title="Export CSV"
+                      aria-label="Export CSV"
                     >
                       <Download className="h-3.5 w-3.5" />
                     </Button>
@@ -909,6 +911,8 @@ export default function ReportsPage() {
                     size="sm"
                     variant="outline"
                     onClick={() => exportCsv("right-to-work")}
+                    title="Export CSV"
+                    aria-label="Export CSV"
                   >
                     <Download className="h-3.5 w-3.5" />
                   </Button>
@@ -1090,6 +1094,8 @@ export default function ReportsPage() {
                     size="sm"
                     variant="outline"
                     onClick={() => exportCsv("holiday-usage")}
+                    title="Export CSV"
+                    aria-label="Export CSV"
                   >
                     <Download className="h-3.5 w-3.5" />
                   </Button>
@@ -1158,6 +1164,8 @@ export default function ReportsPage() {
                     size="sm"
                     variant="outline"
                     onClick={() => exportCsv("ssp")}
+                    title="Export CSV"
+                    aria-label="Export CSV"
                   >
                     <Download className="h-3.5 w-3.5" />
                   </Button>
@@ -1230,6 +1238,8 @@ export default function ReportsPage() {
                     size="sm"
                     variant="outline"
                     onClick={() => exportCsv("parental")}
+                    title="Export CSV"
+                    aria-label="Export CSV"
                   >
                     <Download className="h-3.5 w-3.5" />
                   </Button>
@@ -1604,9 +1614,10 @@ export default function ReportsPage() {
                       !payrollReport || payrollReport.rows.length === 0
                     }
                     onClick={exportPayrollCsv}
+                    title="Export CSV"
+                    aria-label="Export CSV"
                   >
-                    <Download className="mr-1.5 h-3.5 w-3.5" />
-                    Export CSV
+                    <Download className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </CardHeader>

@@ -3,7 +3,10 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { notifyRequestStatusChange } from "@/lib/slack-notifications";
-import { emailRequestStatusChange } from "@/lib/email-notifications";
+import {
+  emailRequestStatusChange,
+  emailApprovedLeaveCancelled,
+} from "@/lib/email-notifications";
 import { recordAudit, requestAuditContext, type AuditAction } from "@/lib/audit";
 import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
@@ -78,6 +81,21 @@ export async function PATCH(
       if (leaveRequest.userId !== userId) {
         return NextResponse.json(
           { error: "Only the requester can cancel their leave" },
+          { status: 403 }
+        );
+      }
+      // You can't un-take leave that's already started — approved leave is only
+      // cancellable while it's still upcoming. (Pending leave can always be
+      // withdrawn, since it was never granted.)
+      if (
+        leaveRequest.status === "APPROVED" &&
+        leaveRequest.startDate <= new Date()
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Approved leave that has already started can't be cancelled.",
+          },
           { status: 403 }
         );
       }
@@ -249,6 +267,21 @@ export async function PATCH(
         endDate: updated.endDate,
         reviewerName: updated.reviewedBy?.name ?? "Unknown",
       }).catch((err) => console.error("Email notification error:", err));
+    }
+
+    // When someone cancels leave that was already approved, let the other
+    // approvers know — it frees up coverage they'd planned around.
+    if (status === "CANCELLED" && leaveRequest.status === "APPROVED") {
+      emailApprovedLeaveCancelled({
+        cancellerName: updated.user.name,
+        cancellerUserId: userId,
+        leaveTypeName: updated.leaveType.name,
+        startDate: updated.startDate,
+        endDate: updated.endDate,
+        organizationId: leaveRequest.user.organizationId,
+      }).catch((err) =>
+        console.error("Cancellation notice email error:", err)
+      );
     }
 
     const actor = {

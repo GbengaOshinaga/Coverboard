@@ -124,6 +124,44 @@ export async function emailNewRequest(data: {
   );
 }
 
+// ─── Approved Leave Cancelled (notify the other approvers) ───────────
+
+export async function emailApprovedLeaveCancelled(data: {
+  cancellerName: string;
+  cancellerUserId: string;
+  leaveTypeName: string;
+  startDate: Date;
+  endDate: Date;
+  organizationId: string;
+}) {
+  // Notify the *other* admins/managers — never the person who cancelled, and
+  // nobody at all in a solo-admin org (there's no one else to inform).
+  const approvers: EmailRecipient[] = await prisma.user.findMany({
+    where: {
+      organizationId: data.organizationId,
+      role: { in: ["ADMIN", "MANAGER"] },
+      id: { not: data.cancellerUserId },
+    },
+    select: { email: true },
+  });
+
+  if (approvers.length === 0) return;
+
+  const days = countWeekdays(data.startDate, data.endDate);
+  const range = `${data.startDate.toLocaleDateString("en-GB")} – ${data.endDate.toLocaleDateString("en-GB")}`;
+  const subject = `${data.cancellerName} cancelled approved leave`;
+  const html = `
+    <p>${data.cancellerName} has cancelled leave that was previously approved:</p>
+    <p><strong>${data.leaveTypeName}</strong><br/>${range} (${days} day${days !== 1 ? "s" : ""})</p>
+    <p>The time has been freed up — you may want to review team coverage.</p>
+    <p><a href="${getAppBaseUrl()}/requests">View requests</a></p>
+  `;
+
+  await Promise.all(
+    approvers.map((m) => sendEmail({ to: m.email, subject, html }))
+  );
+}
+
 // ─── Leave Request Status Change (notify requester) ──────────────────
 
 export async function emailRequestStatusChange(data: {
