@@ -116,6 +116,33 @@ export function calculateSspPayableDays(startDate: Date, endDate: Date): number 
 }
 
 /**
+ * Payable SSP days for a single sickness spell, accounting for PIW linking.
+ *
+ * The 3 waiting days (the first 3 qualifying days of a period of incapacity,
+ * which are unpaid) are served only ONCE per period of incapacity for work
+ * (PIW). Two spells separated by 8 weeks (56 days) or less link into one PIW.
+ *
+ * - **Unlinked spell** (a fresh PIW): serve the 3 waiting days — defers to
+ *   {@link calculateSspPayableDays}.
+ * - **Linked spell** (a prior SSP spell ended within the 56-day window): the
+ *   waiting days were already served on the earlier spell, so every qualifying
+ *   weekday is payable with no deduction. Re-deducting them here would underpay
+ *   the employee — an unlawful deduction from wages.
+ *
+ * Any PIW is at least 4 days, so the first spell always serves all 3 waiting
+ * days; "linked ⇒ 0 waiting days" is therefore correct for every real case.
+ */
+export function calculateSspPayableDaysForSpell(
+  startDate: Date,
+  endDate: Date,
+  opts: { linkedToPriorPiw: boolean }
+): number {
+  return opts.linkedToPriorPiw
+    ? countWeekdays(startDate, endDate)
+    : calculateSspPayableDays(startDate, endDate);
+}
+
+/**
  * SSP is only payable on qualifying days (typically the employee's usual
  * working days). Dividing the weekly rate by `qualifyingDaysPerWeek`
  * produces the correct daily figure; dividing by 7 under-pays employees
