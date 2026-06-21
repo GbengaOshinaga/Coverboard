@@ -55,6 +55,15 @@ export async function GET(request: Request) {
   const to = searchParams.get("to")
     ? new Date(searchParams.get("to") as string)
     : defaultEnd;
+  // A malformed date (e.g. "garbage") yields an Invalid Date, which Prisma
+  // rejects with an opaque 500. Validate before querying and return a clear
+  // 400 instead.
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+    return NextResponse.json(
+      { error: "Invalid 'from' or 'to' date parameter" },
+      { status: 400 }
+    );
+  }
 
   const requests = await prisma.leaveRequest.findMany({
     where: {

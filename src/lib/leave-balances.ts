@@ -20,6 +20,49 @@ export type LeaveBalance = {
 };
 
 /**
+ * Adjust an Annual Leave allowance for the org's bank-holiday accounting mode.
+ *
+ * The base UK allowance (28 days) is the WTR 5.6-week statutory minimum, which
+ * is *inclusive* of bank holidays. When an org runs in "exclusive" mode
+ * (`ukBankHolidayInclusive = false`) the bank holidays are tracked separately,
+ * so the discretionary Annual Leave bucket is the statutory total minus the
+ * bank holidays (e.g. 28 - 8 = 20). Either way the total time off stays at the
+ * statutory 28. Only UK Annual Leave is affected; everything else passes
+ * through unchanged.
+ *
+ * UK-ness is keyed off `workCountry` (where the employee works), matching every
+ * other UK-compliance gate in the app (`hasUKEmployees`, holiday pay, reports,
+ * and the settings toggle's visibility). `countryCode` is the legacy field and
+ * must NOT be used here: gating on it would apply the bank-holiday split to
+ * employees whose work location is unset, while the settings page — which keys
+ * the toggle off `workCountry` — hides the control, leaving the accounting with
+ * no visible governing switch.
+ */
+export function adjustAllowanceForBankHolidays(params: {
+  allowance: number;
+  workCountry: string | null;
+  leaveTypeName: string;
+  ukBankHolidayInclusive: boolean;
+  ukRegionalBankHolidayCount: number;
+}): number {
+  const {
+    allowance,
+    workCountry,
+    leaveTypeName,
+    ukBankHolidayInclusive,
+    ukRegionalBankHolidayCount,
+  } = params;
+  if (
+    workCountry === "GB" &&
+    leaveTypeName === "Annual Leave" &&
+    !ukBankHolidayInclusive
+  ) {
+    return Math.max(0, allowance - ukRegionalBankHolidayCount);
+  }
+  return allowance;
+}
+
+/**
  * Calculate leave balances for a user for a given year.
  *
  * For each leave type in the org:
@@ -37,6 +80,7 @@ export async function getUserLeaveBalances(
     where: { id: userId },
     select: {
       countryCode: true,
+      workCountry: true,
       organizationId: true,
       employmentType: true,
       daysWorkedPerWeek: true,
@@ -80,7 +124,7 @@ export async function getUserLeaveBalances(
   });
 
   let ukRegionalBankHolidayCount = 0;
-  if (user.countryCode === "GB" && !ukBankHolidayInclusive) {
+  if (user.workCountry === "GB" && !ukBankHolidayInclusive) {
     ukRegionalBankHolidayCount = await prisma.bankHoliday.count({
       where: {
         organizationId: user.organizationId,
@@ -138,9 +182,13 @@ export async function getUserLeaveBalances(
         allowance = proRatedEntitlement;
       }
     }
-    if (user.countryCode === "GB" && lt.name === "Annual Leave" && !ukBankHolidayInclusive) {
-      allowance += ukRegionalBankHolidayCount;
-    }
+    allowance = adjustAllowanceForBankHolidays({
+      allowance,
+      workCountry: user.workCountry,
+      leaveTypeName: lt.name,
+      ukBankHolidayInclusive,
+      ukRegionalBankHolidayCount,
+    });
 
     const carryOver = carryOverBalances.find((c) => c.leaveTypeId === lt.id);
     // Carry-over only counts toward the allowance until it expires. Once the

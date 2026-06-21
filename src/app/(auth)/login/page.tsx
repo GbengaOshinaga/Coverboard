@@ -14,6 +14,16 @@ import { trackClient, AnalyticsEvents } from "@/lib/analytics";
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   GoogleEmail:
     "We couldn't verify your Google email. Try signing in with your email and password.",
+  Callback:
+    "Google sign-in was cancelled or denied. Try again, or use your email and password.",
+  OAuthCallback:
+    "Google sign-in was cancelled or denied. Try again, or use your email and password.",
+  AccessDenied:
+    "Google sign-in was cancelled or denied. Try again, or use your email and password.",
+  OAuthAccountNotLinked:
+    "This email uses a different sign-in method. Sign in with your email and password instead.",
+  Configuration:
+    "Sign-in is temporarily misconfigured. Try email and password, or contact support.",
 };
 
 export default function LoginPage() {
@@ -40,15 +50,20 @@ function LoginInner() {
       .catch(() => setGoogleAvailable(false));
   }, []);
 
-  // Surface OAuth errors redirected back to /login (e.g. no account found).
+  // Surface OAuth errors redirected back to /login, then drop ?error= from the URL
+  // so a stale failed Google attempt doesn't keep confusing later sign-ins.
   useEffect(() => {
     const code = searchParams.get("error");
     if (!code) return;
     setError(
       OAUTH_ERROR_MESSAGES[code] ??
-        "Couldn't sign in with Google. Try again or use your email and password."
+        "Couldn't sign in. Try again or use your email and password."
     );
-  }, [searchParams]);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("error");
+    const qs = params.toString();
+    router.replace(qs ? `/login?${qs}` : "/login", { scroll: false });
+  }, [searchParams, router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

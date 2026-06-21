@@ -28,6 +28,15 @@ export async function GET(request: Request) {
   const orgId = sessionUser.organizationId as string;
   const { searchParams } = new URL(request.url);
   const year = Number(searchParams.get("year") ?? new Date().getFullYear());
+  // A malformed `year` (e.g. "abc" -> NaN) would otherwise flow into
+  // `new Date(NaN, …)` and reach Prisma as an Invalid Date, surfacing as an
+  // opaque 500. Reject it up front with a clear 400 instead.
+  if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+    return NextResponse.json(
+      { error: "Invalid 'year' parameter" },
+      { status: 400 }
+    );
+  }
 
   const yearStart = new Date(year, 0, 1);
   const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
