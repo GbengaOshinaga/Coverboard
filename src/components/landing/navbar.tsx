@@ -22,6 +22,7 @@ export function LandingNavbar() {
           <a href="#scale-pro" className="hover:text-gray-900 transition-colors">Scale &amp; Pro</a>
           <a href="#how-it-works" className="hover:text-gray-900 transition-colors">How it works</a>
           <a href="#pricing" className="hover:text-gray-900 transition-colors">Pricing</a>
+          <Link href="/guides" className="hover:text-gray-900 transition-colors">Guides</Link>
         </div>
 
         <div className="hidden md:flex items-center gap-3">
@@ -54,6 +55,7 @@ export function LandingNavbar() {
           <a href="#scale-pro" onClick={() => setMobileOpen(false)} className="block text-sm text-gray-600 py-2">Scale &amp; Pro</a>
           <a href="#how-it-works" onClick={() => setMobileOpen(false)} className="block text-sm text-gray-600 py-2">How it works</a>
           <a href="#pricing" onClick={() => setMobileOpen(false)} className="block text-sm text-gray-600 py-2">Pricing</a>
+          <Link href="/guides" onClick={() => setMobileOpen(false)} className="block text-sm text-gray-600 py-2">Guides</Link>
           <div className="flex flex-col gap-2 pt-2">
             <Link href="/login" className="text-sm font-medium text-gray-700 text-center py-2">Log in</Link>
             <Link href="/signup" className="text-sm font-medium text-white bg-brand-600 text-center py-2 rounded-lg">Get started free</Link>

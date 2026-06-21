@@ -5,7 +5,7 @@ import { notifyNewRequest } from "@/lib/slack-notifications";
 import { emailNewRequest, emailSspCapReached } from "@/lib/email-notifications";
 import {
   SSP_MAX_WEEKS,
-  calculateSspPayableDays,
+  calculateSspPayableDaysForSpell,
   calculateSspEntitlement,
   UK_SSP_WEEKLY_RATE,
   calculateBradfordFactor,
@@ -327,7 +327,15 @@ export async function createLeaveRequest(
           limitReached: entitlement.reason === "SSP 28-week limit reached",
         };
       } else {
-        const requestedPayable = calculateSspPayableDays(startDate, endDate);
+        // Waiting days are served once per PIW. A spell linked to a prior SSP
+        // spell (one ending within the 56-day window queried above) has already
+        // served them, so it pays every weekday with no 3-day deduction;
+        // re-deducting would underpay the employee. See the helper for detail.
+        const requestedPayable = calculateSspPayableDaysForSpell(
+          startDate,
+          endDate,
+          { linkedToPriorPiw: priorSsp.length > 0 }
+        );
         const capped = Math.min(requestedPayable, entitlement.remainingDays);
         sspDaysPaid = capped;
         const cumulativeAfter = cumulativePrior + capped;

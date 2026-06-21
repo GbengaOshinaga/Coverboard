@@ -11,6 +11,7 @@ import {
   calculateVariableHoursFte,
   calculateBradfordFactor,
   calculateSspPayableDays,
+  calculateSspPayableDaysForSpell,
   calculateSspDailyRate,
   calculateSspEntitlement,
   easterSunday,
@@ -336,4 +337,38 @@ test("UK_SSP_WEEKLY_RATE default is 123.25 (2026/27)", () => {
   if (!process.env.SSP_WEEKLY_RATE) {
     assert.equal(UK_SSP_WEEKLY_RATE, 123.25);
   }
+});
+
+// ─── SSP waiting days across linked spells (PIW linking) ──────────────
+// A 10-weekday spell: unlinked serves 3 waiting days (7 payable); a spell
+// linked to a prior PIW within 56 days has already served them (10 payable).
+const SPELL_START = new Date(Date.UTC(2026, 0, 5)); // Mon 5 Jan 2026
+const SPELL_END = new Date(Date.UTC(2026, 0, 16)); // Fri 16 Jan 2026 (10 weekdays)
+
+test("unlinked SSP spell serves the 3 waiting days (fresh PIW)", () => {
+  const days = calculateSspPayableDaysForSpell(SPELL_START, SPELL_END, {
+    linkedToPriorPiw: false,
+  });
+  // 10 weekdays − 3 waiting = 7, matching calculateSspPayableDays.
+  assert.equal(days, 7);
+  assert.equal(days, calculateSspPayableDays(SPELL_START, SPELL_END));
+});
+
+test("linked SSP spell does NOT re-serve waiting days — pays every weekday", () => {
+  const days = calculateSspPayableDaysForSpell(SPELL_START, SPELL_END, {
+    linkedToPriorPiw: true,
+  });
+  // Linked to a prior PIW: waiting days already served, so all 10 weekdays pay.
+  // The old code deducted 3 again (would have returned 7) — an underpayment.
+  assert.equal(days, 10);
+});
+
+test("linked spell pays 3 more days than the unlinked equivalent", () => {
+  const unlinked = calculateSspPayableDaysForSpell(SPELL_START, SPELL_END, {
+    linkedToPriorPiw: false,
+  });
+  const linked = calculateSspPayableDaysForSpell(SPELL_START, SPELL_END, {
+    linkedToPriorPiw: true,
+  });
+  assert.equal(linked - unlinked, 3);
 });
