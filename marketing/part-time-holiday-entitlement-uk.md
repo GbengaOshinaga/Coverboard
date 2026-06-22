@@ -67,7 +67,8 @@ simply cap a permanent worker's holiday at 12.07% if it would give them less tha
 full 5.6 weeks. For irregular-hours and part-year workers, recent rules also allow an
 accrual method based on **12.07% of hours worked in a pay period** — but the safest
 position is to check current GOV.UK guidance for your worker's exact arrangement, as
-this area has changed.
+this area has changed. For the post-2024 rules in full, see our guide to
+[holiday for irregular-hours and zero-hours workers](/guides/irregular-hours-holiday-2024).
 
 ## A note on holiday *pay* vs. holiday *entitlement*
 
@@ -77,7 +78,7 @@ Two different things, often confused:
 - **Pay** = how much they're paid for those days — which for anyone with overtime,
   commission or variable hours must be based on a **52-week average**, not just basic
   salary. See our separate guide on
-  [holiday pay including overtime](holiday-pay-overtime-uk.md).
+  [holiday pay including overtime](/guides/holiday-pay-overtime-uk).
 
 ## Doing it automatically
 
