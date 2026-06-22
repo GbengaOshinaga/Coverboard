@@ -8,6 +8,8 @@ import {
   UK_LEL_WEEKLY,
   UK_SSP_WEEKLY_RATE,
   calculateUkProRatedAnnualLeave,
+  calculateIrregularHoursAccrual,
+  IRREGULAR_HOURS_ACCRUAL_RATE,
   calculateVariableHoursFte,
   calculateBradfordFactor,
   calculateSspPayableDays,
@@ -17,6 +19,27 @@ import {
   easterSunday,
   getUkBankHolidaysForRegion,
 } from "@/lib/uk-compliance";
+
+// ─── Irregular-hours accrual (12.07%) ─────────────────────────────────
+
+test("12.07% accrual rate is derived from 5.6 weeks over 46.4 working weeks", () => {
+  // 5.6 / (52 - 5.6) = 0.12068...
+  assert.ok(Math.abs(IRREGULAR_HOURS_ACCRUAL_RATE - 0.1207) < 0.0001);
+});
+
+test("irregular-hours accrual = 12.07% of logged hours (in hours)", () => {
+  // 354 logged hours → 354 * 0.12069 ≈ 42.72 hours accrued
+  const accrued = calculateIrregularHoursAccrual(354);
+  assert.ok(Math.abs(accrued - 42.72) < 0.05);
+});
+
+test("irregular-hours accrual is 0 for no logged hours", () => {
+  assert.equal(calculateIrregularHoursAccrual(0), 0);
+});
+
+test("irregular-hours accrual floors negative input at 0", () => {
+  assert.equal(calculateIrregularHoursAccrual(-100), 0);
+});
 
 // ─── Pro-rata entitlement ─────────────────────────────────────────────
 

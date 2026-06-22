@@ -10,6 +10,8 @@ type LeaveBalance = {
   used: number;
   pending: number;
   remaining: number;
+  unit?: "days" | "hours";
+  entitlementHours?: number;
 };
 
 export function BalanceIndicator({
@@ -83,6 +85,15 @@ export function BalanceIndicator({
             {balance.pending > 0 && <span>Pending: {balance.pending}</span>}
             <span>This request: {requestedDays} day{requestedDays !== 1 ? "s" : ""}</span>
           </div>
+          {balance.unit === "hours" && (
+            <p className="mt-1.5 text-xs text-gray-500">
+              Your statutory holiday accrues in hours (12.07% of hours worked)
+              {balance.entitlementHours !== undefined
+                ? ` — ${balance.entitlementHours.toFixed(1)} hrs so far`
+                : ""}
+              . The day figures above are an equivalent for booking.
+            </p>
+          )}
           {wouldExceed && (
             <p className="mt-1.5 text-xs text-red-600">
               You can still submit this request, but it may be rejected by your

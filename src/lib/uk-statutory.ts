@@ -45,6 +45,7 @@ export async function enableUkStatutoryLeaveTypes(
         requiresEvidence: p.requiresEvidence,
         minNoticeDays: p.minNoticeDays,
         durationLogic: p.durationLogic,
+        applyProRata: p.applyProRata ?? false,
         countryCode: "GB",
         organizationId,
       },
@@ -55,6 +56,7 @@ export async function enableUkStatutoryLeaveTypes(
         requiresEvidence: p.requiresEvidence,
         minNoticeDays: p.minNoticeDays,
         durationLogic: p.durationLogic,
+        applyProRata: p.applyProRata ?? false,
         countryCode: "GB",
       },
     });

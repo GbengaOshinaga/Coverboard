@@ -15,6 +15,7 @@ plan-gating notes that are useful to customers but irrelevant to cold search tra
 | [UK Statutory Leave Types Explained](uk-statutory-leave-types.md) | `docs/uk-statutory-leave-overview.md` | "UK statutory leave types" |
 | [GDPR and Employee Sickness Records (UK)](gdpr-sickness-records-uk.md) | `docs/gdpr-leave-data.md` | "GDPR sickness records" |
 | [Part-Time Holiday Entitlement (UK)](part-time-holiday-entitlement-uk.md) | *(derived from `docs/uk-statutory-leave-overview.md`)* | "part time holiday entitlement UK" |
+| [Irregular-Hours & Zero-Hours Holiday (UK, 2024 Rules)](irregular-hours-holiday-2024.md) | *(pairs with the `/tools` irregular-hours calculator)* | "zero hours holiday entitlement" |
 
 ## Notes
 

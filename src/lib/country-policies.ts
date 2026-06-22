@@ -13,6 +13,12 @@ export type CountryLeaveRule = {
   requiresEvidence?: boolean;
   minNoticeDays?: number;
   durationLogic?: string;
+  /**
+   * Whether entitlement is pro-rated by contract (part-time days / irregular
+   * hours). Only the statutory annual holiday should set this — it drives the
+   * UK pro-rata + 12.07% accrual paths in leave-balances.
+   */
+  applyProRata?: boolean;
   note: string;
 };
 
@@ -45,6 +51,7 @@ export const COUNTRY_POLICIES: CountryPolicy[] = [
         category: "STATUTORY",
         requiresEvidence: false,
         minNoticeDays: 0,
+        applyProRata: true,
         durationLogic: "28 days minimum; company setting controls bank holiday inclusive/exclusive mode",
         note: "Working Time Regulations: 5.6 weeks statutory minimum",
       },
@@ -360,6 +367,7 @@ export function getCountryPolicies(countryCodes: string[]) {
     requiresEvidence: boolean;
     minNoticeDays: number;
     durationLogic: string | null;
+    applyProRata: boolean;
   }[] = [];
 
   for (const policy of policies) {
@@ -373,6 +381,7 @@ export function getCountryPolicies(countryCodes: string[]) {
         requiresEvidence: rule.requiresEvidence ?? false,
         minNoticeDays: rule.minNoticeDays ?? 0,
         durationLogic: rule.durationLogic ?? null,
+        applyProRata: rule.applyProRata ?? false,
       });
     }
   }

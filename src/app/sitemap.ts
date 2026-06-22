@@ -1,11 +1,12 @@
 import type { MetadataRoute } from "next";
 import { getAppBaseUrl } from "@/lib/app-url";
 import { getGuideSlugs } from "@/lib/guides";
+import { TOOLS } from "@/lib/tools";
 
 /**
- * Served at /sitemap.xml. Lists the public marketing/legal pages and the
- * evergreen /guides — submit it once in Google Search Console to get them
- * indexed.
+ * Served at /sitemap.xml. Lists the public marketing/legal pages, the evergreen
+ * /guides and the free /tools — submit it once in Google Search Console to get
+ * them indexed.
  */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = getAppBaseUrl();
@@ -23,6 +24,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
     ...guideSlugs.map((slug) => ({
       url: `${base}/guides/${slug}`,
+      changeFrequency: "monthly" as const,
+      priority: 0.6,
+    })),
+    {
+      url: `${base}/tools`,
+      changeFrequency: "monthly",
+      priority: 0.7,
+    },
+    ...TOOLS.map((tool) => ({
+      url: `${base}/tools/${tool.slug}`,
       changeFrequency: "monthly" as const,
       priority: 0.6,
     })),

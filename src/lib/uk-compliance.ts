@@ -56,6 +56,21 @@ export const UK_LEL_WEEKLY = Number(
 export const FTE_STANDARD_HOURS_PER_WEEK = 37.5;
 
 /**
+ * Statutory minimum paid holiday in weeks (Working Time Regulations 5.6 weeks).
+ */
+export const STATUTORY_HOLIDAY_WEEKS = 5.6;
+
+/**
+ * Holiday accrual rate for irregular-hours and part-year workers under the
+ * post-2024 reform (leave years beginning on/after 1 April 2024): holiday
+ * accrues at 12.07% of the hours actually worked in each pay period. The figure
+ * is derived from the statutory 5.6 weeks over the 46.4 remaining working weeks
+ * of the year (5.6 / (52 - 5.6) = 0.12069…), not a magic number.
+ */
+export const IRREGULAR_HOURS_ACCRUAL_RATE =
+  STATUTORY_HOLIDAY_WEEKS / (52 - STATUTORY_HOLIDAY_WEEKS);
+
+/**
  * Maximum cumulative SSP payable per period of incapacity for work (PIW).
  * Statute caps SSP at 28 weeks — at 5 qualifying days per week that is 140
  * days, but the 28-week limit is a calendar limit, not a day limit, so we
@@ -83,6 +98,18 @@ export function calculateVariableHoursFte(
   const average = recent52.reduce((sum, h) => sum + h, 0) / recent52.length;
   const fte = average / fullTimeHoursPerWeek;
   return Number(Math.max(0, Math.min(1, fte)).toFixed(3));
+}
+
+/**
+ * Statutory holiday *accrued to date* for an irregular-hours / zero-hours
+ * worker: 12.07% of the hours they have actually worked, returned in **hours**.
+ * Unlike the days-based pro-rata below, this is the legally-correct post-2024
+ * method — it accrues from real logged hours rather than projecting an annual
+ * days figure. Negative input is floored at 0.
+ */
+export function calculateIrregularHoursAccrual(loggedHours: number): number {
+  if (!(loggedHours > 0)) return 0;
+  return loggedHours * IRREGULAR_HOURS_ACCRUAL_RATE;
 }
 
 /**
