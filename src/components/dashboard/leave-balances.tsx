@@ -9,6 +9,8 @@ type LeaveBalance = {
   leaveTypeColor: string;
   allowance: number;
   proRatedEntitlement?: number;
+  entitlementHours?: number;
+  unit?: "days" | "hours";
   used: number;
   pending: number;
   remaining: number;
@@ -36,6 +38,13 @@ function BalanceCard({
   balance: LeaveBalance;
   prominent?: boolean;
 }) {
+  // Irregular/zero-hours workers accrue statutory holiday in HOURS (12.07% of
+  // logged hours). The headline shows the accrued hours; the progress bar and
+  // used/remaining still run off the days-equivalent (`allowance`) because
+  // booking is day-based in Phase 1.
+  const isHours = balance.unit === "hours";
+  const hoursAccrued = balance.entitlementHours ?? 0;
+  const hasHoursLogged = isHours && hoursAccrued > 0;
   const isAccruing = balance.allowance > 0;
   const usedPercent = isAccruing
     ? Math.min(100, (balance.used / balance.allowance) * 100)
@@ -64,7 +73,24 @@ function BalanceCard({
           {balance.leaveTypeName}
         </span>
         <div className="flex shrink-0 items-baseline gap-1">
-          {isAccruing ? (
+          {isHours ? (
+            hasHoursLogged ? (
+              <>
+                <span
+                  className={`font-bold ${prominent ? "text-2xl" : "text-sm"} text-gray-900`}
+                >
+                  {hoursAccrued.toFixed(1)}
+                </span>
+                <span className="text-xs text-gray-400">
+                  hrs (≈ {balance.allowance} days) accrued
+                </span>
+              </>
+            ) : (
+              <span className="text-xs font-medium text-gray-500">
+                Accrues from logged hours
+              </span>
+            )
+          ) : isAccruing ? (
             <>
               <span
                 className={`font-bold ${prominent ? "text-2xl" : "text-sm"} ${
@@ -123,6 +149,9 @@ function BalanceCard({
           {balance.pending > 0 && <span>{balance.pending} pending</span>}
           {balance.proRatedEntitlement !== undefined && (
             <span>pro-rated {balance.proRatedEntitlement} days</span>
+          )}
+          {isHours && hasHoursLogged && (
+            <span>accrued at 12.07% of hours worked</span>
           )}
           {balance.carryOver.expired ? (
             <span className="text-gray-400">carry-over expired</span>
