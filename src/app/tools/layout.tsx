@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
-export default async function GuidesLayout({ children }: { children: ReactNode }) {
+export default async function ToolsLayout({ children }: { children: ReactNode }) {
   const session = await getServerSession(authOptions);
   return (
     <div className="min-h-screen bg-gray-50">
@@ -19,11 +19,11 @@ export default async function GuidesLayout({ children }: { children: ReactNode }
             <span className="font-semibold">Coverboard</span>
           </Link>
           <nav className="flex items-center gap-4 text-sm text-gray-600">
-            <Link href="/guides" className="hover:text-gray-900">
-              Guides
-            </Link>
             <Link href="/tools" className="hover:text-gray-900">
               Tools
+            </Link>
+            <Link href="/guides" className="hover:text-gray-900">
+              Guides
             </Link>
             {session ? (
               <Link
