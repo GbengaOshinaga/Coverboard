@@ -15,13 +15,17 @@ export type LeaveBalance = {
   /**
    * Statutory holiday accrued to date in HOURS, for irregular/zero-hours
    * workers whose entitlement is computed at 12.07% of logged hours. Only set
-   * when `unit === "hours"`; `allowance` still carries the days-equivalent so
-   * the day-based balance UI and warn-only booking check stay coherent in
-   * Phase 1 (booking remains days-based).
+   * when `unit === "hours"`, in which case `allowance`/`used`/`pending`/
+   * `remaining` are also all measured in hours.
    */
   entitlementHours?: number;
   /** Unit the entitlement is genuinely measured in. Defaults to "days". */
   unit: "days" | "hours";
+  /**
+   * Average hours per working day for an hours-unit worker — used to default a
+   * booking's hours (working days × this) and to show a rough days-equivalent.
+   */
+  avgHoursPerDay?: number;
   used: number;
   pending: number;
   remaining: number;
@@ -200,6 +204,7 @@ export async function getUserLeaveBalances(
       startDate: true,
       endDate: true,
       status: true,
+      hoursBooked: true,
     },
   });
 
@@ -212,15 +217,15 @@ export async function getUserLeaveBalances(
     let unit: "days" | "hours" = "days";
 
     if (lt.applyProRata && isUk && isHoursWorker) {
-      // Hours-based statutory accrual (12.07% of logged hours). Headline figure
-      // is HOURS accrued to date; the days-equivalent feeds the existing
-      // day-based balance maths until booking goes hours-native (Phase 2). The
+      // Hours-based statutory accrual (12.07% of logged hours). Entitlement and
+      // deduction are both in HOURS for these workers, so `allowance` carries
+      // the hours figure and used/pending are summed in hours below. The
       // bank-holiday inclusive/exclusive split is deliberately NOT applied here
       // — 12.07% accrual already encompasses bank holidays, so subtracting them
       // again would double-count.
       unit = "hours";
       entitlementHours = calculateIrregularHoursAccrual(hoursThisYear);
-      allowance = avgHoursPerDay > 0 ? Math.round(entitlementHours / avgHoursPerDay) : 0;
+      allowance = entitlementHours;
     } else {
       if (lt.applyProRata && isUk) {
         const calculatedEntitlement = calculateUkProRatedAnnualLeave({
@@ -253,7 +258,11 @@ export async function getUserLeaveBalances(
     const carryOverRemaining = carryOverExpired
       ? 0
       : carryOver?.daysRemaining ?? 0;
-    allowance += carryOverRemaining;
+    // Carry-over is tracked in days; don't fold it into an hours allowance
+    // (hours-based carry-over is a future concern, Phase 3+).
+    if (unit !== "hours") {
+      allowance += carryOverRemaining;
+    }
 
     let used = 0;
     let pending = 0;
@@ -264,11 +273,18 @@ export async function getUserLeaveBalances(
       const start = req.startDate < yearStart ? yearStart : req.startDate;
       const end = req.endDate > yearEnd ? yearEnd : req.endDate;
       const days = countWeekdays(start, end);
+      // Hours-unit balances deduct in hours: the hours stored at booking, or a
+      // fallback of working-days × the worker's average day for legacy rows
+      // (booked before Phase 2) that have no hoursBooked.
+      const amount =
+        unit === "hours"
+          ? req.hoursBooked ?? days * avgHoursPerDay
+          : days;
 
       if (req.status === "APPROVED") {
-        used += days;
+        used += amount;
       } else {
-        pending += days;
+        pending += amount;
       }
     }
 
@@ -280,6 +296,7 @@ export async function getUserLeaveBalances(
       proRatedEntitlement,
       entitlementHours,
       unit,
+      avgHoursPerDay: unit === "hours" ? avgHoursPerDay : undefined,
       used,
       pending,
       remaining: Math.max(0, allowance - used - pending),

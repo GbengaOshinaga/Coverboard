@@ -48,6 +48,8 @@ export type CreateLeaveInput = {
   evidenceProvided?: boolean;
   kitDaysUsed?: number;
   splitDaysUsed?: number;
+  /** Hours to deduct (irregular/zero-hours workers). Derived if omitted. */
+  hoursBooked?: number;
   childBirthDate?: Date;
   splCurtailmentConfirmed?: boolean;
   context?: AuditContext;
@@ -161,8 +163,13 @@ export async function createLeaveRequest(
     return { ok: false, status: 400, error: "End date must be after start date" };
   }
 
-  // Check leave balance (warn but don't block)
+  // Check leave balance (warn but don't block). For irregular/zero-hours
+  // workers the relevant balance is measured in hours, so we resolve the hours
+  // this request costs (explicit input, or working-days × their average day)
+  // and warn in hours. `resolvedHoursBooked` is persisted on the request below;
+  // it stays null for day-based balances.
   let balanceWarning: string | null = null;
+  let resolvedHoursBooked: number | null = null;
   try {
     const requestedDays = countWeekdays(startDate, endDate);
     const balance = await getUserLeaveBalance(
@@ -170,7 +177,14 @@ export async function createLeaveRequest(
       leaveTypeId,
       startDate.getFullYear()
     );
-    if (balance && requestedDays > balance.remaining) {
+    if (balance?.unit === "hours") {
+      const avgHoursPerDay = balance.avgHoursPerDay ?? 0;
+      resolvedHoursBooked =
+        input.hoursBooked ?? Number((requestedDays * avgHoursPerDay).toFixed(2));
+      if (resolvedHoursBooked > balance.remaining) {
+        balanceWarning = `This request (${resolvedHoursBooked} hours) exceeds your remaining balance of ${balance.remaining.toFixed(1)} hours for ${balance.leaveTypeName}.`;
+      }
+    } else if (balance && requestedDays > balance.remaining) {
       balanceWarning = `This request (${requestedDays} days) exceeds your remaining balance of ${balance.remaining} days for ${balance.leaveTypeName}.`;
     }
   } catch {
@@ -380,6 +394,7 @@ export async function createLeaveRequest(
       : evidenceProvided ?? false,
     kitDaysUsed: kitDaysUsed ?? 0,
     splitDaysUsed: splitDaysUsed ?? 0,
+    hoursBooked: resolvedHoursBooked ?? undefined,
     childBirthDate: childBirthDate ?? undefined,
     splCurtailmentConfirmed: splCurtailmentConfirmed ?? false,
     dailyHolidayPayRate: dailyHolidayPayRate ?? undefined,

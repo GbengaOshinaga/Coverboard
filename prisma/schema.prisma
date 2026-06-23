@@ -211,6 +211,10 @@ model LeaveRequest {
   evidenceProvided         Boolean     @default(false)
   kitDaysUsed              Int         @default(0)
   splitDaysUsed            Int         @default(0)
+  // Hours this request deducts from an irregular/zero-hours worker's
+  // hours-based holiday balance. NULL = day-based (all other workers/leave),
+  // counted via countWeekdays() as before.
+  hoursBooked              Float?
   sicknessNote             String?
   childBirthDate           DateTime?   @db.Date
   splCurtailmentConfirmed  Boolean     @default(false)

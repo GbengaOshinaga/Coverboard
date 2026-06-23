@@ -17,10 +17,12 @@ type LeaveBalance = {
 export function BalanceIndicator({
   balance,
   requestedDays,
+  requestedHours = 0,
   loading,
 }: {
   balance: LeaveBalance | null;
   requestedDays: number;
+  requestedHours?: number;
   loading: boolean;
 }) {
   if (loading) {
@@ -52,8 +54,15 @@ export function BalanceIndicator({
     );
   }
 
-  const wouldExceed = requestedDays > balance.remaining;
-  const afterRequest = balance.remaining - requestedDays;
+  const isHours = balance.unit === "hours";
+  // Format a number in the balance's unit. Hours show one decimal; days stay
+  // whole-ish (the existing day model never had fractional balances here).
+  const fmt = (n: number) =>
+    isHours ? `${n.toFixed(1)} hour${n === 1 ? "" : "s"}` : `${n} day${n === 1 ? "" : "s"}`;
+
+  const requested = isHours ? requestedHours : requestedDays;
+  const wouldExceed = requested > balance.remaining;
+  const afterRequest = balance.remaining - requested;
 
   return (
     <div
@@ -76,22 +85,19 @@ export function BalanceIndicator({
             }`}
           >
             {wouldExceed
-              ? `Exceeds your remaining balance by ${Math.abs(afterRequest)} day${Math.abs(afterRequest) !== 1 ? "s" : ""}`
-              : `${balance.remaining} day${balance.remaining !== 1 ? "s" : ""} remaining`}
+              ? `Exceeds your remaining balance by ${fmt(Math.abs(afterRequest))}`
+              : `${fmt(balance.remaining)} remaining`}
           </p>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-500">
-            <span>Allowance: {balance.allowance}</span>
-            <span>Used: {balance.used}</span>
-            {balance.pending > 0 && <span>Pending: {balance.pending}</span>}
-            <span>This request: {requestedDays} day{requestedDays !== 1 ? "s" : ""}</span>
+            <span>Allowance: {fmt(balance.allowance)}</span>
+            <span>Used: {fmt(balance.used)}</span>
+            {balance.pending > 0 && <span>Pending: {fmt(balance.pending)}</span>}
+            <span>This request: {fmt(requested)}</span>
           </div>
-          {balance.unit === "hours" && (
+          {isHours && (
             <p className="mt-1.5 text-xs text-gray-500">
-              Your statutory holiday accrues in hours (12.07% of hours worked)
-              {balance.entitlementHours !== undefined
-                ? ` — ${balance.entitlementHours.toFixed(1)} hrs so far`
-                : ""}
-              . The day figures above are an equivalent for booking.
+              Your statutory holiday accrues and is taken in hours (12.07% of
+              hours worked).
             </p>
           )}
           {wouldExceed && (
