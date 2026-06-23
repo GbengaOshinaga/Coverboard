@@ -4,6 +4,7 @@ import {
   calculateHolidayPayRate,
   calculateHolidayPayRateForEmployee,
   calculateWeeklyHolidayPayRate,
+  calculateHourlyHolidayPayRate,
   isAnnualLeaveType,
   type WeeklyEarning,
 } from "@/lib/holidayPay";
@@ -152,4 +153,32 @@ test("calculateHolidayPayRateForEmployee returns null for non-GB employee", asyn
   } finally {
     (prisma.user as unknown as { findUnique: unknown }).findUnique = original;
   }
+});
+
+// ─── Hourly holiday pay rate (irregular/zero-hours workers) ───────────
+
+test("hourly rate = total earnings ÷ total hours over paid weeks", () => {
+  // 2 weeks: £300/30h and £500/40h → 800 / 70 = £11.43/h
+  const rate = calculateHourlyHolidayPayRate([
+    week("2026-01-05", 300, { hours_worked: 30 }),
+    week("2026-01-12", 500, { hours_worked: 40 }),
+  ]);
+  assert.equal(rate, 11.43);
+});
+
+test("hourly rate excludes zero-pay weeks", () => {
+  const rate = calculateHourlyHolidayPayRate([
+    week("2026-01-05", 400, { hours_worked: 40 }),
+    week("2026-01-12", 0, { hours_worked: 0, is_zero_pay_week: true }),
+  ]);
+  // Only the paid week counts: 400 / 40 = £10/h
+  assert.equal(rate, 10);
+});
+
+test("hourly rate is 0 with no earnings or no hours", () => {
+  assert.equal(calculateHourlyHolidayPayRate([]), 0);
+  assert.equal(
+    calculateHourlyHolidayPayRate([week("2026-01-05", 100, { hours_worked: 0 })]),
+    0
+  );
 });
