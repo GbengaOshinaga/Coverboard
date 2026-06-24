@@ -191,17 +191,19 @@ export async function createLeaveRequest(
     // Don't block request creation if balance check fails
   }
 
-  // ── Paternity leave: 56-day birth window ──────────────────────────
+  // ── Paternity leave: must fall within 52 weeks of birth/placement ──
+  // Post-2024 reform: leave can be taken any time in the first year (previously
+  // 56 days), and the two weeks may be non-consecutive (each booked separately).
   const isPaternityLeave = /paternity/i.test(leaveTypeConfig.name);
   if (isPaternityLeave && childBirthDate) {
     const windowEnd = new Date(childBirthDate);
-    windowEnd.setUTCDate(windowEnd.getUTCDate() + 56);
+    windowEnd.setUTCDate(windowEnd.getUTCDate() + 364); // 52 weeks
     if (startDate > windowEnd) {
       return {
         ok: false,
         status: 400,
         error:
-          "Paternity leave must start within 56 days of the child's birth or placement date",
+          "Paternity leave must start within 52 weeks of the child's birth or placement date",
       };
     }
   }
@@ -322,6 +324,8 @@ export async function createLeaveRequest(
         averageWeeklyEarnings,
         sspDaysPaidInPeriod: cumulativePrior,
         qualifyingDaysPerWeek: employee.qualifyingDaysPerWeek,
+        // Pick pre- vs post-6-April-2026 SSP rules by the spell's start date.
+        onDate: startDate,
       });
 
       if (!entitlement.eligible) {

@@ -9,6 +9,7 @@ import {
   calculateEstimatedSspCost,
   calculateSspPayableDays,
   calculateSspDailyRate,
+  calculateSspWeeklyRate,
 } from "@/lib/uk-compliance";
 import {
   getCurrentSMPPhase,
@@ -146,7 +147,14 @@ export async function GET(request: Request) {
 
   const sspCurrent = users.flatMap((user) => {
     const qDays = user.qualifyingDaysPerWeek ?? 5;
-    const dailyRate = calculateSspDailyRate(qDays);
+    // Post-reform SSP rate is capped at 80% of AWE; fall back to the flat rate
+    // when earnings are unknown.
+    const weeklyRate = calculateSspWeeklyRate(
+      user.averageWeeklyEarnings === null
+        ? null
+        : Number(user.averageWeeklyEarnings)
+    );
+    const dailyRate = calculateSspDailyRate(qDays, weeklyRate);
     const maxDays = SSP_MAX_WEEKS * qDays;
     return user.leaveRequests
       .filter((r) => r.leaveType.name.includes("SSP") && r.endDate >= new Date())
@@ -165,7 +173,7 @@ export async function GET(request: Request) {
           estimatedCostToDate: calculateEstimatedSspCost(
             r.startDate,
             new Date(),
-            undefined,
+            weeklyRate,
             qDays
           ),
           sspDaysPaid: r.sspDaysPaid ?? 0,

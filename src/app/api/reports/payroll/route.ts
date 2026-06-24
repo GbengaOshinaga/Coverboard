@@ -12,6 +12,10 @@ import {
   getCurrentSMPPhase,
   isMaternityLeaveType,
 } from "@/lib/smpCalculator";
+import {
+  isNeonatalCareLeaveType,
+  calculateNeonatalWeeklyRate,
+} from "@/lib/neonatalPay";
 import { buildPayrollHolidayRateFields } from "@/lib/payroll-export";
 import {
   parseExportFormat,
@@ -86,6 +90,7 @@ export async function GET(request: Request) {
           countryCode: true,
           workCountry: true,
           employmentType: true,
+          averageWeeklyEarnings: true,
         },
       },
       leaveType: {
@@ -171,6 +176,29 @@ export async function GET(request: Request) {
           })
         : null;
 
+      // Neonatal Care Pay: a single weekly rate (lower of flat or 90% AWE) for
+      // up to 12 weeks. Computed live from the employee's AWE; weeks-in-period
+      // is the working days taken ÷ 5.
+      const neonatal =
+        isNeonatalCareLeaveType(r.leaveType.name) && isUkBased
+          ? (() => {
+              const awe =
+                r.user.averageWeeklyEarnings === null
+                  ? null
+                  : Number(r.user.averageWeeklyEarnings);
+              const weeklyRate = calculateNeonatalWeeklyRate(awe);
+              const weeksTaken = Number((daysTaken / 5).toFixed(2));
+              return {
+                weeklyRate: weeklyRate > 0 ? weeklyRate : null,
+                weeksTaken,
+                estimatedPay:
+                  weeklyRate > 0
+                    ? Number((weeklyRate * weeksTaken).toFixed(2))
+                    : null,
+              };
+            })()
+          : null;
+
       return {
         leaveRequestId: r.id,
         userId: r.userId,
@@ -222,6 +250,7 @@ export async function GET(request: Request) {
                   : Number(r.smpPhase2WeeklyRate),
             }
           : null,
+        neonatal,
       };
     })
   );
@@ -303,6 +332,14 @@ export async function GET(request: Request) {
     {
       key: (r) => r.smp?.averageWeeklyEarnings ?? null,
       header: "AWE (£)",
+    },
+    {
+      key: (r) => r.neonatal?.weeklyRate ?? null,
+      header: "Neonatal weekly rate (£)",
+    },
+    {
+      key: (r) => r.neonatal?.estimatedPay ?? null,
+      header: "Neonatal estimated pay (£)",
     },
   ];
 

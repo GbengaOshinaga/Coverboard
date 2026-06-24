@@ -13,7 +13,8 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "backfill:work-country": "tsx scripts/backfill-work-country.ts"
+    "backfill:work-country": "tsx scripts/backfill-work-country.ts",
+    "backfill:uk-leave-types": "tsx scripts/backfill-uk-statutory-leave-types.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.3.0",

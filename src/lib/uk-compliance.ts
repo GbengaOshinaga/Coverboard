@@ -29,10 +29,22 @@ const DEFAULT_SSP_WEEKLY_RATE = 123.25;
 // Statutory Maternity Pay flat weekly rate for 2026/27 (as of 6 April 2026).
 // Update each April — see docs/internal/april-statutory-rate-update.md.
 const DEFAULT_SMP_WEEKLY_RATE = 194.32;
-// Lower Earnings Limit for Class 1 NICs — £125 for 2026/27 (held from 2025/26).
-// Employees below this weekly average earnings threshold are not entitled to SSP.
+// Lower Earnings Limit for Class 1 NICs — £129 for 2026/27.
+// Still used as the SMP/maternity qualifying threshold. NOTE: from 6 April 2026
+// the LEL no longer gates SSP eligibility (the SSP reform removed it).
 // Update each April via HMRC guidance — see docs/internal/april-statutory-rate-update.md.
-const DEFAULT_LEL_WEEKLY = 125;
+const DEFAULT_LEL_WEEKLY = 129;
+
+/**
+ * Date the 6 April 2026 SSP reform took effect: waiting days abolished, the LEL
+ * eligibility gate removed, and the rate capped at the lower of the flat weekly
+ * rate or 80% of average weekly earnings. Sickness starting before this date
+ * still computes under the pre-reform rules (transition handling).
+ */
+export const SSP_REFORM_DATE = new Date(Date.UTC(2026, 3, 6));
+
+/** Low-earner SSP fraction: post-reform rate is min(flat, 80% of AWE). */
+export const SSP_LOW_EARNER_FRACTION = 0.8;
 
 export const UK_SSP_WEEKLY_RATE = Number(
   process.env.SSP_WEEKLY_RATE ?? DEFAULT_SSP_WEEKLY_RATE
@@ -133,11 +145,17 @@ export function calculateBradfordFactor(absenceSpells: number, absenceDays: numb
 }
 
 /**
- * Payable SSP days = consecutive weekdays of sickness less the 3 waiting
- * days. Waiting-day logic is unchanged — do not touch.
+ * Payable SSP days for a spell.
+ *
+ * From 6 April 2026 ({@link SSP_REFORM_DATE}) waiting days are abolished: SSP is
+ * payable from day 1, so every qualifying weekday counts. Spells that started
+ * before the reform still serve the 3 unpaid waiting days (transition handling).
  */
 export function calculateSspPayableDays(startDate: Date, endDate: Date): number {
   const consecutiveDays = countWeekdays(startDate, endDate);
+  if (startDate >= SSP_REFORM_DATE) {
+    return consecutiveDays;
+  }
   if (consecutiveDays <= 3) return 0;
   return consecutiveDays - 3;
 }
@@ -145,19 +163,17 @@ export function calculateSspPayableDays(startDate: Date, endDate: Date): number 
 /**
  * Payable SSP days for a single sickness spell, accounting for PIW linking.
  *
- * The 3 waiting days (the first 3 qualifying days of a period of incapacity,
- * which are unpaid) are served only ONCE per period of incapacity for work
- * (PIW). Two spells separated by 8 weeks (56 days) or less link into one PIW.
+ * Waiting days only existed before the 6 April 2026 reform (see
+ * {@link calculateSspPayableDays}). Pre-reform they were the first 3 qualifying
+ * days of a period of incapacity (PIW), served once per PIW; two spells
+ * separated by 8 weeks (56 days) or less link into one PIW.
  *
- * - **Unlinked spell** (a fresh PIW): serve the 3 waiting days — defers to
- *   {@link calculateSspPayableDays}.
+ * - **Unlinked spell** (a fresh PIW): defers to {@link calculateSspPayableDays}
+ *   — which serves the 3 waiting days pre-reform, none post-reform.
  * - **Linked spell** (a prior SSP spell ended within the 56-day window): the
  *   waiting days were already served on the earlier spell, so every qualifying
- *   weekday is payable with no deduction. Re-deducting them here would underpay
- *   the employee — an unlawful deduction from wages.
- *
- * Any PIW is at least 4 days, so the first spell always serves all 3 waiting
- * days; "linked ⇒ 0 waiting days" is therefore correct for every real case.
+ *   weekday is payable. (Post-reform this is moot — there are no waiting days —
+ *   but the result is identical.)
  */
 export function calculateSspPayableDaysForSpell(
   startDate: Date,
@@ -188,6 +204,20 @@ export function calculateSspDailyRate(
   return Number((weeklyRate / safeQDays).toFixed(2));
 }
 
+/**
+ * Effective weekly SSP rate under the 6 April 2026 reform: the **lower** of the
+ * flat weekly rate and 80% of the employee's average weekly earnings. When AWE
+ * is unknown we fall back to the flat rate (never under-paying).
+ */
+export function calculateSspWeeklyRate(
+  averageWeeklyEarnings: number | null | undefined,
+  flatRate: number = UK_SSP_WEEKLY_RATE
+): number {
+  const awe = Number(averageWeeklyEarnings);
+  if (!Number.isFinite(awe) || averageWeeklyEarnings == null) return flatRate;
+  return Math.min(flatRate, Number((awe * SSP_LOW_EARNER_FRACTION).toFixed(2)));
+}
+
 export type SspEligibilityInput = {
   /** Employee's average weekly earnings over the relevant 8-week period. */
   averageWeeklyEarnings: number | null | undefined;
@@ -197,8 +227,14 @@ export type SspEligibilityInput = {
   qualifyingDaysPerWeek: number | null | undefined;
   /** Weekly SSP rate (defaults to the current HMRC rate from env). */
   weeklyRate?: number;
-  /** LEL override for tests (defaults to UK_LEL_WEEKLY). */
+  /** LEL override for tests (defaults to UK_LEL_WEEKLY). Pre-reform only. */
   lelWeekly?: number;
+  /**
+   * The spell's start date, used to pick pre- vs post-reform rules. Defaults to
+   * today. On/after {@link SSP_REFORM_DATE}: no LEL gate, rate capped at 80% of
+   * AWE. Before: the old LEL gate + flat rate.
+   */
+  onDate?: Date;
 };
 
 export type SspEligibilityResult =
@@ -219,15 +255,16 @@ export type SspEligibilityResult =
     };
 
 /**
- * Gate an SSP calculation on the two statutory eligibility checks:
+ * Compute SSP eligibility and the daily rate.
  *
- *   1. Average weekly earnings must be **at least** the Lower Earnings
- *      Limit (≥ £125/wk for 2025/26). Below the LEL → not eligible.
- *   2. Cumulative SSP paid in this PIW must be under the 28-week cap
- *      (28 × qualifyingDaysPerWeek; 140 days at a 5-day week).
+ * From 6 April 2026 ({@link SSP_REFORM_DATE}): every employee is eligible
+ * regardless of earnings (no LEL gate), and the daily rate is the lower of the
+ * flat rate or 80% of AWE ÷ qualifying days. Before the reform: the old rules —
+ * AWE must be at least the LEL, and the rate is the flat rate.
  *
- * `User.averageWeeklyEarnings` is synced from the last 8 paid `WeeklyEarning`
- * weeks (see `syncUserAverageWeeklyEarnings` / `resolveAverageWeeklyEarnings`).
+ * The only post-reform ineligibility is the 28-week cap (28 ×
+ * qualifyingDaysPerWeek). `User.averageWeeklyEarnings` is synced from the last 8
+ * paid `WeeklyEarning` weeks (see `resolveAverageWeeklyEarnings`).
  */
 export function calculateSspEntitlement(
   input: SspEligibilityInput
@@ -240,26 +277,33 @@ export function calculateSspEntitlement(
       ? qDaysRaw
       : 5;
   const maxDays = SSP_MAX_WEEKS * qualifyingDaysPerWeek;
+  const postReform = (input.onDate ?? new Date()) >= SSP_REFORM_DATE;
 
-  if (
-    input.averageWeeklyEarnings === null ||
-    input.averageWeeklyEarnings === undefined
-  ) {
-    return { eligible: false, reason: "Missing average weekly earnings" };
-  }
-
-  const avg = Number(input.averageWeeklyEarnings);
-  if (avg < lel) {
-    return { eligible: false, reason: "Below Lower Earnings Limit" };
+  // Pre-reform earnings checks no longer apply from 6 April 2026.
+  if (!postReform) {
+    if (
+      input.averageWeeklyEarnings === null ||
+      input.averageWeeklyEarnings === undefined
+    ) {
+      return { eligible: false, reason: "Missing average weekly earnings" };
+    }
+    if (Number(input.averageWeeklyEarnings) < lel) {
+      return { eligible: false, reason: "Below Lower Earnings Limit" };
+    }
   }
 
   if (input.sspDaysPaidInPeriod >= maxDays) {
     return { eligible: false, reason: "SSP 28-week limit reached" };
   }
 
+  // Post-reform: rate capped at 80% of AWE. Pre-reform: flat weekly rate.
+  const effectiveWeeklyRate = postReform
+    ? calculateSspWeeklyRate(input.averageWeeklyEarnings, weeklyRate)
+    : weeklyRate;
+
   return {
     eligible: true,
-    dailyRate: calculateSspDailyRate(qualifyingDaysPerWeek, weeklyRate),
+    dailyRate: calculateSspDailyRate(qualifyingDaysPerWeek, effectiveWeeklyRate),
     remainingDays: maxDays - input.sspDaysPaidInPeriod,
     maxDays,
     qualifyingDaysPerWeek,

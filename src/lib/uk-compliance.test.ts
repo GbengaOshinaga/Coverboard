@@ -5,6 +5,7 @@ import {
   EmploymentType,
   FTE_STANDARD_HOURS_PER_WEEK,
   SSP_MAX_WEEKS,
+  SSP_REFORM_DATE,
   UK_LEL_WEEKLY,
   UK_SSP_WEEKLY_RATE,
   calculateUkProRatedAnnualLeave,
@@ -15,6 +16,7 @@ import {
   calculateSspPayableDays,
   calculateSspPayableDaysForSpell,
   calculateSspDailyRate,
+  calculateSspWeeklyRate,
   calculateSspEntitlement,
   easterSunday,
   getUkBankHolidaysForRegion,
@@ -136,14 +138,24 @@ test("Bradford factor formula", () => {
   assert.equal(score, 300);
 });
 
-// ─── SSP waiting days ─────────────────────────────────────────────────
+// ─── SSP waiting days (abolished 6 April 2026) ────────────────────────
 
-test("SSP waiting days logic", () => {
+test("SSP pre-reform spell still deducts 3 waiting days", () => {
+  // Mon–Fri before 6 April 2026: 5 weekdays − 3 waiting = 2 payable
   const payable = calculateSspPayableDays(
     new Date("2026-01-05T00:00:00Z"),
     new Date("2026-01-09T00:00:00Z")
   );
   assert.equal(payable, 2);
+});
+
+test("SSP post-reform spell pays from day 1 (no waiting days)", () => {
+  // Mon–Fri on/after 6 April 2026: all 5 weekdays payable
+  const payable = calculateSspPayableDays(
+    new Date("2026-04-06T00:00:00Z"),
+    new Date("2026-04-10T00:00:00Z")
+  );
+  assert.equal(payable, 5);
 });
 
 // ─── UK bank holidays filtered by region ─────────────────────────────
@@ -227,23 +239,47 @@ test("SSP daily rate does NOT use /7 — catches the HMRC-penalty bug", () => {
   assert.ok(rate > buggy);
 });
 
-// ─── SSP eligibility — Lower Earnings Limit boundary ──────────────────
+// ─── SSP rate — 80%-of-AWE cap (post 6 April 2026 reform) ─────────────
 
-test("SSP below LEL is not eligible", () => {
+test("SSP weekly rate = min(flat, 80% of AWE)", () => {
+  // Low earner: 80% × 100 = 80 < flat → £80
+  assert.equal(calculateSspWeeklyRate(100, 123.25), 80);
+  // High earner: 80% × 500 = 400 > flat → capped at flat
+  assert.equal(calculateSspWeeklyRate(500, 123.25), 123.25);
+  // AWE unknown → flat rate (never under-pay)
+  assert.equal(calculateSspWeeklyRate(null, 123.25), 123.25);
+});
+
+// ─── SSP eligibility — post-reform (default: today is post-reform) ─────
+
+test("SSP post-reform: low earner below the old LEL is still eligible", () => {
   const result = calculateSspEntitlement({
-    averageWeeklyEarnings: UK_LEL_WEEKLY - 0.01,
+    averageWeeklyEarnings: 100, // below LEL, but LEL no longer gates SSP
     sspDaysPaidInPeriod: 0,
     qualifyingDaysPerWeek: 5,
   });
-  assert.equal(result.eligible, false);
-  if (!result.eligible) {
-    assert.equal(result.reason, "Below Lower Earnings Limit");
+  assert.equal(result.eligible, true);
+  if (result.eligible) {
+    // rate = 80% × 100 = £80/wk ÷ 5 = £16.00/day
+    assert.equal(result.dailyRate, 16);
   }
 });
 
-test("SSP exactly at LEL is eligible (inclusive boundary)", () => {
+test("SSP post-reform: high earner is capped at the flat daily rate", () => {
   const result = calculateSspEntitlement({
-    averageWeeklyEarnings: UK_LEL_WEEKLY,
+    averageWeeklyEarnings: 500,
+    sspDaysPaidInPeriod: 0,
+    qualifyingDaysPerWeek: 5,
+  });
+  assert.equal(result.eligible, true);
+  if (result.eligible) {
+    assert.equal(result.dailyRate, calculateSspDailyRate(5)); // flat 24.65
+  }
+});
+
+test("SSP post-reform: missing AWE is still eligible at the flat rate", () => {
+  const result = calculateSspEntitlement({
+    averageWeeklyEarnings: null,
     sspDaysPaidInPeriod: 0,
     qualifyingDaysPerWeek: 5,
   });
@@ -253,24 +289,16 @@ test("SSP exactly at LEL is eligible (inclusive boundary)", () => {
   }
 });
 
-test("SSP above LEL is eligible", () => {
+test("SSP pre-reform (transition): below LEL is still NOT eligible", () => {
   const result = calculateSspEntitlement({
-    averageWeeklyEarnings: UK_LEL_WEEKLY + 50,
+    averageWeeklyEarnings: UK_LEL_WEEKLY - 0.01,
     sspDaysPaidInPeriod: 0,
     qualifyingDaysPerWeek: 5,
-  });
-  assert.equal(result.eligible, true);
-});
-
-test("SSP missing average weekly earnings blocks eligibility", () => {
-  const result = calculateSspEntitlement({
-    averageWeeklyEarnings: null,
-    sspDaysPaidInPeriod: 0,
-    qualifyingDaysPerWeek: 5,
+    onDate: new Date(SSP_REFORM_DATE.getTime() - 86400000), // day before reform
   });
   assert.equal(result.eligible, false);
   if (!result.eligible) {
-    assert.equal(result.reason, "Missing average weekly earnings");
+    assert.equal(result.reason, "Below Lower Earnings Limit");
   }
 });
 
