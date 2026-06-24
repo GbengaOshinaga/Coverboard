@@ -11,6 +11,12 @@ export type ToolMeta = {
 
 export const TOOLS: ToolMeta[] = [
   {
+    slug: "ssp-calculator",
+    title: "Statutory Sick Pay (SSP) calculator",
+    description:
+      "Work out UK Statutory Sick Pay under the 2026 rules — no waiting days, no Lower Earnings Limit, capped at 80% of average weekly earnings.",
+  },
+  {
     slug: "irregular-hours-holiday-calculator",
     title: "Irregular hours & zero-hours holiday calculator",
     description:

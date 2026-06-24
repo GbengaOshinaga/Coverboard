@@ -114,7 +114,9 @@ const createSchema = z.object({
   evidenceProvided: z.boolean().optional(),
   kitDaysUsed: z.number().int().min(0).optional(),
   splitDaysUsed: z.number().int().min(0).optional(),
+  hoursBooked: z.number().min(0).optional(),
   childBirthDate: z.string().transform((s) => new Date(s)).optional(),
+  expectedDueDate: z.string().transform((s) => new Date(s)).optional(),
   splCurtailmentConfirmed: z.boolean().optional(),
 });
 

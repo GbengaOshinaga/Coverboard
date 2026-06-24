@@ -11,6 +11,7 @@ type LeaveBalance = {
   proRatedEntitlement?: number;
   entitlementHours?: number;
   unit?: "days" | "hours";
+  avgHoursPerDay?: number;
   used: number;
   pending: number;
   remaining: number;
@@ -38,13 +39,16 @@ function BalanceCard({
   balance: LeaveBalance;
   prominent?: boolean;
 }) {
-  // Irregular/zero-hours workers accrue statutory holiday in HOURS (12.07% of
-  // logged hours). The headline shows the accrued hours; the progress bar and
-  // used/remaining still run off the days-equivalent (`allowance`) because
-  // booking is day-based in Phase 1.
+  // Irregular/zero-hours workers accrue and take statutory holiday in HOURS
+  // (12.07% of logged hours). For them allowance/used/remaining are all hours;
+  // we show remaining/entitlement in hours with a rough days-equivalent.
   const isHours = balance.unit === "hours";
   const hoursAccrued = balance.entitlementHours ?? 0;
   const hasHoursLogged = isHours && hoursAccrued > 0;
+  const remainingDaysEquiv =
+    balance.avgHoursPerDay && balance.avgHoursPerDay > 0
+      ? balance.remaining / balance.avgHoursPerDay
+      : null;
   const isAccruing = balance.allowance > 0;
   const usedPercent = isAccruing
     ? Math.min(100, (balance.used / balance.allowance) * 100)
@@ -77,12 +81,17 @@ function BalanceCard({
             hasHoursLogged ? (
               <>
                 <span
-                  className={`font-bold ${prominent ? "text-2xl" : "text-sm"} text-gray-900`}
+                  className={`font-bold ${prominent ? "text-2xl" : "text-sm"} ${
+                    isLow ? "text-red-600" : "text-gray-900"
+                  }`}
                 >
-                  {hoursAccrued.toFixed(1)}
+                  {balance.remaining.toFixed(1)}
                 </span>
                 <span className="text-xs text-gray-400">
-                  hrs (≈ {balance.allowance} days) accrued
+                  / {hoursAccrued.toFixed(1)} hrs
+                  {remainingDaysEquiv !== null
+                    ? ` (≈ ${remainingDaysEquiv.toFixed(1)} days)`
+                    : ""}
                 </span>
               </>
             ) : (
@@ -145,8 +154,16 @@ function BalanceCard({
       )}
 
       <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-400">
-          <span>{balance.used} used</span>
-          {balance.pending > 0 && <span>{balance.pending} pending</span>}
+          <span>
+            {isHours ? `${balance.used.toFixed(1)} hrs used` : `${balance.used} used`}
+          </span>
+          {balance.pending > 0 && (
+            <span>
+              {isHours
+                ? `${balance.pending.toFixed(1)} hrs pending`
+                : `${balance.pending} pending`}
+            </span>
+          )}
           {balance.proRatedEntitlement !== undefined && (
             <span>pro-rated {balance.proRatedEntitlement} days</span>
           )}

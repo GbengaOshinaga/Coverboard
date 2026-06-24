@@ -41,6 +41,7 @@ export const teamMemberSchema = z
       .trim()
       .toUpperCase()
       .length(2, "Work location (country) is required"),
+    serviceStartDate: z.string().date().nullable().optional(),
   })
   .transform((data) =>
     data.employmentType === "ZERO_HOURS"

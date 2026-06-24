@@ -90,13 +90,13 @@ If no earnings history has been added for a UK employee, the holiday pay calcula
 The 52-week average applies to UK workers whose pay varies. Non-UK employees are not gated by these rules — Coverboard hides the section entirely outside the UK. For UK employees on a fixed salary with no overtime, commission, or variable pay, basic salary is already their normal pay — no earnings history is needed and the fallback warning is informational only.
 
 **What if an employee has been with us less than 52 weeks?**
-Coverboard uses however many paid weeks are available, up to 52. If an employee has 20 weeks of history, it averages over those 20 weeks.
+Coverboard uses however many paid weeks are available, up to 52, looking back a **maximum of 104 weeks** (the statutory cap — you don't reach back further than two years to make up the 52). If an employee has 20 weeks of history, it averages over those 20 weeks.
 
 **Does this apply to all holiday or just some of it?**
 Strictly speaking, UK law requires normal pay for the first 4 weeks of statutory leave (the Working Time Directive element). The remaining 1.6 weeks can be paid at basic rate. In practice, most employers apply the same rate to all holiday to avoid complexity — Coverboard does the same by default.
 
-**What about zero-hours workers?**
-Zero-hours workers often have highly variable earnings. The 52-week average is especially important for them — it is also the legally required method following the Harpur Trust v Brazel Supreme Court ruling in 2022.
+**What about zero-hours and irregular-hours workers?**
+Zero-hours workers often have highly variable earnings, so the 52-week average is especially important for holiday *pay*. Note that holiday *entitlement* for irregular-hours and zero-hours workers is separate: since April 2024 it accrues at **12.07% of hours worked** and is tracked in hours (see the UK statutory leave overview). The 52-week average here is about the *rate per hour/day*, not how much leave they get.
 
 **Can the employee see their own holiday pay rate?**
 Yes. From **Settings → Profile** every UK employee sees their own current daily holiday pay rate in a read-only summary card. They cannot see their colleagues' figures.

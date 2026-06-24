@@ -20,6 +20,8 @@
  *   • https://www.gov.uk/employers-maternity-pay-leave
  */
 
+import { UK_LEL_WEEKLY } from "@/lib/uk-compliance";
+
 const DEFAULT_SMP_FLAT_RATE = 194.32;
 
 /**
@@ -43,11 +45,15 @@ export const SMP_PHASE_2_WEEKS = 39;
  *
  * @param weeklyEarnings Array of (up to) 8 weeks of gross earnings.
  */
-export function calculateAWE(weeklyEarnings: number[]): number {
+export function calculateAWE(
+  weeklyEarnings: number[],
+  periodWeeks = 8
+): number {
   if (weeklyEarnings.length === 0) return 0;
-  const slice = weeklyEarnings.slice(-8);
+  const weeks = Math.max(1, Math.round(periodWeeks));
+  const slice = weeklyEarnings.slice(-weeks);
   const total = slice.reduce((sum, w) => sum + Number(w || 0), 0);
-  return Number((total / 8).toFixed(2));
+  return Number((total / weeks).toFixed(2));
 }
 
 export type SMPPhaseRates = {
@@ -72,6 +78,73 @@ export function calculateSMPPhaseRates(
   const phase1 = Number(ninetyPercent.toFixed(2));
   const phase2 = Number(Math.min(flatRate, ninetyPercent).toFixed(2));
   return { phase1Weekly: phase1, phase2Weekly: phase2 };
+}
+
+export type SmpEntitlement =
+  | { eligible: true; phase1Weekly: number; phase2Weekly: number }
+  | {
+      eligible: false;
+      reason:
+        | "Below Lower Earnings Limit"
+        | "Missing average weekly earnings"
+        | "Less than 26 weeks' continuous service";
+    };
+
+export type SmpEntitlementOpts = {
+  lelWeekly?: number;
+  flatRate?: number;
+  /** Employee's employment start date, for the continuous-service test. */
+  serviceStartDate?: Date | null;
+  /** Expected week of childbirth (due date), for the qualifying week. */
+  expectedDueDate?: Date | null;
+};
+
+/** Days from the expected due date back to the start of the qualifying week
+ *  (15 weeks) plus the 26 weeks of required continuous service. */
+const SMP_SERVICE_DAYS_BEFORE_DUE = (15 + 26) * 7; // 287
+
+/**
+ * SMP eligibility. Two statutory limbs:
+ *  1. Earnings test — AWE must be at least the Lower Earnings Limit (£129 for
+ *     2026/27). Below it the employee claims Maternity Allowance instead (SMP1).
+ *  2. Continuous-service test — 26 weeks' continuous employment into the
+ *     qualifying week (15 weeks before the expected due date). Only checked when
+ *     BOTH `serviceStartDate` and `expectedDueDate` are supplied; otherwise the
+ *     service limb is skipped (earnings-only) and left for the employer.
+ */
+export function calculateSmpEntitlement(
+  averageWeeklyEarnings: number | null | undefined,
+  opts: SmpEntitlementOpts = {}
+): SmpEntitlement {
+  const lelWeekly = opts.lelWeekly ?? UK_LEL_WEEKLY;
+  const flatRate = opts.flatRate ?? SMP_FLAT_RATE;
+
+  if (averageWeeklyEarnings === null || averageWeeklyEarnings === undefined) {
+    return { eligible: false, reason: "Missing average weekly earnings" };
+  }
+  if (Number(averageWeeklyEarnings) < lelWeekly) {
+    return { eligible: false, reason: "Below Lower Earnings Limit" };
+  }
+
+  if (opts.serviceStartDate && opts.expectedDueDate) {
+    // Must have started on/before (due date − 41 weeks) to have 26 weeks'
+    // continuous service into the qualifying week (due date − 15 weeks).
+    const mustStartBy = new Date(opts.expectedDueDate);
+    mustStartBy.setUTCDate(mustStartBy.getUTCDate() - SMP_SERVICE_DAYS_BEFORE_DUE);
+    if (opts.serviceStartDate > mustStartBy) {
+      return {
+        eligible: false,
+        reason: "Less than 26 weeks' continuous service",
+      };
+    }
+  }
+
+  const rates = calculateSMPPhaseRates(Number(averageWeeklyEarnings), flatRate);
+  return {
+    eligible: true,
+    phase1Weekly: rates.phase1Weekly,
+    phase2Weekly: rates.phase2Weekly,
+  };
 }
 
 export type SMPPhaseDates = {
@@ -180,13 +253,20 @@ export function isMaternityLeaveType(
 }
 
 /**
- * Pull the most recent 8 paid weeks of earnings ending at `beforeDate`
- * (exclusive) and compute AWE. Returns `null` when no earnings history
- * exists — the caller should surface a warning so payroll knows to
- * request the figure manually.
+ * Pull the 8-week relevant period of earnings ending at `beforeDate`
+ * (exclusive) and compute AWE for statutory payments (SMP/SAP/ShPP/SPP/SNCP and
+ * SSP). Returns `null` when no earnings history exists — the caller should
+ * surface a warning so payroll knows to request the figure manually.
  *
- * "Paid weeks" mirrors the holiday-pay exclusion: any week flagged
- * `isZeroPayWeek` is dropped.
+ * IMPORTANT: statutory AWE is NOT the holiday-pay average. Per HMRC, all weeks
+ * in the relevant period are included and **blank weeks count as zero pay** —
+ * the divisor stays at 8 (the number of weeks in the period). We therefore do
+ * NOT drop `isZeroPayWeek` rows here (that exclusion is the Working Time
+ * Regulations holiday-pay rule, handled separately in `holidayPay.ts`).
+ *
+ * Known limitation: for employees with fewer than 8 weeks of history (new
+ * starters) HMRC uses a smaller divisor; `calculateAWE` still divides by 8, so
+ * AWE is understated in that edge case until an employment-start date is tracked.
  */
 export async function getAweForUser(
   userId: string,
@@ -195,26 +275,40 @@ export async function getAweForUser(
   // Deferred require to keep smpCalculator testable without pulling the
   // Prisma client into node:test suites that stub the DB.
   const { prisma } = await import("@/lib/prisma");
-  const rows = await prisma.weeklyEarning.findMany({
-    where: {
-      userId,
-      weekStartDate: { lt: beforeDate },
-      isZeroPayWeek: false,
-    },
-    orderBy: { weekStartDate: "desc" },
-    take: 8,
-  });
+  const [rows, user] = await Promise.all([
+    prisma.weeklyEarning.findMany({
+      where: { userId, weekStartDate: { lt: beforeDate } },
+      orderBy: { weekStartDate: "desc" },
+      take: 8,
+    }),
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { serviceStartDate: true },
+    }),
+  ]);
   if (rows.length === 0) return null;
-  const earnings = rows
-    .map((r) => Number(r.grossEarnings))
-    .reverse();
-  return calculateAWE(earnings);
+
+  // New starters with <8 weeks of employment use a smaller divisor (the number
+  // of weeks employed) rather than the standard 8 — otherwise the average is
+  // understated (HMRC SPM170600). Established employees keep ÷8.
+  let periodWeeks = 8;
+  if (user?.serviceStartDate) {
+    const weeksEmployed = Math.floor(
+      (beforeDate.getTime() - user.serviceStartDate.getTime()) /
+        (7 * 24 * 60 * 60 * 1000)
+    );
+    if (weeksEmployed < 8) periodWeeks = Math.max(1, weeksEmployed);
+  }
+
+  const earnings = rows.map((r) => Number(r.grossEarnings)).reverse();
+  return calculateAWE(earnings, periodWeeks);
 }
 
 /**
- * Recompute average weekly earnings from `WeeklyEarning` rows (last 8 paid
- * weeks) and persist on `User.averageWeeklyEarnings` for SSP / reports.
- * Sets the field to `null` when there is no qualifying earnings history.
+ * Recompute average weekly earnings from the 8-week relevant period (blank
+ * weeks included as zero — see {@link getAweForUser}) and persist on
+ * `User.averageWeeklyEarnings` for SSP / SMP / neonatal / reports. Sets the
+ * field to `null` when there is no earnings history.
  */
 export async function syncUserAverageWeeklyEarnings(
   userId: string,

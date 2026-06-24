@@ -24,6 +24,12 @@ const updateSchema = z.object({
   department: z.string().max(100).nullable().optional(),
   countryCode: z.string().min(2).max(2).optional(),
   workCountry: z.string().trim().toUpperCase().length(2).nullable().optional(),
+  serviceStartDate: z
+    .string()
+    .date()
+    .transform((s) => new Date(s))
+    .nullable()
+    .optional(),
 }).transform((data) =>
   data.employmentType === "ZERO_HOURS"
     ? { ...data, daysWorkedPerWeek: 0 }

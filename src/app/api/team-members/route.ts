@@ -92,6 +92,7 @@ export async function POST(request: Request) {
       department,
       countryCode,
       workCountry,
+      serviceStartDate,
     } = parsed.data;
     const orgId = (session.user as Record<string, unknown>).organizationId as string;
 
@@ -160,6 +161,7 @@ export async function POST(request: Request) {
         department: department ?? null,
         countryCode,
         workCountry,
+        serviceStartDate: serviceStartDate ? new Date(serviceStartDate) : null,
         organizationId: orgId,
         // Invited members get their temp password emailed to this address, so
         // logging in already proves control of it — no separate verification

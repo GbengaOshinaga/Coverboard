@@ -16,7 +16,7 @@ import { trackServer } from "@/lib/analytics/server";
 import { getDailyHolidayPayRateForUser } from "@/lib/holidayPay";
 import {
   calculateSMPPhaseDates,
-  calculateSMPPhaseRates,
+  calculateSmpEntitlement,
   getAweForUser,
   isMaternityLeaveType,
   resolveAverageWeeklyEarnings,
@@ -48,7 +48,11 @@ export type CreateLeaveInput = {
   evidenceProvided?: boolean;
   kitDaysUsed?: number;
   splitDaysUsed?: number;
+  /** Hours to deduct (irregular/zero-hours workers). Derived if omitted. */
+  hoursBooked?: number;
   childBirthDate?: Date;
+  /** Expected week of childbirth (due date) — maternity, for the SMP service test. */
+  expectedDueDate?: Date;
   splCurtailmentConfirmed?: boolean;
   context?: AuditContext;
 };
@@ -113,6 +117,7 @@ export async function createLeaveRequest(
     kitDaysUsed,
     splitDaysUsed,
     childBirthDate,
+    expectedDueDate,
     splCurtailmentConfirmed,
     context,
   } = input;
@@ -161,8 +166,13 @@ export async function createLeaveRequest(
     return { ok: false, status: 400, error: "End date must be after start date" };
   }
 
-  // Check leave balance (warn but don't block)
+  // Check leave balance (warn but don't block). For irregular/zero-hours
+  // workers the relevant balance is measured in hours, so we resolve the hours
+  // this request costs (explicit input, or working-days × their average day)
+  // and warn in hours. `resolvedHoursBooked` is persisted on the request below;
+  // it stays null for day-based balances.
   let balanceWarning: string | null = null;
+  let resolvedHoursBooked: number | null = null;
   try {
     const requestedDays = countWeekdays(startDate, endDate);
     const balance = await getUserLeaveBalance(
@@ -170,24 +180,33 @@ export async function createLeaveRequest(
       leaveTypeId,
       startDate.getFullYear()
     );
-    if (balance && requestedDays > balance.remaining) {
+    if (balance?.unit === "hours") {
+      const avgHoursPerDay = balance.avgHoursPerDay ?? 0;
+      resolvedHoursBooked =
+        input.hoursBooked ?? Number((requestedDays * avgHoursPerDay).toFixed(2));
+      if (resolvedHoursBooked > balance.remaining) {
+        balanceWarning = `This request (${resolvedHoursBooked} hours) exceeds your remaining balance of ${balance.remaining.toFixed(1)} hours for ${balance.leaveTypeName}.`;
+      }
+    } else if (balance && requestedDays > balance.remaining) {
       balanceWarning = `This request (${requestedDays} days) exceeds your remaining balance of ${balance.remaining} days for ${balance.leaveTypeName}.`;
     }
   } catch {
     // Don't block request creation if balance check fails
   }
 
-  // ── Paternity leave: 56-day birth window ──────────────────────────
+  // ── Paternity leave: must fall within 52 weeks of birth/placement ──
+  // Post-2024 reform: leave can be taken any time in the first year (previously
+  // 56 days), and the two weeks may be non-consecutive (each booked separately).
   const isPaternityLeave = /paternity/i.test(leaveTypeConfig.name);
   if (isPaternityLeave && childBirthDate) {
     const windowEnd = new Date(childBirthDate);
-    windowEnd.setUTCDate(windowEnd.getUTCDate() + 56);
+    windowEnd.setUTCDate(windowEnd.getUTCDate() + 364); // 52 weeks
     if (startDate > windowEnd) {
       return {
         ok: false,
         status: 400,
         error:
-          "Paternity leave must start within 56 days of the child's birth or placement date",
+          "Paternity leave must start within 52 weeks of the child's birth or placement date",
       };
     }
   }
@@ -244,10 +263,22 @@ export async function createLeaveRequest(
   if (isMaternityLeaveType(leaveTypeConfig.name)) {
     try {
       smpAverageWeeklyEarnings = await getAweForUser(userId, startDate);
-      if (smpAverageWeeklyEarnings !== null) {
-        const rates = calculateSMPPhaseRates(smpAverageWeeklyEarnings);
-        smpPhase1WeeklyRate = rates.phase1Weekly;
-        smpPhase2WeeklyRate = rates.phase2Weekly;
+      const smpEmployee = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { serviceStartDate: true },
+      });
+      // Stamp SMP pay rates only when the employee passes BOTH statutory limbs:
+      // the earnings test (AWE ≥ LEL) and — when an expected due date is given —
+      // 26 weeks' continuous service into the qualifying week. Otherwise rates
+      // stay null (Maternity Allowance instead). Maternity LEAVE is a day-one
+      // right, so the dates are recorded regardless of pay eligibility.
+      const smpEntitlement = calculateSmpEntitlement(smpAverageWeeklyEarnings, {
+        serviceStartDate: smpEmployee?.serviceStartDate ?? null,
+        expectedDueDate,
+      });
+      if (smpEntitlement.eligible) {
+        smpPhase1WeeklyRate = smpEntitlement.phase1Weekly;
+        smpPhase2WeeklyRate = smpEntitlement.phase2Weekly;
       }
       const phases = calculateSMPPhaseDates(startDate);
       smpPhase1EndDate = phases.phase1EndDate;
@@ -308,6 +339,8 @@ export async function createLeaveRequest(
         averageWeeklyEarnings,
         sspDaysPaidInPeriod: cumulativePrior,
         qualifyingDaysPerWeek: employee.qualifyingDaysPerWeek,
+        // Pick pre- vs post-6-April-2026 SSP rules by the spell's start date.
+        onDate: startDate,
       });
 
       if (!entitlement.eligible) {
@@ -380,7 +413,9 @@ export async function createLeaveRequest(
       : evidenceProvided ?? false,
     kitDaysUsed: kitDaysUsed ?? 0,
     splitDaysUsed: splitDaysUsed ?? 0,
+    hoursBooked: resolvedHoursBooked ?? undefined,
     childBirthDate: childBirthDate ?? undefined,
+    expectedDueDate: expectedDueDate ?? undefined,
     splCurtailmentConfirmed: splCurtailmentConfirmed ?? false,
     dailyHolidayPayRate: dailyHolidayPayRate ?? undefined,
     sspDaysPaid,

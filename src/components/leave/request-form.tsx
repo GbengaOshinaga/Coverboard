@@ -44,6 +44,9 @@ type LeaveBalance = {
   used: number;
   pending: number;
   remaining: number;
+  unit?: "days" | "hours";
+  entitlementHours?: number;
+  avgHoursPerDay?: number;
 };
 
 export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveType[]; currentUserId?: string }) {
@@ -61,6 +64,11 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
   const [overlapLoading, setOverlapLoading] = useState(false);
   const [balances, setBalances] = useState<LeaveBalance[]>([]);
   const [balanceLoading, setBalanceLoading] = useState(true);
+  // Hours booked, for irregular/zero-hours workers whose balance is in hours.
+  const [hoursDraft, setHoursDraft] = useState("");
+  const [hoursEdited, setHoursEdited] = useState(false);
+  // Expected due date — maternity only, for the SMP service-test.
+  const [expectedDueDate, setExpectedDueDate] = useState("");
 
   // Fetch the user's leave balances on mount
   useEffect(() => {
@@ -103,11 +111,31 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
   );
 
   const isSspLeave = selectedLeaveType?.name.includes("SSP") ?? false;
+  const isMaternityLeave = /maternity/i.test(selectedLeaveType?.name ?? "");
 
   const requestedDays = useMemo(() => {
     if (!startDate || !endDate) return 0;
     return countWeekdays(new Date(startDate), new Date(endDate));
   }, [startDate, endDate]);
+
+  // Hours-based balances (irregular/zero-hours workers): the request deducts
+  // hours, defaulted to working days × their average day and editable.
+  const isHoursLeave = selectedBalance?.unit === "hours";
+  const defaultHours = useMemo(
+    () =>
+      requestedDays > 0
+        ? Number((requestedDays * (selectedBalance?.avgHoursPerDay ?? 0)).toFixed(1))
+        : 0,
+    [requestedDays, selectedBalance?.avgHoursPerDay]
+  );
+  const requestedHours = isHoursLeave ? parseFloat(hoursDraft) || 0 : 0;
+
+  // Keep the hours field tracking the date range until the user edits it.
+  useEffect(() => {
+    if (isHoursLeave && !hoursEdited) {
+      setHoursDraft(defaultHours > 0 ? String(defaultHours) : "");
+    }
+  }, [isHoursLeave, hoursEdited, defaultHours]);
 
   const checkOverlap = useCallback(async () => {
     if (!startDate || !endDate) return;
@@ -136,6 +164,7 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
   useEffect(() => {
     setSicknessNote("");
     setEvidenceProvided(false);
+    setHoursEdited(false);
   }, [leaveTypeId]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -173,6 +202,11 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
           note: note || undefined,
           sicknessNote: sicknessNote.trim() || undefined,
           evidenceProvided: needsEvidence ? hasEvidence : undefined,
+          hoursBooked: isHoursLeave ? requestedHours : undefined,
+          expectedDueDate:
+            isMaternityLeave && expectedDueDate
+              ? new Date(expectedDueDate).toISOString()
+              : undefined,
         }),
       });
 
@@ -200,10 +234,12 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
 
   const leaveTypeOptions = leaveTypes.map((lt) => {
     const bal = balances.find((b) => b.leaveTypeId === lt.id);
-    return {
-      value: lt.id,
-      label: bal ? `${lt.name} (${bal.remaining} days left)` : lt.name,
-    };
+    if (!bal) return { value: lt.id, label: lt.name };
+    const left =
+      bal.unit === "hours"
+        ? `${bal.remaining.toFixed(1)} hrs left`
+        : `${bal.remaining} days left`;
+    return { value: lt.id, label: `${lt.name} (${left})` };
   });
 
   return (
@@ -250,6 +286,48 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
         required
       />
 
+      {/* Expected due date — maternity, for SMP eligibility (qualifying week) */}
+      {isMaternityLeave && (
+        <div className="space-y-1">
+          <Input
+            id="expectedDueDate"
+            label="Expected due date"
+            type="date"
+            value={expectedDueDate}
+            onChange={(e) => setExpectedDueDate(e.target.value)}
+          />
+          <p className="text-xs text-gray-500">
+            Used to check Statutory Maternity Pay eligibility (26 weeks&apos;
+            service by the qualifying week). Optional.
+          </p>
+        </div>
+      )}
+
+      {/* Hours booked — irregular/zero-hours workers deduct holiday in hours */}
+      {isHoursLeave && startDate && endDate && requestedDays > 0 && (
+        <div className="space-y-1">
+          <Input
+            id="hoursBooked"
+            label="Hours to book"
+            type="number"
+            min="0"
+            step="0.5"
+            value={hoursDraft}
+            onChange={(e) => {
+              setHoursEdited(true);
+              setHoursDraft(e.target.value);
+            }}
+          />
+          <p className="text-xs text-gray-500">
+            Your holiday is tracked in hours. We&apos;ve estimated{" "}
+            {defaultHours} hours ({requestedDays} day
+            {requestedDays !== 1 ? "s" : ""} ×{" "}
+            {selectedBalance?.avgHoursPerDay?.toFixed(1)}h average) — adjust if
+            this leave covers different hours.
+          </p>
+        </div>
+      )}
+
       {sensitiveTone && (
         <div className="flex items-start gap-2 rounded-lg border border-brand-100 bg-brand-50/60 p-3 text-sm text-gray-700">
           <Heart className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" aria-hidden />
@@ -262,6 +340,7 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
         <BalanceIndicator
           balance={selectedBalance}
           requestedDays={requestedDays}
+          requestedHours={requestedHours}
           loading={balanceLoading}
         />
       )}

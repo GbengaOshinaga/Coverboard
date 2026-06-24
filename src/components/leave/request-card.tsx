@@ -26,6 +26,7 @@ type LeaveRequest = {
   note: string | null;
   createdAt: string;
   coverOverride?: boolean;
+  hoursBooked?: number | null;
   user: {
     id: string;
     name: string;
@@ -115,7 +116,9 @@ export function RequestCard({
             </span>
             <span className="text-xs text-gray-400">&middot;</span>
             <span className="text-xs text-gray-600">
-              {days} day{days !== 1 ? "s" : ""}
+              {request.hoursBooked != null
+                ? `${request.hoursBooked.toFixed(1)} hours`
+                : `${days} day${days !== 1 ? "s" : ""}`}
             </span>
           </div>
 

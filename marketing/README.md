@@ -16,6 +16,7 @@ plan-gating notes that are useful to customers but irrelevant to cold search tra
 | [GDPR and Employee Sickness Records (UK)](gdpr-sickness-records-uk.md) | `docs/gdpr-leave-data.md` | "GDPR sickness records" |
 | [Part-Time Holiday Entitlement (UK)](part-time-holiday-entitlement-uk.md) | *(derived from `docs/uk-statutory-leave-overview.md`)* | "part time holiday entitlement UK" |
 | [Irregular-Hours & Zero-Hours Holiday (UK, 2024 Rules)](irregular-hours-holiday-2024.md) | *(pairs with the `/tools` irregular-hours calculator)* | "zero hours holiday entitlement" |
+| [SSP Changes April 2026: What Employers Need to Do](ssp-changes-2026.md) | *(pairs with the `/tools` SSP calculator)* | "SSP changes 2026" |
 
 ## Notes
 

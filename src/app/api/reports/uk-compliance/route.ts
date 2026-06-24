@@ -9,6 +9,7 @@ import {
   calculateEstimatedSspCost,
   calculateSspPayableDays,
   calculateSspDailyRate,
+  calculateSspWeeklyRate,
 } from "@/lib/uk-compliance";
 import {
   getCurrentSMPPhase,
@@ -20,6 +21,7 @@ import {
   ukComplianceUnavailablePayload,
 } from "@/lib/uk-workforce";
 import { countWeekdays } from "@/lib/utils";
+import { isHoursAveragedEmploymentType } from "@/lib/employment-types";
 import { recordReadAudit, requestAuditContext } from "@/lib/audit";
 import type { AnyPlan } from "@/lib/plans";
 import {
@@ -107,15 +109,23 @@ export async function GET(request: Request) {
           startDate: { gte: new Date(new Date().getFullYear(), 0, 1) },
           endDate: { lte: new Date(new Date().getFullYear(), 11, 31, 23, 59, 59, 999) },
         },
-        select: { startDate: true, endDate: true },
+        select: { startDate: true, endDate: true, hoursBooked: true },
       });
-      const taken = balances.reduce((sum, r) => sum + countWeekdays(r.startDate, r.endDate), 0);
+      // Irregular/zero-hours workers take holiday in hours (every user here is
+      // already workCountry=GB), so report their usage in hours.
+      const isHours = isHoursAveragedEmploymentType(user.employmentType);
+      const taken = isHours
+        ? Number(
+            balances.reduce((sum, r) => sum + (r.hoursBooked ?? 0), 0).toFixed(1)
+          )
+        : balances.reduce((sum, r) => sum + countWeekdays(r.startDate, r.endDate), 0);
       return {
         userId: user.id,
         name: user.name,
         department: user.department,
         contractType: user.employmentType,
         taken,
+        unit: isHours ? "hours" : "days",
       };
     })
   );
@@ -137,7 +147,14 @@ export async function GET(request: Request) {
 
   const sspCurrent = users.flatMap((user) => {
     const qDays = user.qualifyingDaysPerWeek ?? 5;
-    const dailyRate = calculateSspDailyRate(qDays);
+    // Post-reform SSP rate is capped at 80% of AWE; fall back to the flat rate
+    // when earnings are unknown.
+    const weeklyRate = calculateSspWeeklyRate(
+      user.averageWeeklyEarnings === null
+        ? null
+        : Number(user.averageWeeklyEarnings)
+    );
+    const dailyRate = calculateSspDailyRate(qDays, weeklyRate);
     const maxDays = SSP_MAX_WEEKS * qDays;
     return user.leaveRequests
       .filter((r) => r.leaveType.name.includes("SSP") && r.endDate >= new Date())
@@ -156,7 +173,7 @@ export async function GET(request: Request) {
           estimatedCostToDate: calculateEstimatedSspCost(
             r.startDate,
             new Date(),
-            undefined,
+            weeklyRate,
             qDays
           ),
           sspDaysPaid: r.sspDaysPaid ?? 0,

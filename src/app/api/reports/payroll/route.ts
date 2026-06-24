@@ -3,11 +3,19 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { countWeekdays } from "@/lib/utils";
-import { getDailyHolidayPayRateForUser, isAnnualLeaveType } from "@/lib/holidayPay";
+import {
+  getDailyHolidayPayRateForUser,
+  getHourlyHolidayPayRateForUser,
+  isAnnualLeaveType,
+} from "@/lib/holidayPay";
 import {
   getCurrentSMPPhase,
   isMaternityLeaveType,
 } from "@/lib/smpCalculator";
+import {
+  isNeonatalCareLeaveType,
+  calculateNeonatalWeeklyRate,
+} from "@/lib/neonatalPay";
 import { buildPayrollHolidayRateFields } from "@/lib/payroll-export";
 import {
   parseExportFormat,
@@ -82,6 +90,7 @@ export async function GET(request: Request) {
           countryCode: true,
           workCountry: true,
           employmentType: true,
+          averageWeeklyEarnings: true,
         },
       },
       leaveType: {
@@ -101,6 +110,16 @@ export async function GET(request: Request) {
     return rate;
   }
 
+  // Irregular/zero-hours workers are paid by the hour, so their holiday pay uses
+  // an hourly rate (52-week earnings ÷ hours) applied to the hours booked.
+  const hourlyRateCache = new Map<string, number | null>();
+  async function hourlyRate(userId: string): Promise<number | null> {
+    if (hourlyRateCache.has(userId)) return hourlyRateCache.get(userId)!;
+    const rate = await getHourlyHolidayPayRateForUser(userId);
+    hourlyRateCache.set(userId, rate);
+    return rate;
+  }
+
   const referenceDate = to < new Date() ? to : new Date();
 
   const rows = await Promise.all(
@@ -112,18 +131,29 @@ export async function GET(request: Request) {
 
       const isAnnual = isAnnualLeaveType(r.leaveType.name);
       const isUkBased = r.user.workCountry === "GB";
+
+      // Hours-booked annual leave (irregular/zero-hours workers): pay is the
+      // hourly rate × hours, not a daily rate × days.
+      const hoursTaken = r.hoursBooked ?? null;
+      const isHoursRow = hoursTaken !== null && isAnnual && isUkBased;
+
       // Prisma Decimal → number, preserving null when absent.
       let dailyRate: number | null =
         r.dailyHolidayPayRate === null
           ? null
           : Number(r.dailyHolidayPayRate);
 
-      if (dailyRate === null && isAnnual && isUkBased) {
+      if (dailyRate === null && isAnnual && isUkBased && !isHoursRow) {
         dailyRate = await liveRate(r.userId);
       }
 
-      const estimatedPay =
-        isUkBased && dailyRate !== null
+      const hourly = isHoursRow ? await hourlyRate(r.userId) : null;
+
+      const estimatedPay = isHoursRow
+        ? hourly !== null
+          ? Number((hourly * (hoursTaken as number)).toFixed(2))
+          : null
+        : isUkBased && dailyRate !== null
           ? Number((dailyRate * daysTaken).toFixed(2))
           : null;
 
@@ -146,6 +176,29 @@ export async function GET(request: Request) {
           })
         : null;
 
+      // Neonatal Care Pay: a single weekly rate (lower of flat or 90% AWE) for
+      // up to 12 weeks. Computed live from the employee's AWE; weeks-in-period
+      // is the working days taken ÷ 5.
+      const neonatal =
+        isNeonatalCareLeaveType(r.leaveType.name) && isUkBased
+          ? (() => {
+              const awe =
+                r.user.averageWeeklyEarnings === null
+                  ? null
+                  : Number(r.user.averageWeeklyEarnings);
+              const weeklyRate = calculateNeonatalWeeklyRate(awe);
+              const weeksTaken = Number((daysTaken / 5).toFixed(2));
+              return {
+                weeklyRate: weeklyRate > 0 ? weeklyRate : null,
+                weeksTaken,
+                estimatedPay:
+                  weeklyRate > 0
+                    ? Number((weeklyRate * weeksTaken).toFixed(2))
+                    : null,
+              };
+            })()
+          : null;
+
       return {
         leaveRequestId: r.id,
         userId: r.userId,
@@ -160,12 +213,17 @@ export async function GET(request: Request) {
         startDate: r.startDate,
         endDate: r.endDate,
         daysTaken,
+        hoursTaken,
+        hourlyRate: hourly,
         ...buildPayrollHolidayRateFields({
           isUkBased,
           dailyRate,
           estimatedPay,
-          rateSource:
-            r.dailyHolidayPayRate !== null
+          rateSource: isHoursRow
+            ? hourly !== null
+              ? "recalculated"
+              : "not_applicable"
+            : r.dailyHolidayPayRate !== null
               ? "captured_at_booking"
               : isAnnual && dailyRate !== null
                 ? "recalculated"
@@ -192,6 +250,7 @@ export async function GET(request: Request) {
                   : Number(r.smpPhase2WeeklyRate),
             }
           : null,
+        neonatal,
       };
     })
   );
@@ -199,6 +258,9 @@ export async function GET(request: Request) {
   const totals = {
     rowCount: rows.length,
     totalDays: rows.reduce((s, r) => s + r.daysTaken, 0),
+    totalHours: Number(
+      rows.reduce((s, r) => s + (r.hoursTaken ?? 0), 0).toFixed(2)
+    ),
     totalEstimatedPay: Number(
       rows.reduce((s, r) => s + (r.estimatedPay ?? 0), 0).toFixed(2)
     ),
@@ -240,8 +302,16 @@ export async function GET(request: Request) {
     },
     { key: "daysTaken", header: "Days taken" },
     {
-      key: (r) => (r as Record<string, unknown>).dailyRate ?? null,
+      key: (r) => (r as Record<string, unknown>).hoursTaken ?? null,
+      header: "Hours taken",
+    },
+    {
+      key: (r) => (r as Record<string, unknown>).dailyHolidayPayRate ?? null,
       header: "Daily rate (£)",
+    },
+    {
+      key: (r) => (r as Record<string, unknown>).hourlyRate ?? null,
+      header: "Hourly rate (£)",
     },
     {
       key: (r) => (r as Record<string, unknown>).estimatedPay ?? null,
@@ -262,6 +332,14 @@ export async function GET(request: Request) {
     {
       key: (r) => r.smp?.averageWeeklyEarnings ?? null,
       header: "AWE (£)",
+    },
+    {
+      key: (r) => r.neonatal?.weeklyRate ?? null,
+      header: "Neonatal weekly rate (£)",
+    },
+    {
+      key: (r) => r.neonatal?.estimatedPay ?? null,
+      header: "Neonatal estimated pay (£)",
     },
   ];
 

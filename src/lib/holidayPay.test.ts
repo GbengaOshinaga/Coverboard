@@ -4,6 +4,7 @@ import {
   calculateHolidayPayRate,
   calculateHolidayPayRateForEmployee,
   calculateWeeklyHolidayPayRate,
+  calculateHourlyHolidayPayRate,
   isAnnualLeaveType,
   type WeeklyEarning,
 } from "@/lib/holidayPay";
@@ -92,6 +93,25 @@ test("looks past zero-pay weeks to reach 52 paid weeks", () => {
   assert.equal(calculateHolidayPayRate(weeks), 95.38);
 });
 
+test("does not look back beyond the 104-week cap for paid weeks", () => {
+  // 20 old paid weeks at £9,999 (>104 weeks ago) must be ignored. The most
+  // recent 104 weeks hold 64 zero-pay weeks then 40 paid weeks at £300.
+  let i = 0;
+  const old = Array.from({ length: 20 }, () =>
+    week(`2024-01-0${(i++ % 9) + 1}`, 9999)
+  );
+  const recentZero = Array.from({ length: 64 }, () =>
+    week(`2025-06-0${(i++ % 9) + 1}`, 0, { is_zero_pay_week: true })
+  );
+  const recentPaid = Array.from({ length: 40 }, () =>
+    week(`2026-01-0${(i++ % 9) + 1}`, 300)
+  );
+  const weeks = [...old, ...recentZero, ...recentPaid];
+  // With the cap: only the 40 recent paid weeks count → 300/wk ÷ 5 = £60/day.
+  // Without it, the £9,999 weeks would leak in and inflate the average.
+  assert.equal(calculateHolidayPayRate(weeks), 60);
+});
+
 test("includes overtime and commission in the average", () => {
   // A worker on £400 basic with two weeks of overtime at £600.
   // The test confirms the calculator uses *gross_earnings* rather than any
@@ -152,4 +172,32 @@ test("calculateHolidayPayRateForEmployee returns null for non-GB employee", asyn
   } finally {
     (prisma.user as unknown as { findUnique: unknown }).findUnique = original;
   }
+});
+
+// ─── Hourly holiday pay rate (irregular/zero-hours workers) ───────────
+
+test("hourly rate = total earnings ÷ total hours over paid weeks", () => {
+  // 2 weeks: £300/30h and £500/40h → 800 / 70 = £11.43/h
+  const rate = calculateHourlyHolidayPayRate([
+    week("2026-01-05", 300, { hours_worked: 30 }),
+    week("2026-01-12", 500, { hours_worked: 40 }),
+  ]);
+  assert.equal(rate, 11.43);
+});
+
+test("hourly rate excludes zero-pay weeks", () => {
+  const rate = calculateHourlyHolidayPayRate([
+    week("2026-01-05", 400, { hours_worked: 40 }),
+    week("2026-01-12", 0, { hours_worked: 0, is_zero_pay_week: true }),
+  ]);
+  // Only the paid week counts: 400 / 40 = £10/h
+  assert.equal(rate, 10);
+});
+
+test("hourly rate is 0 with no earnings or no hours", () => {
+  assert.equal(calculateHourlyHolidayPayRate([]), 0);
+  assert.equal(
+    calculateHourlyHolidayPayRate([week("2026-01-05", 100, { hours_worked: 0 })]),
+    0
+  );
 });

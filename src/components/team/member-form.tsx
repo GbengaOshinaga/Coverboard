@@ -20,6 +20,7 @@ type MemberData = {
   department?: string;
   countryCode: string;
   workCountry: string;
+  serviceStartDate?: string | null;
 };
 
 const roleOptions = [
@@ -71,6 +72,11 @@ export function MemberForm({
   );
   const [fteRatio, setFteRatio] = useState(String(initialData?.fteRatio ?? 1));
   const [department, setDepartment] = useState(initialData?.department ?? "");
+  const [serviceStartDate, setServiceStartDate] = useState(
+    initialData?.serviceStartDate
+      ? initialData.serviceStartDate.slice(0, 10)
+      : ""
+  );
   const [rightToWorkVerified, setRightToWorkVerified] = useState<string>(
     initialData?.rightToWorkVerified === null || initialData?.rightToWorkVerified === undefined
       ? "unknown"
@@ -104,6 +110,7 @@ export function MemberForm({
         department: department.trim() || undefined,
         countryCode,
         workCountry,
+        serviceStartDate: serviceStartDate || null,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -212,6 +219,13 @@ export function MemberForm({
           value={department}
           onChange={(e) => setDepartment(e.target.value)}
           placeholder="Engineering"
+        />
+        <Input
+          id="serviceStartDate"
+          label="Employment start date"
+          type="date"
+          value={serviceStartDate}
+          onChange={(e) => setServiceStartDate(e.target.value)}
         />
       </div>
 

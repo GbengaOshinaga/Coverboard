@@ -42,6 +42,23 @@ function isUkWorkCountry(workCountry: string | null | undefined): boolean {
 const WORKING_DAYS_PER_WEEK = 5;
 
 /**
+ * Statutory holiday-pay reference period: up to 52 *paid* weeks, looking back a
+ * maximum of 104 weeks (Working Time Regulations, as amended 2020). Paid weeks
+ * are taken from within this window only — you do not reach back beyond 104
+ * weeks to make up 52, even if earlier paid weeks exist.
+ */
+const HOLIDAY_PAY_MAX_LOOKBACK_WEEKS = 104;
+const HOLIDAY_PAY_REFERENCE_WEEKS = 52;
+
+/** Most recent ≤52 paid weeks within the 104-week lookback (oldest → newest in). */
+function referencePaidWeeks(weeklyEarnings: WeeklyEarning[]): WeeklyEarning[] {
+  return weeklyEarnings
+    .slice(-HOLIDAY_PAY_MAX_LOOKBACK_WEEKS)
+    .filter((w) => !w.is_zero_pay_week)
+    .slice(-HOLIDAY_PAY_REFERENCE_WEEKS);
+}
+
+/**
  * Return the employee's average **daily** holiday pay rate (£) based on the
  * most recent 52 paid weeks.
  *
@@ -55,9 +72,7 @@ const WORKING_DAYS_PER_WEEK = 5;
 export function calculateHolidayPayRate(
   weeklyEarnings: WeeklyEarning[]
 ): number {
-  const paidWeeks = weeklyEarnings
-    .filter((w) => !w.is_zero_pay_week)
-    .slice(-52);
+  const paidWeeks = referencePaidWeeks(weeklyEarnings);
 
   if (paidWeeks.length === 0) return 0;
 
@@ -92,6 +107,34 @@ export async function calculateHolidayPayRateForEmployee(
 }
 
 /**
+ * Average **hourly** holiday pay rate (£) for irregular/zero-hours workers:
+ * total gross earnings divided by total hours worked across the most recent 52
+ * paid weeks. This is the right basis for workers whose holiday accrues and is
+ * paid in hours (the 12.07% method), where a per-day rate is meaningless.
+ *
+ * Zero-pay weeks are excluded (same as the daily rate). Returns `0` when no
+ * paid hours are available — the caller falls back / surfaces a warning.
+ */
+export function calculateHourlyHolidayPayRate(
+  weeklyEarnings: WeeklyEarning[]
+): number {
+  const paidWeeks = referencePaidWeeks(weeklyEarnings);
+  if (paidWeeks.length === 0) return 0;
+
+  const totalEarnings = paidWeeks.reduce(
+    (sum, w) => sum + Number(w.gross_earnings),
+    0
+  );
+  const totalHours = paidWeeks.reduce(
+    (sum, w) => sum + Number(w.hours_worked ?? 0),
+    0
+  );
+  if (totalHours <= 0) return 0;
+
+  return Number((totalEarnings / totalHours).toFixed(2));
+}
+
+/**
  * Same logic as {@link calculateHolidayPayRate} but returns the weekly
  * average rather than the per-day figure. Useful when converting for a
  * custom working-pattern.
@@ -99,9 +142,7 @@ export async function calculateHolidayPayRateForEmployee(
 export function calculateWeeklyHolidayPayRate(
   weeklyEarnings: WeeklyEarning[]
 ): number {
-  const paidWeeks = weeklyEarnings
-    .filter((w) => !w.is_zero_pay_week)
-    .slice(-52);
+  const paidWeeks = referencePaidWeeks(weeklyEarnings);
   if (paidWeeks.length === 0) return 0;
   const total = paidWeeks.reduce((sum, w) => sum + Number(w.gross_earnings), 0);
   return Number((total / paidWeeks.length).toFixed(2));
@@ -115,9 +156,7 @@ export function calculateWeeklyHolidayPayRate(
  * Prisma `Decimal` values are coerced to `number` here; we keep two decimal
  * places via {@link calculateHolidayPayRate}'s `toFixed(2)`.
  */
-export async function getDailyHolidayPayRateForUser(
-  userId: string
-): Promise<number | null> {
+async function loadUserWeeks(userId: string): Promise<WeeklyEarning[] | null> {
   const employee = await prisma.user.findUnique({
     where: { id: userId },
     select: { workCountry: true },
@@ -129,17 +168,32 @@ export async function getDailyHolidayPayRateForUser(
     orderBy: { weekStartDate: "asc" },
     take: 260,
   });
-
   if (rows.length === 0) return null;
 
-  const weeks: WeeklyEarning[] = rows.map((r) => ({
+  return rows.map((r) => ({
     week_start_date: r.weekStartDate,
     gross_earnings: Number(r.grossEarnings),
     hours_worked: Number(r.hoursWorked),
     is_zero_pay_week: r.isZeroPayWeek,
   }));
+}
 
-  return calculateHolidayPayRate(weeks);
+export async function getDailyHolidayPayRateForUser(
+  userId: string
+): Promise<number | null> {
+  const weeks = await loadUserWeeks(userId);
+  return weeks === null ? null : calculateHolidayPayRate(weeks);
+}
+
+/**
+ * Average hourly holiday pay rate for an irregular/zero-hours worker, from their
+ * 52-week earnings history. UK-gated; `null` when no earnings/work location.
+ */
+export async function getHourlyHolidayPayRateForUser(
+  userId: string
+): Promise<number | null> {
+  const weeks = await loadUserWeeks(userId);
+  return weeks === null ? null : calculateHourlyHolidayPayRate(weeks);
 }
 
 /**

@@ -79,6 +79,7 @@ type UKReport = {
     taken: number;
     department: string | null;
     contractType: string;
+    unit?: "days" | "hours";
   }>;
   absenceTrigger: { threshold: number; rows: BradfordRow[] };
   sspLiability: Array<{
@@ -130,7 +131,9 @@ type PayrollRow = {
   startDate: string;
   endDate: string;
   daysTaken: number;
+  hoursTaken?: number | null;
   dailyHolidayPayRate?: number | null;
+  hourlyRate?: number | null;
   estimatedPay?: number | null;
   rateSource?:
     | "captured_at_booking"
@@ -145,6 +148,7 @@ type PayrollReport = {
   totals: {
     rowCount: number;
     totalDays: number;
+    totalHours: number;
     totalEstimatedPay: number;
   };
 };
@@ -161,10 +165,12 @@ type PayrollCsvBaseRow = {
   startDate: string;
   endDate: string;
   daysTaken: number;
+  hoursTaken: string;
 };
 
 type PayrollCsvFullRow = PayrollCsvBaseRow & {
   dailyHolidayPayRate: string;
+  hourlyRate: string;
   estimatedPay: string;
   rateSource: string;
 };
@@ -326,7 +332,7 @@ export default function ReportsPage() {
   function exportPayrollCsv() {
     if (!payrollReport) return;
     const includeHolidayRateColumns = payrollReport.rows.some(
-      (r) => r.dailyHolidayPayRate !== undefined
+      (r) => r.dailyHolidayPayRate !== undefined || r.hourlyRate != null
     );
     const payrollCsvBaseColumns: { key: keyof PayrollCsvBaseRow; label: string }[] =
       [
@@ -341,15 +347,17 @@ export default function ReportsPage() {
         { key: "startDate", label: "Start" },
         { key: "endDate", label: "End" },
         { key: "daysTaken", label: "Days taken" },
+        { key: "hoursTaken", label: "Hours taken" },
       ];
     const payrollCsvHolidayColumns: {
       key: keyof Pick<
         PayrollCsvFullRow,
-        "dailyHolidayPayRate" | "estimatedPay" | "rateSource"
+        "dailyHolidayPayRate" | "hourlyRate" | "estimatedPay" | "rateSource"
       >;
       label: string;
     }[] = [
       { key: "dailyHolidayPayRate", label: "Daily holiday pay rate (\u00a3)" },
+      { key: "hourlyRate", label: "Hourly holiday pay rate (\u00a3)" },
       { key: "estimatedPay", label: "Estimated pay (\u00a3)" },
       { key: "rateSource", label: "Rate source" },
     ];
@@ -366,15 +374,17 @@ export default function ReportsPage() {
       startDate: r.startDate.slice(0, 10),
       endDate: r.endDate.slice(0, 10),
       daysTaken: r.daysTaken,
+      hoursTaken: r.hoursTaken == null ? "" : String(r.hoursTaken),
     });
 
     if (includeHolidayRateColumns) {
       const rows: PayrollCsvFullRow[] = payrollReport.rows.map((r) => {
         const base = toBaseRow(r);
-        if (r.dailyHolidayPayRate === undefined) {
+        if (r.dailyHolidayPayRate === undefined && r.hourlyRate == null) {
           return {
             ...base,
             dailyHolidayPayRate: "",
+            hourlyRate: "",
             estimatedPay: "",
             rateSource: "",
           };
@@ -385,6 +395,7 @@ export default function ReportsPage() {
             r.dailyHolidayPayRate == null
               ? ""
               : r.dailyHolidayPayRate.toFixed(2),
+          hourlyRate: r.hourlyRate == null ? "" : r.hourlyRate.toFixed(2),
           estimatedPay: r.estimatedPay == null ? "" : r.estimatedPay.toFixed(2),
           rateSource: r.rateSource ?? "",
         };
@@ -1114,7 +1125,7 @@ export default function ReportsPage() {
                           <th className="pb-2 pr-4">Employee</th>
                           <th className="pb-2 pr-4">Department</th>
                           <th className="pb-2 pr-4">Contract</th>
-                          <th className="pb-2 text-right">Days taken</th>
+                          <th className="pb-2 text-right">Taken (YTD)</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1133,7 +1144,9 @@ export default function ReportsPage() {
                               {row.contractType.replace("_", " ").toLowerCase()}
                             </td>
                             <td className="py-2.5 text-right font-mono font-medium">
-                              {row.taken}
+                              {row.unit === "hours"
+                                ? `${row.taken} hrs`
+                                : row.taken}
                             </td>
                           </tr>
                         ))}
@@ -1649,7 +1662,7 @@ export default function ReportsPage() {
                 </div>
 
                 {payrollReport && (
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <div className="rounded-md border border-gray-100 bg-gray-50 p-3">
                       <p className="text-xs text-gray-500">Rows</p>
                       <p className="text-lg font-semibold text-gray-900">
@@ -1660,6 +1673,12 @@ export default function ReportsPage() {
                       <p className="text-xs text-gray-500">Total days</p>
                       <p className="text-lg font-semibold text-gray-900">
                         {payrollReport.totals.totalDays}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-gray-100 bg-gray-50 p-3">
+                      <p className="text-xs text-gray-500">Total hours</p>
+                      <p className="text-lg font-semibold text-gray-900">
+                        {payrollReport.totals.totalHours}
                       </p>
                     </div>
                     <div className="rounded-md border border-gray-100 bg-gray-50 p-3">
@@ -1690,8 +1709,8 @@ export default function ReportsPage() {
                           <th className="pb-2 pr-4">Employee</th>
                           <th className="pb-2 pr-4">Leave type</th>
                           <th className="pb-2 pr-4">Dates</th>
-                          <th className="pb-2 pr-4 text-right">Days</th>
-                          <th className="pb-2 pr-4 text-right">Daily rate</th>
+                          <th className="pb-2 pr-4 text-right">Taken</th>
+                          <th className="pb-2 pr-4 text-right">Rate</th>
                           <th className="pb-2 pr-4 text-right">Est. pay</th>
                           <th className="pb-2">Source</th>
                         </tr>
@@ -1728,12 +1747,18 @@ export default function ReportsPage() {
                               )}
                             </td>
                             <td className="py-2 pr-4 text-right text-gray-700">
-                              {row.daysTaken}
+                              {row.hoursTaken != null
+                                ? `${row.hoursTaken} hrs`
+                                : row.daysTaken}
                             </td>
                             <td className="py-2 pr-4 text-right text-gray-700">
-                              {row.dailyHolidayPayRate == null
-                                ? "—"
-                                : `£${row.dailyHolidayPayRate.toFixed(2)}`}
+                              {row.hoursTaken != null
+                                ? row.hourlyRate == null
+                                  ? "—"
+                                  : `£${row.hourlyRate.toFixed(2)}/hr`
+                                : row.dailyHolidayPayRate == null
+                                  ? "—"
+                                  : `£${row.dailyHolidayPayRate.toFixed(2)}`}
                             </td>
                             <td className="py-2 pr-4 text-right font-medium text-gray-900">
                               {row.estimatedPay == null

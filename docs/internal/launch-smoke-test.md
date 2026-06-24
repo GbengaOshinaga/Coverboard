@@ -168,7 +168,7 @@ Skip if Slack isn't connected on staging. Web and Slack approvals share one core
 This step needs an SSP leave large enough to trip the 28-week cap. The easiest path: submit a long sickness leave for the member that exceeds `28 × qualifyingDaysPerWeek` days.
 
 **Preflight:**
-- Confirm the member's `qualifyingDaysPerWeek = 5` (default). Add at least 8 weeks of paid `WeeklyEarning` history in **Settings → Holiday pay earnings** (or via `POST /api/weekly-earnings`) so `User.averageWeeklyEarnings` is auto-synced above the LEL (£125+). If earnings history is missing, SSP returns `Missing average weekly earnings`.
+- Confirm the member's `qualifyingDaysPerWeek = 5` (default). Add at least 8 weeks of paid `WeeklyEarning` history in **Settings → Holiday pay earnings** (or via `POST /api/weekly-earnings`) so `User.averageWeeklyEarnings` is set. Since the 6 April 2026 SSP reform there is no Lower Earnings Limit gate: SSP is payable from day 1 with no waiting days, and the daily rate is the lower of the flat rate or 80% of AWE. With no earnings history the employee is still eligible, paid at the flat rate.
 - Pick start/end dates that span ~30 working weeks (e.g. start = today, end = today + 210 days). For a 5-day qualifying week, anything over 140 payable working days will reach the cap.
 
 **Do:**
