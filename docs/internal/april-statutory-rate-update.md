@@ -14,7 +14,7 @@ UK statutory pay rates change every tax year on **6 April**. Coverboard's SSP, S
 | `SSP_WEEKLY_RATE` | Statutory Sick Pay weekly rate | `123.25` |
 | `SMP_WEEKLY_RATE` | Statutory Maternity Pay flat weekly rate (also used for SAP/SPP/ShPP via the same flat rate) | `194.32` |
 | `SMP_FLAT_RATE` | Optional alias for `SMP_WEEKLY_RATE` consumed by the SMP phase calculator — set either one. If both are set, `SMP_FLAT_RATE` wins. | `194.32` |
-| `LEL_WEEKLY` | Lower Earnings Limit — employees with average weekly earnings below this floor are **not** entitled to SSP at all | `125` |
+| `LEL_WEEKLY` | Lower Earnings Limit. **No longer gates SSP** (the SSP reform removed the earnings floor from 6 April 2026); still used as the SMP/SAP/SPP/ShPP/neonatal earnings-eligibility threshold | `129` |
 
 If you don't set these, the defaults above are used. The defaults are kept current in the code at release time, but Vercel env vars are the right place to update them annually so you're not waiting on a code deploy.
 
@@ -28,7 +28,9 @@ HMRC publishes the new tax-year rates in late winter / early spring before they 
 - **SMP/SAP/SPP/ShPP flat rate** — https://www.gov.uk/maternity-pay-leave/pay (and the equivalent paternity / adoption / shared parental pages)
 - **Lower Earnings Limit (LEL)** — https://www.gov.uk/government/publications/rates-and-allowances-national-insurance-contributions (look for "Class 1 NICs lower earnings limit, primary threshold")
 
-> The LEL is held for some tax years (it was £125 for both 2025/26 and 2026/27, for example). If HMRC publishes the same number, you can leave `LEL_WEEKLY` unchanged — but bump the "last reviewed" date in your records anyway so future-you knows it was actually checked.
+> The LEL can be held across tax years. If HMRC publishes the same number, you can leave `LEL_WEEKLY` unchanged — but bump the "last reviewed" date in your records anyway so future-you knows it was actually checked.
+>
+> **Note (SSP reform, 6 April 2026):** SSP no longer uses the LEL at all, and the SSP rate is now the lower of `SSP_WEEKLY_RATE` or **80% of the employee's average weekly earnings**. `LEL_WEEKLY` now only affects SMP/SAP/SPP/ShPP/neonatal eligibility.
 
 ---
 

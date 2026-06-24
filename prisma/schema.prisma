@@ -217,6 +217,9 @@ model LeaveRequest {
   hoursBooked              Float?
   sicknessNote             String?
   childBirthDate           DateTime?   @db.Date
+  // Expected week of childbirth (due date) for maternity — drives the SMP
+  // 26-week continuous-service / qualifying-week eligibility test.
+  expectedDueDate          DateTime?   @db.Date
   splCurtailmentConfirmed  Boolean     @default(false)
   dailyHolidayPayRate      Decimal?    @db.Decimal(10, 2)
   sspDaysPaid              Int         @default(0)

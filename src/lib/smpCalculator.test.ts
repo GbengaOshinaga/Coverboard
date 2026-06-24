@@ -5,6 +5,7 @@ import {
   calculateAWE,
   calculateSMPPhaseDates,
   calculateSMPPhaseRates,
+  calculateSmpEntitlement,
   getCurrentSMPPhase,
   isMaternityLeaveType,
 } from "@/lib/smpCalculator";
@@ -37,12 +38,83 @@ test("AWE uses only the most recent 8 weeks when more are supplied", () => {
   assert.equal(awe, 500);
 });
 
-test("AWE includes a zero-earning week in the /8 divisor (no auto-exclusion)", () => {
-  // The spec divides by 8 regardless — callers are responsible for
-  // filtering zero-pay weeks before passing earnings in.
+test("AWE includes a zero-earning week as zero in the /8 divisor", () => {
+  // Statutory AWE rule (HMRC): blank weeks are included as zero pay and the
+  // divisor stays at 8 — they are NOT excluded the way holiday-pay weeks are.
+  // (getAweForUser must therefore pass zero-pay weeks through, not filter them.)
   const awe = calculateAWE([500, 500, 500, 500, 500, 500, 500, 0]);
-  // Total = 3500 → /8 = 437.5
+  // Total = 3500 → /8 = 437.5  (excluding the zero week would wrongly give 500)
   assert.equal(awe, 437.5);
+});
+
+// ─── AWE new-starter divisor ───────────────────────────────────────────
+
+test("AWE divides by the relevant-period length for new starters", () => {
+  // 5 weeks of £400 over a 5-week period → £400 (not £250 from ÷8)
+  assert.equal(calculateAWE([400, 400, 400, 400, 400], 5), 400);
+  // Same earnings but the standard 8-week divisor → understated £250
+  assert.equal(calculateAWE([400, 400, 400, 400, 400], 8), 250);
+});
+
+// ─── SMP eligibility — earnings test ───────────────────────────────────
+
+test("SMP eligible when AWE is at or above the LEL", () => {
+  const r = calculateSmpEntitlement(500, { lelWeekly: 129 });
+  assert.equal(r.eligible, true);
+  if (r.eligible) {
+    assert.equal(r.phase1Weekly, calculateSMPPhaseRates(500).phase1Weekly);
+    assert.equal(r.phase2Weekly, calculateSMPPhaseRates(500).phase2Weekly);
+  }
+});
+
+test("SMP eligible exactly at the LEL (inclusive boundary)", () => {
+  const r = calculateSmpEntitlement(129, { lelWeekly: 129 });
+  assert.equal(r.eligible, true);
+});
+
+test("SMP not eligible below the LEL (would claim Maternity Allowance)", () => {
+  const r = calculateSmpEntitlement(100, { lelWeekly: 129 });
+  assert.equal(r.eligible, false);
+  if (!r.eligible) assert.equal(r.reason, "Below Lower Earnings Limit");
+});
+
+test("SMP not eligible when AWE is missing", () => {
+  const r = calculateSmpEntitlement(null, { lelWeekly: 129 });
+  assert.equal(r.eligible, false);
+  if (!r.eligible) assert.equal(r.reason, "Missing average weekly earnings");
+});
+
+// ─── SMP eligibility — 26-week continuous-service test ─────────────────
+
+test("SMP service test passes with long enough service before the qualifying week", () => {
+  const due = new Date("2026-12-01");
+  const r = calculateSmpEntitlement(500, {
+    lelWeekly: 129,
+    expectedDueDate: due,
+    serviceStartDate: new Date("2025-06-01"), // ~18 months before → eligible
+  });
+  assert.equal(r.eligible, true);
+});
+
+test("SMP service test fails when hired too close to the qualifying week", () => {
+  const due = new Date("2026-12-01");
+  const r = calculateSmpEntitlement(500, {
+    lelWeekly: 129,
+    expectedDueDate: due,
+    serviceStartDate: new Date("2026-09-01"), // only ~3 months before due → fails
+  });
+  assert.equal(r.eligible, false);
+  if (!r.eligible) {
+    assert.equal(r.reason, "Less than 26 weeks' continuous service");
+  }
+});
+
+test("SMP service test is skipped (earnings-only) when no due date is given", () => {
+  const r = calculateSmpEntitlement(500, {
+    lelWeekly: 129,
+    serviceStartDate: new Date("2026-11-01"), // recent, but no due date → not checked
+  });
+  assert.equal(r.eligible, true);
 });
 
 // ─── Phase rates ───────────────────────────────────────────────────────

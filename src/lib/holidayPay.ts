@@ -42,6 +42,23 @@ function isUkWorkCountry(workCountry: string | null | undefined): boolean {
 const WORKING_DAYS_PER_WEEK = 5;
 
 /**
+ * Statutory holiday-pay reference period: up to 52 *paid* weeks, looking back a
+ * maximum of 104 weeks (Working Time Regulations, as amended 2020). Paid weeks
+ * are taken from within this window only — you do not reach back beyond 104
+ * weeks to make up 52, even if earlier paid weeks exist.
+ */
+const HOLIDAY_PAY_MAX_LOOKBACK_WEEKS = 104;
+const HOLIDAY_PAY_REFERENCE_WEEKS = 52;
+
+/** Most recent ≤52 paid weeks within the 104-week lookback (oldest → newest in). */
+function referencePaidWeeks(weeklyEarnings: WeeklyEarning[]): WeeklyEarning[] {
+  return weeklyEarnings
+    .slice(-HOLIDAY_PAY_MAX_LOOKBACK_WEEKS)
+    .filter((w) => !w.is_zero_pay_week)
+    .slice(-HOLIDAY_PAY_REFERENCE_WEEKS);
+}
+
+/**
  * Return the employee's average **daily** holiday pay rate (£) based on the
  * most recent 52 paid weeks.
  *
@@ -55,9 +72,7 @@ const WORKING_DAYS_PER_WEEK = 5;
 export function calculateHolidayPayRate(
   weeklyEarnings: WeeklyEarning[]
 ): number {
-  const paidWeeks = weeklyEarnings
-    .filter((w) => !w.is_zero_pay_week)
-    .slice(-52);
+  const paidWeeks = referencePaidWeeks(weeklyEarnings);
 
   if (paidWeeks.length === 0) return 0;
 
@@ -103,9 +118,7 @@ export async function calculateHolidayPayRateForEmployee(
 export function calculateHourlyHolidayPayRate(
   weeklyEarnings: WeeklyEarning[]
 ): number {
-  const paidWeeks = weeklyEarnings
-    .filter((w) => !w.is_zero_pay_week)
-    .slice(-52);
+  const paidWeeks = referencePaidWeeks(weeklyEarnings);
   if (paidWeeks.length === 0) return 0;
 
   const totalEarnings = paidWeeks.reduce(
@@ -129,9 +142,7 @@ export function calculateHourlyHolidayPayRate(
 export function calculateWeeklyHolidayPayRate(
   weeklyEarnings: WeeklyEarning[]
 ): number {
-  const paidWeeks = weeklyEarnings
-    .filter((w) => !w.is_zero_pay_week)
-    .slice(-52);
+  const paidWeeks = referencePaidWeeks(weeklyEarnings);
   if (paidWeeks.length === 0) return 0;
   const total = paidWeeks.reduce((sum, w) => sum + Number(w.gross_earnings), 0);
   return Number((total / paidWeeks.length).toFixed(2));

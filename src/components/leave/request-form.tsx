@@ -67,6 +67,8 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
   // Hours booked, for irregular/zero-hours workers whose balance is in hours.
   const [hoursDraft, setHoursDraft] = useState("");
   const [hoursEdited, setHoursEdited] = useState(false);
+  // Expected due date — maternity only, for the SMP service-test.
+  const [expectedDueDate, setExpectedDueDate] = useState("");
 
   // Fetch the user's leave balances on mount
   useEffect(() => {
@@ -109,6 +111,7 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
   );
 
   const isSspLeave = selectedLeaveType?.name.includes("SSP") ?? false;
+  const isMaternityLeave = /maternity/i.test(selectedLeaveType?.name ?? "");
 
   const requestedDays = useMemo(() => {
     if (!startDate || !endDate) return 0;
@@ -200,6 +203,10 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
           sicknessNote: sicknessNote.trim() || undefined,
           evidenceProvided: needsEvidence ? hasEvidence : undefined,
           hoursBooked: isHoursLeave ? requestedHours : undefined,
+          expectedDueDate:
+            isMaternityLeave && expectedDueDate
+              ? new Date(expectedDueDate).toISOString()
+              : undefined,
         }),
       });
 
@@ -278,6 +285,23 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
         onChange={(e) => setLeaveTypeId(e.target.value)}
         required
       />
+
+      {/* Expected due date — maternity, for SMP eligibility (qualifying week) */}
+      {isMaternityLeave && (
+        <div className="space-y-1">
+          <Input
+            id="expectedDueDate"
+            label="Expected due date"
+            type="date"
+            value={expectedDueDate}
+            onChange={(e) => setExpectedDueDate(e.target.value)}
+          />
+          <p className="text-xs text-gray-500">
+            Used to check Statutory Maternity Pay eligibility (26 weeks&apos;
+            service by the qualifying week). Optional.
+          </p>
+        </div>
+      )}
 
       {/* Hours booked — irregular/zero-hours workers deduct holiday in hours */}
       {isHoursLeave && startDate && endDate && requestedDays > 0 && (
