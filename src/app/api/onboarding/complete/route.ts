@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import {
   getCountryPolicies,
   getHolidaysForYear,
+  BASE_LEAVE_TYPES,
 } from "@/lib/country-policies";
 import { enableUkStatutoryLeaveTypes } from "@/lib/uk-statutory";
 import { AnalyticsEvents } from "@/lib/analytics/events";
@@ -61,11 +62,7 @@ export async function POST(request: Request) {
       data: { countryCode: countries[0], workCountry: countries[0] },
     });
 
-    const defaultLeaveTypes = [
-      { name: "Annual Leave", color: "#3b82f6", isPaid: true, defaultDays: 20 },
-      { name: "Sick Leave", color: "#ef4444", isPaid: true, defaultDays: 10 },
-      { name: "Unpaid Leave", color: "#6b7280", isPaid: false, defaultDays: 0 },
-    ];
+    const defaultLeaveTypes = BASE_LEAVE_TYPES;
 
     const createdLeaveTypes = await Promise.all(
       defaultLeaveTypes.map((lt) =>
@@ -102,72 +99,48 @@ export async function POST(request: Request) {
     // Non-UK country policies only; GB statutory types/policies come from enableUkStatutoryLeaveTypes.
     const countryPolicies = getCountryPolicies(countries.filter((c) => c !== "GB"));
 
-    for (const cp of countryPolicies) {
-      const leaveType = createdLeaveTypes.find((lt) => lt.name === cp.leaveType);
-      if (!leaveType) continue;
-
-      await prisma.leavePolicy.upsert({
-        where: {
-          countryCode_leaveTypeId: {
+    await Promise.all(
+      countryPolicies.map((cp) => {
+        const leaveType = createdLeaveTypes.find(
+          (lt) => lt.name === cp.leaveType
+        );
+        if (!leaveType) return null;
+        return prisma.leavePolicy.upsert({
+          where: {
+            countryCode_leaveTypeId: {
+              countryCode: cp.countryCode,
+              leaveTypeId: leaveType.id,
+            },
+          },
+          create: {
             countryCode: cp.countryCode,
+            annualAllowance: cp.annualAllowance,
+            carryOverMax: cp.carryOverMax,
             leaveTypeId: leaveType.id,
           },
-        },
-        create: {
-          countryCode: cp.countryCode,
-          annualAllowance: cp.annualAllowance,
-          carryOverMax: cp.carryOverMax,
-          leaveTypeId: leaveType.id,
-        },
-        update: {
-          annualAllowance: cp.annualAllowance,
-          carryOverMax: cp.carryOverMax,
-        },
-      });
+          update: {
+            annualAllowance: cp.annualAllowance,
+            carryOverMax: cp.carryOverMax,
+          },
+        });
+      })
+    );
 
-    }
-
-    // Create public holidays for the current year
+    // Public holidays for this year and next — one batched insert (upsert
+    // bodies were no-op updates, so skipDuplicates is equivalent and far faster).
     const standardCountries = countries.filter((code) => code !== "GB");
-    const holidays = getHolidaysForYear(standardCountries, currentYear);
-
-    for (const h of holidays) {
-      await prisma.publicHoliday.upsert({
-        where: {
-          date_countryCode_organizationId: {
-            date: h.date,
-            countryCode: h.countryCode,
-            organizationId: orgId,
-          },
-        },
-        create: {
-          name: h.name,
-          date: h.date,
-          countryCode: h.countryCode,
-          organizationId: orgId,
-        },
-        update: {},
-      });
-    }
-
-    // Also create holidays for next year
-    const nextYearHolidays = getHolidaysForYear(standardCountries, currentYear + 1);
-    for (const h of nextYearHolidays) {
-      await prisma.publicHoliday.upsert({
-        where: {
-          date_countryCode_organizationId: {
-            date: h.date,
-            countryCode: h.countryCode,
-            organizationId: orgId,
-          },
-        },
-        create: {
-          name: h.name,
-          date: h.date,
-          countryCode: h.countryCode,
-          organizationId: orgId,
-        },
-        update: {},
+    const publicHolidayRows = [currentYear, currentYear + 1].flatMap((year) =>
+      getHolidaysForYear(standardCountries, year).map((h) => ({
+        name: h.name,
+        date: h.date,
+        countryCode: h.countryCode,
+        organizationId: orgId,
+      }))
+    );
+    if (publicHolidayRows.length > 0) {
+      await prisma.publicHoliday.createMany({
+        data: publicHolidayRows,
+        skipDuplicates: true,
       });
     }
 
@@ -180,36 +153,40 @@ export async function POST(request: Request) {
       const inviterName = inviterUser?.name ?? "Your admin";
       const orgName = inviterUser?.organization.name ?? "your team";
 
-      for (const invite of invites) {
-        const existing = await prisma.user.findUnique({
-          where: { email: invite.email },
-        });
-        if (existing) continue;
+      await Promise.all(
+        invites.map(async (invite) => {
+          const existing = await prisma.user.findUnique({
+            where: { email: invite.email },
+          });
+          if (existing) return;
 
-        const tempPassword = Math.random().toString(36).slice(-10);
-        const tempPasswordHash = await bcrypt.hash(tempPassword, 10);
+          const tempPassword = Math.random().toString(36).slice(-10);
+          const tempPasswordHash = await bcrypt.hash(tempPassword, 10);
 
-        await prisma.user.create({
-          data: {
-            name: invite.name,
+          await prisma.user.create({
+            data: {
+              name: invite.name,
+              email: invite.email,
+              passwordHash: tempPasswordHash,
+              role: "MEMBER",
+              memberType: "EMPLOYEE",
+              countryCode: invite.countryCode,
+              workCountry: invite.countryCode,
+              organizationId: orgId,
+            },
+          });
+
+          sendTeamInviteEmail({
+            inviteeName: invite.name,
+            inviterName,
+            orgName,
             email: invite.email,
-            passwordHash: tempPasswordHash,
-            role: "MEMBER",
-            memberType: "EMPLOYEE",
-            countryCode: invite.countryCode,
-            workCountry: invite.countryCode,
-            organizationId: orgId,
-          },
-        });
-
-        sendTeamInviteEmail({
-          inviteeName: invite.name,
-          inviterName,
-          orgName,
-          email: invite.email,
-          tempPassword,
-        }).catch((err) => console.error("Onboarding invite email error:", err));
-      }
+            tempPassword,
+          }).catch((err) =>
+            console.error("Onboarding invite email error:", err)
+          );
+        })
+      );
     }
 
     // Mark onboarding as complete

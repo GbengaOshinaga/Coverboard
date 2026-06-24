@@ -26,8 +26,9 @@ export async function enableUkStatutoryLeaveTypes(
     ukPolicies.map((p) => [p.leaveType, p] as const)
   );
 
-  for (const [leaveTypeName, p] of byLeaveType) {
-    await prisma.leaveType.upsert({
+  await Promise.all(
+    Array.from(byLeaveType).map(([leaveTypeName, p]) =>
+    prisma.leaveType.upsert({
       where: {
         name_organizationId: { name: leaveTypeName, organizationId },
       },
@@ -59,62 +60,60 @@ export async function enableUkStatutoryLeaveTypes(
         applyProRata: p.applyProRata ?? false,
         countryCode: "GB",
       },
-    });
-  }
+    })
+    )
+  );
 
   const gbLeaveTypes = await prisma.leaveType.findMany({
     where: { organizationId, countryCode: "GB" },
     select: { id: true, name: true },
   });
 
-  for (const lt of gbLeaveTypes) {
-    const p = byLeaveType.get(lt.name);
-    if (!p) continue;
-    await prisma.leavePolicy.upsert({
-      where: {
-        countryCode_leaveTypeId: { countryCode: "GB", leaveTypeId: lt.id },
-      },
-      create: {
-        countryCode: "GB",
-        annualAllowance: p.annualAllowance,
-        carryOverMax: p.carryOverMax,
-        leaveTypeId: lt.id,
-      },
-      update: {
-        annualAllowance: p.annualAllowance,
-        carryOverMax: p.carryOverMax,
-      },
-    });
-  }
+  await Promise.all(
+    gbLeaveTypes.map((lt) => {
+      const p = byLeaveType.get(lt.name);
+      if (!p) return null;
+      return prisma.leavePolicy.upsert({
+        where: {
+          countryCode_leaveTypeId: { countryCode: "GB", leaveTypeId: lt.id },
+        },
+        create: {
+          countryCode: "GB",
+          annualAllowance: p.annualAllowance,
+          carryOverMax: p.carryOverMax,
+          leaveTypeId: lt.id,
+        },
+        update: {
+          annualAllowance: p.annualAllowance,
+          carryOverMax: p.carryOverMax,
+        },
+      });
+    })
+  );
 
+  // Seed two years × three regions of bank holidays in ONE insert. The upsert
+  // bodies were no-op updates, so createMany with skipDuplicates is equivalent
+  // for fresh orgs and safe on re-sync (existing rows are skipped) — and turns
+  // ~60 round-trips into a single query.
   const currentYear = new Date().getFullYear();
   const ukRegions: BankHolidayRegion[] = [
     "ENGLAND_WALES",
     "SCOTLAND",
     "NORTHERN_IRELAND",
   ];
-  for (const year of [currentYear, currentYear + 1]) {
-    for (const region of ukRegions) {
-      const holidays = getUkBankHolidaysForRegion(year, region);
-      for (const holiday of holidays) {
-        await prisma.bankHoliday.upsert({
-          where: {
-            date_region_organizationId: {
-              date: holiday.date,
-              region,
-              organizationId,
-            },
-          },
-          create: {
-            name: holiday.name,
-            date: holiday.date,
-            region,
-            countryCode: "GB",
-            organizationId,
-          },
-          update: {},
-        });
-      }
-    }
-  }
+  const bankHolidayRows = [currentYear, currentYear + 1].flatMap((year) =>
+    ukRegions.flatMap((region) =>
+      getUkBankHolidaysForRegion(year, region).map((holiday) => ({
+        name: holiday.name,
+        date: holiday.date,
+        region,
+        countryCode: "GB",
+        organizationId,
+      }))
+    )
+  );
+  await prisma.bankHoliday.createMany({
+    data: bankHolidayRows,
+    skipDuplicates: true,
+  });
 }
