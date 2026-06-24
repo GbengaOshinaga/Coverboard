@@ -344,6 +344,23 @@ export const COUNTRY_POLICIES: CountryPolicy[] = [
  * Get the default leave types to create for an org based on selected countries.
  * Merges leave types across countries, keeping the highest allowance as default.
  */
+/**
+ * Generic baseline leave types every organisation gets, regardless of country —
+ * created at onboarding before the country-specific statutory types are layered
+ * on. Kept here so the onboarding *preview* (`getDefaultLeaveTypes`) and the
+ * onboarding API that actually creates them stay in sync.
+ */
+export const BASE_LEAVE_TYPES: {
+  name: string;
+  color: string;
+  isPaid: boolean;
+  defaultDays: number;
+}[] = [
+  { name: "Annual Leave", color: "#3b82f6", isPaid: true, defaultDays: 20 },
+  { name: "Sick Leave", color: "#ef4444", isPaid: true, defaultDays: 10 },
+  { name: "Unpaid Leave", color: "#6b7280", isPaid: false, defaultDays: 0 },
+];
+
 export function getDefaultLeaveTypes(countryCodes: string[]) {
   const policies = COUNTRY_POLICIES.filter((p) =>
     countryCodes.includes(p.code)
@@ -354,6 +371,16 @@ export function getDefaultLeaveTypes(countryCodes: string[]) {
     string,
     { color: string; isPaid: boolean; defaultDays: number }
   >();
+
+  // Seed the generic baseline (Annual / Sick / Unpaid Leave) so the preview
+  // matches what onboarding actually creates; country policies override below.
+  for (const base of BASE_LEAVE_TYPES) {
+    leaveTypeMap.set(base.name, {
+      color: base.color,
+      isPaid: base.isPaid,
+      defaultDays: base.defaultDays,
+    });
+  }
 
   for (const policy of policies) {
     for (const rule of policy.leaveRules) {

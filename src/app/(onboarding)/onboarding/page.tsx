@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,7 @@ import {
   getDefaultLeaveTypes,
   getCountryPolicies,
 } from "@/lib/country-policies";
-import { Check, Plus, Trash2, ArrowRight, ArrowLeft, Globe, BookOpen, Users, Upload } from "lucide-react";
+import { Check, Plus, Trash2, ArrowRight, ArrowLeft, Globe, BookOpen, Users, Upload, Loader2 } from "lucide-react";
 
 const INDUSTRY_OPTIONS = [
   { value: "", label: "Select an industry (optional)" },
@@ -46,6 +46,35 @@ export default function OnboardingPage() {
   const [enableRegions, setEnableRegions] = useState(false);
   const [invites, setInvites] = useState<Invite[]>([{ name: "", email: "", countryCode: "" }]);
   const [loading, setLoading] = useState(false);
+  const [setupStep, setSetupStep] = useState(0);
+
+  // Cycle reassuring progress messages while the workspace is being created,
+  // so "Setting up…" doesn't look frozen. (The request itself is a single call;
+  // these are paced to feel like progress.)
+  const setupMessages = useMemo(
+    () => [
+      "Creating your leave types…",
+      selectedCountries.includes("GB")
+        ? "Adding UK statutory leave & bank holidays…"
+        : "Adding public holidays…",
+      invites.some((inv) => inv.email.trim())
+        ? "Inviting your team…"
+        : "Preparing your dashboard…",
+      "Almost there…",
+    ],
+    [selectedCountries, invites]
+  );
+
+  useEffect(() => {
+    if (!loading) {
+      setSetupStep(0);
+      return;
+    }
+    const id = setInterval(() => {
+      setSetupStep((s) => Math.min(s + 1, setupMessages.length - 1));
+    }, 900);
+    return () => clearInterval(id);
+  }, [loading, setupMessages.length]);
   const [error, setError] = useState("");
 
   function continueFromCountries() {
@@ -469,17 +498,26 @@ export default function OnboardingPage() {
                 <ArrowLeft className="mr-1.5 h-4 w-4" />
                 Back
               </Button>
-              <div className="flex gap-3">
+              <div className="flex items-center gap-3">
+                {loading && (
+                  <span
+                    className="flex items-center gap-2 text-sm text-gray-500"
+                    aria-live="polite"
+                  >
+                    <Loader2 className="h-4 w-4 animate-spin text-brand-500" />
+                    {setupMessages[setupStep]}
+                  </span>
+                )}
                 <Button
                   variant="outline"
                   onClick={handleComplete}
                   disabled={loading}
                 >
-                  {loading ? "Setting up..." : "Skip & finish"}
+                  {loading ? "Setting up…" : "Skip & finish"}
                 </Button>
                 <Button onClick={handleComplete} disabled={loading}>
                   {loading
-                    ? "Setting up..."
+                    ? "Setting up…"
                     : `Finish setup${invites.some((inv) => inv.email.trim()) ? " & invite" : ""}`}
                 </Button>
               </div>
