@@ -3,9 +3,8 @@
 import Link from "next/link";
 import {
   CalendarDays,
-  Users,
+  Clock,
   Globe,
-  Bell,
   ShieldCheck,
   BarChart3,
   Check,
@@ -27,21 +26,21 @@ function HeroSection() {
           <span className="rounded-full bg-brand-600 px-2 py-0.5 text-xs font-semibold text-white">
             New
           </span>
-          From lean teams to People Ops — UK compliant
+          For UK shift, hourly &amp; zero-hours teams
         </div>
 
         <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight text-gray-900 leading-[1.1]">
-          Know who&apos;s out.
+          Leave &amp; cover that gets
           <br />
-          <span className="text-brand-600">Plan who&apos;s covered.</span>
+          <span className="text-brand-600">shift work right.</span>
         </h1>
 
         <p className="mt-6 text-lg md:text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
-          Coverboard is the leave management tool for teams that work across
-          countries. One &ldquo;Who&apos;s out today?&rdquo; view, overlap
-          detection, and each country&apos;s leave rules applied automatically
-          &mdash; with the UK statutory compliance depth a spreadsheet can&apos;t
-          give you.
+          Most leave tools break the moment your staff don&apos;t work fixed
+          days. Coverboard gets holiday and sick pay right for variable-hours,
+          zero-hours and part-time workers &mdash; the maths employers get sued
+          for &mdash; warns you before a team drops below cover, and runs
+          month-to-month with no contract.
         </p>
 
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -158,46 +157,46 @@ function HeroSection() {
 
 const features = [
   {
-    icon: CalendarDays,
-    title: "Who's out today?",
+    icon: Clock,
+    title: "Variable-hours holiday, done right",
     description:
-      "One glance shows you every absence across the team. No more Slack-pinging to find out who's off.",
-  },
-  {
-    icon: Globe,
-    title: "Multi-country leave rules",
-    description:
-      "Leave entitlements and public holidays for nine countries — the UK, Nigeria, Kenya, South Africa, Ghana, Brazil, Mexico, Philippines, and Indonesia — applied automatically per country, and growing.",
-  },
-  {
-    icon: Users,
-    title: "Overlap detection",
-    description:
-      "See who else is off before you approve. Never accidentally leave a project unstaffed.",
-  },
-  {
-    icon: BarChart3,
-    title: "Leave balance tracking",
-    description:
-      "Real-time balances that account for country policies, approved requests, and pending days off.",
-  },
-  {
-    icon: MessageSquare,
-    title: "Slack & Jira integrations",
-    description:
-      "Run /whosout, /mybalance, and /requestleave from Slack. Reassign Jira tickets when someone's out, so engineering work doesn't stall.",
-  },
-  {
-    icon: Bell,
-    title: "Email notifications",
-    description:
-      "Managers get notified of new requests. Team members get instant updates when their leave is approved or rejected.",
+      "Holiday for zero-hours and irregular-hours staff accrues at the correct 12.07% of hours worked — tracked and taken in hours, not fudged into days. The maths the simple tools can't do and employers get sued for, built in.",
   },
   {
     icon: ShieldCheck,
-    title: "UK statutory compliance",
+    title: "Never drop below cover",
     description:
-      "SSP with LEL checks and 28-week cap tracking, SMP phase tracking with AWE, 52-week holiday pay averaging, KIT/SPLIT day tracking, parental leave tracker, Bradford Factor, pro-rata for part-time and zero-hours, regional bank holidays, and GDPR data retention — built in.",
+      "Set a minimum cover level per team, region or role. Coverboard warns you the moment a request would leave a shift short-staffed — before you approve it, not after.",
+  },
+  {
+    icon: Check,
+    title: "Statutory sick & family pay, current with the law",
+    description:
+      "SSP on the 2026 rules (no waiting days, 80% of earnings), SMP eligibility, holiday-pay averaging, carer's and neonatal care leave, Bradford Factor and bank holidays by region — kept up to date so you stay compliant without thinking about it.",
+  },
+  {
+    icon: CalendarDays,
+    title: "Who's off — and where you're short",
+    description:
+      "One glance shows who's out today, who's back soon, and which teams are below safe cover this week. No more group-chat scramble to find out.",
+  },
+  {
+    icon: Building2,
+    title: "No contract, no sales calls",
+    description:
+      "Self-serve and month-to-month — start free, cancel anytime. No multi-year lock-in, no 80% cancellation penalties, no 'free advice' sessions that are really sales pitches.",
+  },
+  {
+    icon: BarChart3,
+    title: "Reports built for shift teams",
+    description:
+      "Absence trends, Bradford Factor, regional cover, holiday-usage and a payroll export — the reporting the simple trackers don't give you.",
+  },
+  {
+    icon: MessageSquare,
+    title: "Slack & integrations",
+    description:
+      "Run /whosout, /mybalance and /requestleave from Slack, with email approvals and notifications so nothing gets missed.",
   },
 ];
 
@@ -313,12 +312,12 @@ function FeaturesSection() {
         <div className="text-center max-w-2xl mx-auto mb-16">
           <p className="text-sm font-semibold text-brand-600 mb-3">Features</p>
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight">
-            Leave ops that scale with you
+            Made for teams the simple tools can&apos;t handle
           </h2>
           <p className="mt-4 text-gray-600 text-lg">
-            Start with calendars, approvals, and notifications. Add statutory depth,
-            payroll-ready figures, analytics, and governance when People Ops and
-            compliance need more than a spreadsheet.
+            Variable hours, zero-hours contracts, shift cover, statutory pay that
+            has to be right — the stuff that breaks simple trackers and lands
+            employers in tribunals. Coverboard handles it, without a contract.
           </p>
         </div>
 

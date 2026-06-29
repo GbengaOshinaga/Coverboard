@@ -82,6 +82,8 @@ export default function RegionsSettingsPage() {
   const { toast } = useToast();
   const [regions, setRegions] = useState<Region[]>([]);
   const [loading, setLoading] = useState(true);
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [enabling, setEnabling] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<Region | null>(null);
   const [deleting, setDeleting] = useState<Region | null>(null);
@@ -107,11 +109,40 @@ export default function RegionsSettingsPage() {
     setLoading(true);
     try {
       const res = await fetch("/api/regions");
-      if (res.ok) setRegions(await res.json());
+      if (res.ok) {
+        setEnabled(true);
+        setRegions(await res.json());
+      } else if (res.status === 403) {
+        // Regions feature toggle is off — show the enable prompt instead of an
+        // empty list whose "Add region" button would 403.
+        const data = await res.json().catch(() => null);
+        if (data?.error === "FEATURE_DISABLED") setEnabled(false);
+      }
     } finally {
       setLoading(false);
     }
   }, []);
+
+  async function handleEnable() {
+    setEnabling(true);
+    try {
+      const res = await fetch("/api/organization/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ regionsEnabled: true }),
+      });
+      if (res.ok) {
+        toast("Regions enabled", "success");
+        setEnabled(true);
+        await refresh();
+      } else {
+        const data = await res.json().catch(() => null);
+        toast(data?.error ?? "Failed to enable regions", "error");
+      }
+    } finally {
+      setEnabling(false);
+    }
+  }
 
   useEffect(() => {
     refresh();
@@ -255,6 +286,32 @@ export default function RegionsSettingsPage() {
         </p>
       </div>
 
+      {enabled === false ? (
+        <Card className="border-brand-100 bg-brand-50/40">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MapPin className="h-5 w-5 text-brand-500" />
+              Turn on regions &amp; cover
+            </CardTitle>
+            <CardDescription>
+              Regions let you set a minimum cover level per location and warn you
+              before a leave request would leave one short-staffed. It&apos;s
+              switched off by default &mdash; enable it to get started.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {canManage ? (
+              <Button onClick={handleEnable} disabled={enabling}>
+                {enabling ? "Enabling…" : "Enable regions"}
+              </Button>
+            ) : (
+              <p className="text-sm text-gray-500">
+                Ask an admin to enable regions in Settings.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
@@ -364,6 +421,7 @@ export default function RegionsSettingsPage() {
           )}
         </CardContent>
       </Card>
+      )}
 
       <Dialog
         open={showAdd}
