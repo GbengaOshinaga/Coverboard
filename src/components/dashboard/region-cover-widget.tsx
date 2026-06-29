@@ -15,18 +15,50 @@ type RegionCoverRow = {
   isWeekendOrHoliday: boolean;
 };
 
+/**
+ * Nudge admins to configure cover when it isn't set up yet — so the cover
+ * concept leads the dashboard for everyone, not just orgs that already use it.
+ */
+function CoverSetupPrompt() {
+  return (
+    <Card className="border-brand-100 bg-brand-50/40">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <ShieldCheck className="h-5 w-5 text-brand-500" />
+          Set up cover
+        </CardTitle>
+        <CardDescription>
+          Tell Coverboard the minimum staff each team or region needs, and we&apos;ll
+          warn you before a leave request would leave you short-staffed.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Link
+          href="/settings/regions"
+          className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+        >
+          <MapPin className="h-4 w-4" />
+          Set minimum cover
+        </Link>
+      </CardContent>
+    </Card>
+  );
+}
+
 export async function RegionCoverWidget({
   organizationId,
   today,
+  isAdmin = false,
 }: {
   organizationId: string;
   today: Date;
+  isAdmin?: boolean;
 }) {
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
     select: { regionsEnabled: true },
   });
-  if (!org?.regionsEnabled) return null;
+  if (!org?.regionsEnabled) return isAdmin ? <CoverSetupPrompt /> : null;
 
   const regions = await prisma.region.findMany({
     where: { organizationId, isActive: true },
@@ -39,7 +71,7 @@ export async function RegionCoverWidget({
     },
   });
 
-  if (regions.length === 0) return null;
+  if (regions.length === 0) return isAdmin ? <CoverSetupPrompt /> : null;
 
   const rows: RegionCoverRow[] = await Promise.all(
     regions.map(async (r) => {

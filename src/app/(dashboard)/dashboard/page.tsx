@@ -182,6 +182,9 @@ export default async function DashboardPage() {
 
       {isAdmin && activationComplete && <ActivationCelebration />}
 
+      {/* Cover leads the dashboard — are we covered today, and where are we short? */}
+      <RegionCoverWidget organizationId={orgId} today={today} isAdmin={isAdmin} />
+
       {showTeamAbsencesFirst && absenceCards}
 
       {/* Stats cards */}
@@ -293,8 +296,6 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       )}
-
-      <RegionCoverWidget organizationId={orgId} today={today} />
 
       {!showTeamAbsencesFirst && absenceCards}
     </div>
