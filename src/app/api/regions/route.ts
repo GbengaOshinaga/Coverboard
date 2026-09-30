@@ -15,6 +15,8 @@ const createSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(80),
   description: z.string().trim().max(500).optional().nullable(),
   minCover: z.number().int().min(1).max(1000).default(1),
+  coverWeekends: z.boolean().optional(),
+  coverBankHolidays: z.boolean().optional(),
   color: z
     .string()
     .trim()
@@ -39,10 +41,12 @@ export async function GET() {
       name: true,
       description: true,
       minCover: true,
+      coverWeekends: true,
+      coverBankHolidays: true,
       color: true,
       isActive: true,
       createdAt: true,
-      _count: { select: { members: true } },
+      _count: { select: { members: true, shiftTypes: true } },
     },
   });
 
@@ -52,10 +56,13 @@ export async function GET() {
       name: r.name,
       description: r.description,
       minCover: r.minCover,
+      coverWeekends: r.coverWeekends,
+      coverBankHolidays: r.coverBankHolidays,
       color: r.color,
       isActive: r.isActive,
       createdAt: r.createdAt,
       memberCount: r._count.members,
+      shiftCount: r._count.shiftTypes,
     }))
   );
 }
@@ -102,6 +109,8 @@ export async function POST(request: Request) {
       name: parsed.data.name,
       description: parsed.data.description ?? null,
       minCover: parsed.data.minCover,
+      coverWeekends: parsed.data.coverWeekends ?? true,
+      coverBankHolidays: parsed.data.coverBankHolidays ?? true,
       color,
       isActive: parsed.data.isActive ?? true,
     },

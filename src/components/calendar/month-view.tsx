@@ -36,6 +36,7 @@ type DailyCoverInput = {
   required: number;
   isWeekend: boolean;
   isBankHoliday: boolean;
+  coverRequired: boolean;
 };
 
 const WEEKDAYS_FULL = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -98,7 +99,7 @@ export function MonthView({
     const key = format(day, "yyyy-MM-dd");
     const c = coverByDate.get(key);
     if (!c) return undefined;
-    if (c.isWeekend || c.isBankHoliday) return undefined;
+    if (!c.coverRequired) return undefined;
     return {
       ok: c.available >= c.required,
       available: c.available,

@@ -22,6 +22,8 @@ function region(
     name: "London",
     minCover: 2,
     memberIds: ["u1", "u2", "u3"],
+    coverWeekends: true,
+    coverBankHolidays: true,
     ...overrides,
   };
 }
@@ -173,18 +175,8 @@ test("zero-minCover regions report stats but never flag a day as under-cover", (
 test("sorts regions by totalDaysBelowCover descending — worst region first", () => {
   const out = computeRegionalCover(
     [
-      {
-        id: "r1",
-        name: "London",
-        minCover: 2,
-        memberIds: ["u1", "u2"],
-      },
-      {
-        id: "r2",
-        name: "Manchester",
-        minCover: 1,
-        memberIds: ["u3", "u4"],
-      },
+      region({ id: "r1", name: "London", minCover: 2, memberIds: ["u1", "u2"] }),
+      region({ id: "r2", name: "Manchester", minCover: 1, memberIds: ["u3", "u4"] }),
     ],
     [
       // London: 2 of 2 off on Mon → 1 day flagged
@@ -217,4 +209,81 @@ test("handles a NOW that falls mid-week (rounds to the containing Monday)", () =
   const out = computeRegionalCover([region()], [], { now: wednesday });
   // Most recent week's Monday is still 1 June, same as NOW above.
   assert.equal(out[0]!.weeklySeries[12]!.weekKey, "2026-06-01");
+});
+
+// ---------- weekend / bank holiday cover ----------
+
+test("weekday-only regions don't count weekend shortfalls", () => {
+  // Both members off Fri 29 – Sun 31 May.
+  const leaves = [
+    leave("u1", utc(2026, 5, 29), utc(2026, 5, 31)),
+    leave("u2", utc(2026, 5, 29), utc(2026, 5, 31)),
+  ];
+  const everyDay = computeRegionalCover(
+    [region({ memberIds: ["u1", "u2"], minCover: 1 })],
+    leaves,
+    { now: NOW }
+  );
+  assert.equal(everyDay[0]!.totalDaysBelowCover, 3);
+
+  const weekdaysOnly = computeRegionalCover(
+    [region({ memberIds: ["u1", "u2"], minCover: 1, coverWeekends: false })],
+    leaves,
+    { now: NOW }
+  );
+  assert.equal(weekdaysOnly[0]!.totalDaysBelowCover, 1);
+});
+
+test("bank holidays only count when the region covers them", () => {
+  // Mon 25 May 2026 is the Spring bank holiday.
+  const leaves = [
+    leave("u1", utc(2026, 5, 25), utc(2026, 5, 25)),
+    leave("u2", utc(2026, 5, 25), utc(2026, 5, 25)),
+  ];
+  const bankHolidayDates = new Set(["2026-05-25"]);
+  const covered = computeRegionalCover(
+    [region({ memberIds: ["u1", "u2"], minCover: 1 })],
+    leaves,
+    { now: NOW, bankHolidayDates }
+  );
+  assert.equal(covered[0]!.totalDaysBelowCover, 1);
+
+  const notCovered = computeRegionalCover(
+    [region({ memberIds: ["u1", "u2"], minCover: 1, coverBankHolidays: false })],
+    leaves,
+    { now: NOW, bankHolidayDates }
+  );
+  assert.equal(notCovered[0]!.totalDaysBelowCover, 0);
+});
+
+// ---------- shift-aware cover ----------
+
+test("shift regions count a day once when any shift falls short", () => {
+  // Nights need 2 every day; u1 and u2 work Tuesday nights. u1 is off on
+  // Tue 26 May, so that night (and only that day) is short.
+  const out = computeRegionalCover(
+    [
+      region({
+        memberIds: ["u1", "u2", "u3"],
+        minCover: 1,
+        shifts: [
+          {
+            id: "night",
+            name: "Night",
+            startTime: "20:00",
+            endTime: "08:00",
+            minCoverByWeekday: [0, 2, 0, 0, 0, 0, 0],
+          },
+        ],
+        patterns: [
+          { userId: "u1", shiftTypeId: "night", weekday: 1, effectiveFrom: "2026-01-01", effectiveTo: null },
+          { userId: "u2", shiftTypeId: "night", weekday: 1, effectiveFrom: "2026-01-01", effectiveTo: null },
+        ],
+      }),
+    ],
+    [leave("u1", utc(2026, 5, 26), utc(2026, 5, 26))],
+    { now: NOW }
+  );
+  assert.equal(out[0]!.totalDaysBelowCover, 1);
+  assert.equal(out[0]!.minCoverageObserved, 1);
 });

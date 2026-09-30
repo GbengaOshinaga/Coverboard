@@ -1,5 +1,14 @@
-import { eachDayOfInterval, parseISO, isWeekend, format } from "date-fns";
+import { eachDayOfInterval, parseISO, format } from "date-fns";
 import { prisma } from "@/lib/prisma";
+import {
+  computeShiftCover,
+  worstShift,
+  LEGACY_SHIFT_ID,
+  type EngineLeave,
+  type EnginePattern,
+  type EngineShift,
+  type ShiftCover,
+} from "@/lib/shiftCover";
 
 export type ConflictDay = {
   date: string;
@@ -7,6 +16,9 @@ export type ConflictDay = {
   required: number;
   shortfall: number;
   staffOff: Array<{ id: string; name: string; leaveType: string | null }>;
+  /** Set when the region uses shifts; null for per-day (legacy) cover. */
+  shiftId: string | null;
+  shiftName: string | null;
 };
 
 export type CoverCheckResult = {
@@ -15,16 +27,28 @@ export type CoverCheckResult = {
   regionId: string | null;
   regionName: string | null;
   minCover: number | null;
+  /** True when the region has shift types and cover is checked per shift. */
+  usesShifts: boolean;
+  /**
+   * False when the region uses shifts but the requester isn't on any shift in
+   * the range (no working pattern), so their leave can't affect cover.
+   */
+  requesterScheduled: boolean;
 };
 
 export type DailyCover = {
   date: string;
+  /** Roll-up: the most at-risk shift's numbers (or the day's, in legacy mode). */
   available: number;
   required: number;
   isWeekend: boolean;
   isBankHoliday: boolean;
+  /** False when no cover rule applies on this day. */
+  coverRequired: boolean;
   staffOff: Array<{ id: string; name: string; leaveType: string | null }>;
   staffAvailable: Array<{ id: string; name: string }>;
+  /** Per-shift breakdown; empty for regions without shift types. */
+  shifts: ShiftCover[];
 };
 
 const DEFAULT_PRESET_COLORS = [
@@ -52,11 +76,40 @@ function isoDay(date: Date): string {
   return format(date, "yyyy-MM-dd");
 }
 
+/** The UK calendar date of an instant, as YYYY-MM-DD. */
+function ukIsoDate(date: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(date);
+}
+
+/** @db.Date columns come back as UTC midnight; read them as UTC. */
+function isoDbDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function dayList(start: Date, end: Date): string[] {
+  return eachDayOfInterval({ start, end }).map(isoDay);
+}
+
+/**
+ * The calendar days in [start, end] plus the matching DB query bounds.
+ * Leave, bank holiday and pattern dates are stored at UTC midnight, so the
+ * bounds must be UTC midnight too — using local midnight drops rows on the
+ * last day whenever the server isn't on UTC (e.g. BST in local dev).
+ */
+function dayWindow(start: Date, end: Date) {
+  const days = dayList(start, end);
+  return {
+    days,
+    from: new Date(`${days[0]}T00:00:00Z`),
+    to: new Date(`${days[days.length - 1]}T00:00:00Z`),
+  };
+}
+
 /**
  * Returns the set of YYYY-MM-DD strings that are bank holidays for the org's
  * configured BankHolidayRegion within the date window.
  */
-async function loadBankHolidaySet(
+export async function loadBankHolidaySet(
   organizationId: string,
   start: Date,
   end: Date
@@ -75,13 +128,10 @@ async function loadBankHolidaySet(
     },
     select: { date: true },
   });
-  return new Set(holidays.map((h) => format(h.date, "yyyy-MM-dd")));
+  return new Set(holidays.map((h) => isoDbDate(h.date)));
 }
 
-/**
- * Active member roster for a region (excludes the deleted-org stub case
- * automatically because stubs have no members).
- */
+/** Active member roster for a region. */
 async function loadRegionMembers(
   regionId: string,
   excludeUserId?: string
@@ -89,6 +139,7 @@ async function loadRegionMembers(
   return prisma.user.findMany({
     where: {
       regionId,
+      isActive: true,
       ...(excludeUserId ? { id: { not: excludeUserId } } : {}),
     },
     select: { id: true, name: true },
@@ -97,17 +148,15 @@ async function loadRegionMembers(
 }
 
 /**
- * Approved leaves overlapping [start, end] for the given userIds. Returns a
- * map keyed by userId of overlapping requests with leaveType name.
+ * Approved leaves overlapping [start, end] for the given userIds, keyed by
+ * userId, as engine leaves (YYYY-MM-DD, local).
  */
 async function loadApprovedLeavesOverlapping(
   userIds: string[],
   start: Date,
   end: Date,
   excludeRequestId?: string
-): Promise<
-  Map<string, Array<{ startDate: Date; endDate: Date; leaveTypeName: string }>>
-> {
+): Promise<Map<string, EngineLeave[]>> {
   if (userIds.length === 0) return new Map();
   const requests = await prisma.leaveRequest.findMany({
     where: {
@@ -124,15 +173,12 @@ async function loadApprovedLeavesOverlapping(
       leaveType: { select: { name: true } },
     },
   });
-  const map = new Map<
-    string,
-    Array<{ startDate: Date; endDate: Date; leaveTypeName: string }>
-  >();
+  const map = new Map<string, EngineLeave[]>();
   for (const r of requests) {
     const list = map.get(r.userId) ?? [];
     list.push({
-      startDate: r.startDate,
-      endDate: r.endDate,
+      start: isoDbDate(r.startDate),
+      end: isoDbDate(r.endDate),
       leaveTypeName: r.leaveType.name,
     });
     map.set(r.userId, list);
@@ -140,17 +186,123 @@ async function loadApprovedLeavesOverlapping(
   return map;
 }
 
-function leaveSpansDay(
-  leaves: Array<{ startDate: Date; endDate: Date; leaveTypeName: string }>,
-  day: Date
-): { active: boolean; leaveTypeName: string | null } {
-  const dayIso = isoDay(day);
-  for (const l of leaves) {
-    if (isoDay(l.startDate) <= dayIso && isoDay(l.endDate) >= dayIso) {
-      return { active: true, leaveTypeName: l.leaveTypeName };
-    }
-  }
-  return { active: false, leaveTypeName: null };
+/**
+ * Prisma `select` for a region's shift types and the working patterns that
+ * overlap [start, end]. Pair with `toEngineShiftData`.
+ */
+export function shiftTypesSelect(start: Date, end: Date) {
+  return {
+    orderBy: [{ sortOrder: "asc" as const }, { startTime: "asc" as const }],
+    select: {
+      id: true,
+      name: true,
+      startTime: true,
+      endTime: true,
+      minCoverByWeekday: true,
+      createdAt: true,
+      patterns: {
+        where: {
+          effectiveFrom: { lte: end },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: start } }],
+        },
+        select: {
+          userId: true,
+          shiftTypeId: true,
+          weekday: true,
+          effectiveFrom: true,
+          effectiveTo: true,
+        },
+      },
+    },
+  };
+}
+
+type ShiftTypeRow = {
+  id: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+  minCoverByWeekday: number[];
+  createdAt: Date;
+  patterns: Array<{
+    userId: string;
+    shiftTypeId: string;
+    weekday: number;
+    effectiveFrom: Date;
+    effectiveTo: Date | null;
+  }>;
+};
+
+export function toEngineShiftData(shiftTypes: ShiftTypeRow[]): {
+  shifts: EngineShift[];
+  patterns: EnginePattern[];
+} {
+  return {
+    shifts: shiftTypes.map((s) => ({
+      id: s.id,
+      name: s.name,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      minCoverByWeekday: s.minCoverByWeekday,
+      activeFrom: ukIsoDate(s.createdAt),
+    })),
+    patterns: shiftTypes.flatMap((s) =>
+      s.patterns.map((p) => ({
+        userId: p.userId,
+        shiftTypeId: p.shiftTypeId,
+        weekday: p.weekday,
+        effectiveFrom: isoDbDate(p.effectiveFrom),
+        effectiveTo: p.effectiveTo ? isoDbDate(p.effectiveTo) : null,
+      }))
+    ),
+  };
+}
+
+type LoadedRegion = {
+  id: string;
+  name: string;
+  minCover: number;
+  isActive: boolean;
+  coverWeekends: boolean;
+  coverBankHolidays: boolean;
+  shifts: EngineShift[];
+  patterns: EnginePattern[];
+};
+
+/** Region plus its shift types and every working pattern overlapping the window. */
+async function loadRegionWithShifts(
+  organizationId: string,
+  regionId: string,
+  start: Date,
+  end: Date
+): Promise<LoadedRegion | null> {
+  const region = await prisma.region.findFirst({
+    where: { id: regionId, organizationId },
+    select: {
+      id: true,
+      name: true,
+      minCover: true,
+      isActive: true,
+      coverWeekends: true,
+      coverBankHolidays: true,
+      shiftTypes: shiftTypesSelect(start, end),
+    },
+  });
+  if (!region) return null;
+  return {
+    id: region.id,
+    name: region.name,
+    minCover: region.minCover,
+    isActive: region.isActive,
+    coverWeekends: region.coverWeekends,
+    coverBankHolidays: region.coverBankHolidays,
+    ...toEngineShiftData(region.shiftTypes),
+  };
+}
+
+function uniqueById<T extends { id: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((i) => (seen.has(i.id) ? false : (seen.add(i.id), true)));
 }
 
 export type DailyCoverInput = {
@@ -165,59 +317,70 @@ export type DailyCoverInput = {
 export async function computeDailyCover(
   input: DailyCoverInput
 ): Promise<DailyCover[]> {
-  const region = await prisma.region.findFirst({
-    where: { id: input.regionId, organizationId: input.organizationId },
-    select: { id: true, minCover: true, isActive: true },
-  });
+  const { days: dayStrings, from, to } = dayWindow(input.start, input.end);
+  const region = await loadRegionWithShifts(
+    input.organizationId,
+    input.regionId,
+    from,
+    to
+  );
   if (!region) return [];
 
   const members = await loadRegionMembers(region.id, input.excludeUserId);
-  const memberIds = members.map((m) => m.id);
   const leavesByUser = await loadApprovedLeavesOverlapping(
-    memberIds,
-    input.start,
-    input.end,
+    members.map((m) => m.id),
+    from,
+    to,
     input.excludeRequestId
   );
-  const bankHolidays = await loadBankHolidaySet(
-    input.organizationId,
-    input.start,
-    input.end
-  );
+  const bankHolidayDates = await loadBankHolidaySet(input.organizationId, from, to);
 
-  const days = eachDayOfInterval({ start: input.start, end: input.end });
+  const days = computeShiftCover({
+    region,
+    shifts: region.shifts,
+    patterns: region.patterns,
+    members,
+    leavesByUser,
+    bankHolidayDates,
+    days: dayStrings,
+  });
+
   return days.map((day) => {
-    const isoDate = format(day, "yyyy-MM-dd");
-    const weekend = isWeekend(day);
-    const bankHoliday = bankHolidays.has(isoDate);
-
-    const staffOff: Array<{ id: string; name: string; leaveType: string | null }> = [];
-    const staffAvailable: Array<{ id: string; name: string }> = [];
-
-    for (const m of members) {
-      const status = leaveSpansDay(leavesByUser.get(m.id) ?? [], day);
-      if (status.active) {
-        staffOff.push({ id: m.id, name: m.name, leaveType: status.leaveTypeName });
-      } else {
-        staffAvailable.push({ id: m.id, name: m.name });
-      }
-    }
-
+    const worst = worstShift(day);
     return {
-      date: isoDate,
-      available: staffAvailable.length,
-      required: region.minCover,
-      isWeekend: weekend,
-      isBankHoliday: bankHoliday,
-      staffOff,
-      staffAvailable,
+      date: day.date,
+      available: worst?.available ?? 0,
+      required: worst?.required ?? 0,
+      isWeekend: day.isWeekend,
+      isBankHoliday: day.isBankHoliday,
+      coverRequired: day.shifts.some((s) => s.coverRequired),
+      staffOff: uniqueById(day.shifts.flatMap((s) => s.staffOff)),
+      staffAvailable: uniqueById(day.shifts.flatMap((s) => s.staffAvailable)),
+      shifts: day.shifts.filter((s) => s.shiftId !== LEGACY_SHIFT_ID),
     };
   });
 }
 
+function emptyResult(
+  regionId: string | null,
+  regionName: string | null,
+  minCover: number | null
+): CoverCheckResult {
+  return {
+    hasConflict: false,
+    conflicts: [],
+    regionId,
+    regionName,
+    minCover,
+    usesShifts: false,
+    requesterScheduled: true,
+  };
+}
+
 /**
- * Core check used at submit and approval time. Excludes weekends and bank
- * holidays per spec.
+ * Core check used at submit and approval time: would the requester being off
+ * across [startDate, endDate] leave any day (or, with shifts, any shift they
+ * work) below its minimum?
  */
 export async function checkRegionalCover(params: {
   organizationId: string;
@@ -230,137 +393,132 @@ export async function checkRegionalCover(params: {
     where: { id: params.organizationId },
     select: { regionsEnabled: true },
   });
-  if (!org?.regionsEnabled) {
-    return {
-      hasConflict: false,
-      conflicts: [],
-      regionId: null,
-      regionName: null,
-      minCover: null,
-    };
-  }
+  if (!org?.regionsEnabled) return emptyResult(null, null, null);
 
   const employee = await prisma.user.findFirst({
     where: { id: params.userId, organizationId: params.organizationId },
     select: { regionId: true },
   });
-  if (!employee || !employee.regionId) {
-    return {
-      hasConflict: false,
-      conflicts: [],
-      regionId: null,
-      regionName: null,
-      minCover: null,
-    };
-  }
-
-  const region = await prisma.region.findFirst({
-    where: { id: employee.regionId, organizationId: params.organizationId },
-    select: { id: true, name: true, minCover: true, isActive: true },
-  });
-  if (!region || !region.isActive) {
-    return {
-      hasConflict: false,
-      conflicts: [],
-      regionId: employee.regionId,
-      regionName: region?.name ?? null,
-      minCover: region?.minCover ?? null,
-    };
-  }
+  if (!employee || !employee.regionId) return emptyResult(null, null, null);
 
   const start = parseISO(params.startDate);
   const end = parseISO(params.endDate);
+  const { from, to } = dayWindow(start, end);
 
-  const daily = await computeDailyCover({
-    organizationId: params.organizationId,
-    regionId: region.id,
-    start,
-    end,
-    excludeUserId: params.userId,
-    excludeRequestId: params.excludeRequestId,
-  });
-
-  const conflicts: ConflictDay[] = [];
-  for (const d of daily) {
-    if (d.isWeekend || d.isBankHoliday) continue;
-    if (d.available < region.minCover) {
-      conflicts.push({
-        date: d.date,
-        available: d.available,
-        required: region.minCover,
-        shortfall: region.minCover - d.available,
-        staffOff: d.staffOff,
-      });
-    }
+  const region = await loadRegionWithShifts(
+    params.organizationId,
+    employee.regionId,
+    from,
+    to
+  );
+  if (!region || !region.isActive) {
+    return emptyResult(
+      employee.regionId,
+      region?.name ?? null,
+      region?.minCover ?? null
+    );
   }
 
-  return {
-    hasConflict: conflicts.length > 0,
-    conflicts,
-    regionId: region.id,
-    regionName: region.name,
-    minCover: region.minCover,
-  };
+  const members = await loadRegionMembers(region.id, params.userId);
+  const leavesByUser = await loadApprovedLeavesOverlapping(
+    members.map((m) => m.id),
+    from,
+    to,
+    params.excludeRequestId
+  );
+  const bankHolidayDates = await loadBankHolidaySet(params.organizationId, from, to);
+
+  return checkRegionalCoverPure({
+    region,
+    employeeRegionId: region.id,
+    employeeId: params.userId,
+    start,
+    end,
+    members,
+    approvedLeavesByUser: leavesByUser,
+    bankHolidayDates,
+    shifts: region.shifts,
+    patterns: region.patterns,
+  });
 }
 
 /**
- * Pure helper used by tests. Given employee+region+leaves+bank-holidays it
- * returns the conflicts. No DB access. Date inputs are JS Dates (UTC midnight).
+ * Pure core of the cover check. No DB access. Date inputs are local-midnight
+ * JS Dates. `members` excludes the requesting employee; the requester is added
+ * back as "on leave" for the requested range so every rule (legacy or shift)
+ * runs through the same engine.
  */
 export type PureCheckInput = {
-  region: { id: string; name: string; minCover: number; isActive: boolean } | null;
+  region: {
+    id: string;
+    name: string;
+    minCover: number;
+    isActive: boolean;
+    coverWeekends: boolean;
+    coverBankHolidays: boolean;
+  } | null;
   employeeRegionId: string | null;
   employeeId: string;
   start: Date;
   end: Date;
   members: Array<{ id: string; name: string }>; // excluding the requesting employee
-  approvedLeavesByUser: Map<
-    string,
-    Array<{ startDate: Date; endDate: Date; leaveTypeName: string }>
-  >;
+  approvedLeavesByUser: ReadonlyMap<string, ReadonlyArray<EngineLeave>>;
   bankHolidayDates: Set<string>;
+  /** Active shift types; omit or [] for per-day cover. */
+  shifts?: EngineShift[];
+  patterns?: EnginePattern[];
 };
+
+const REQUESTED_LEAVE = "Requested leave";
 
 export function checkRegionalCoverPure(input: PureCheckInput): CoverCheckResult {
   if (!input.employeeRegionId || !input.region || !input.region.isActive) {
-    return {
-      hasConflict: false,
-      conflicts: [],
-      regionId: input.employeeRegionId,
-      regionName: input.region?.name ?? null,
-      minCover: input.region?.minCover ?? null,
-    };
+    return emptyResult(
+      input.employeeRegionId,
+      input.region?.name ?? null,
+      input.region?.minCover ?? null
+    );
   }
 
+  const shifts = input.shifts ?? [];
+  const usesShifts = shifts.length > 0;
+  const days = dayList(input.start, input.end);
+
+  const leavesByUser = new Map(input.approvedLeavesByUser);
+  leavesByUser.set(input.employeeId, [
+    { start: days[0], end: days[days.length - 1], leaveTypeName: REQUESTED_LEAVE },
+  ]);
+
+  const engineDays = computeShiftCover({
+    region: input.region,
+    shifts,
+    patterns: input.patterns ?? [],
+    members: [
+      ...input.members.filter((m) => m.id !== input.employeeId),
+      { id: input.employeeId, name: "" },
+    ],
+    leavesByUser,
+    bankHolidayDates: input.bankHolidayDates,
+    days,
+  });
+
   const conflicts: ConflictDay[] = [];
-  const days = eachDayOfInterval({ start: input.start, end: input.end });
+  let requesterScheduled = !usesShifts;
 
-  for (const day of days) {
-    const isoDate = format(day, "yyyy-MM-dd");
-    if (isWeekend(day)) continue;
-    if (input.bankHolidayDates.has(isoDate)) continue;
-
-    const staffOff: ConflictDay["staffOff"] = [];
-    let available = 0;
-    for (const m of input.members) {
-      const status = leaveSpansDay(
-        input.approvedLeavesByUser.get(m.id) ?? [],
-        day
-      );
-      if (status.active) {
-        staffOff.push({ id: m.id, name: m.name, leaveType: status.leaveTypeName });
-      } else {
-        available++;
-      }
-    }
-
-    if (available < input.region.minCover) {
+  for (const day of engineDays) {
+    for (const s of day.shifts) {
+      // The requester's absence only matters on shifts they'd have worked.
+      if (!s.scheduledUserIds.includes(input.employeeId)) continue;
+      requesterScheduled = true;
+      if (!s.coverRequired || s.available >= s.required) continue;
       conflicts.push({
-        date: isoDate,
-        available,
-        required: input.region.minCover,
-        shortfall: input.region.minCover - available,
-        staffOff,
+        date: day.date,
+        available: s.available,
+        required: s.required,
+        shortfall: s.required - s.available,
+        staffOff: s.staffOff.filter((o) => o.id !== input.employeeId),
+        shiftId: s.shiftId === LEGACY_SHIFT_ID ? null : s.shiftId,
+        shiftName: s.shiftId === LEGACY_SHIFT_ID ? null : s.name,
       });
     }
   }
@@ -371,5 +529,7 @@ export function checkRegionalCoverPure(input: PureCheckInput): CoverCheckResult 
     regionId: input.region.id,
     regionName: input.region.name,
     minCover: input.region.minCover,
+    usesShifts,
+    requesterScheduled,
   };
 }

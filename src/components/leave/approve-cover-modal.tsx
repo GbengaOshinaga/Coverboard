@@ -10,6 +10,8 @@ export type CoverConflict = {
   required: number;
   shortfall: number;
   staffOff: Array<{ id: string; name: string; leaveType: string | null }>;
+  shiftId?: string | null;
+  shiftName?: string | null;
 };
 
 const FMT = new Intl.DateTimeFormat("en-GB", {
@@ -40,6 +42,7 @@ export function ApproveCoverModal({
   requesterName: string;
   loading?: boolean;
 }) {
+  const unit = conflicts.some((c) => c.shiftName) ? "shift" : "day";
   return (
     <Dialog
       open={open}
@@ -53,13 +56,15 @@ export function ApproveCoverModal({
             <p className="font-medium">
               Approving {requesterName}&apos;s leave will leave{" "}
               <strong>{regionName ?? "this region"}</strong> below its minimum
-              cover on {conflicts.length} day
+              cover on {conflicts.length} {unit}
               {conflicts.length === 1 ? "" : "s"}.
             </p>
             <ul className="space-y-0.5 text-xs">
               {conflicts.slice(0, 8).map((c) => (
-                <li key={c.date}>
-                  {formatDay(c.date)}: {c.available}/{c.required} available
+                <li key={`${c.date}:${c.shiftId ?? ""}`}>
+                  {formatDay(c.date)}
+                  {c.shiftName ? ` · ${c.shiftName}` : ""}: {c.available}/
+                  {c.required} available
                   {c.staffOff.length > 0 && (
                     <span className="text-amber-700">
                       {" "}

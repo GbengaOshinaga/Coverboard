@@ -49,6 +49,7 @@ export async function GET(
       staffAvailable: [],
       isWeekend: false,
       isBankHoliday: false,
+      coverRequired: false,
       region,
     });
   }

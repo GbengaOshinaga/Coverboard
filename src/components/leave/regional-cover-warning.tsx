@@ -11,10 +11,14 @@ type CoverCheckResult = {
     required: number;
     shortfall: number;
     staffOff: Array<{ id: string; name: string; leaveType: string | null }>;
+    shiftId: string | null;
+    shiftName: string | null;
   }>;
   regionId: string | null;
   regionName: string | null;
   minCover: number | null;
+  usesShifts: boolean;
+  requesterScheduled: boolean;
 };
 
 const FMT = new Intl.DateTimeFormat("en-GB", {
@@ -77,13 +81,23 @@ export function RegionalCoverWarning({
 
   if (!result || !result.regionId) return null;
 
+  if (result.usesShifts && !result.requesterScheduled) {
+    return (
+      <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+        No shifts in the working pattern fall on these dates, so cover in{" "}
+        <strong>{result.regionName}</strong> isn&apos;t affected.
+      </div>
+    );
+  }
+
   if (!result.hasConflict) {
     return (
       <div className="flex items-start gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
         <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <span>
           Cover OK in <strong>{result.regionName}</strong> across this date
-          range (minimum cover: {result.minCover}).
+          range
+          {result.usesShifts ? " for the shifts you work" : ` (minimum cover: ${result.minCover})`}.
         </span>
       </div>
     );
@@ -96,14 +110,17 @@ export function RegionalCoverWarning({
         <div className="space-y-1.5">
           <p className="font-medium">
             Regional cover would drop below minimum on{" "}
-            {result.conflicts.length} day
+            {result.conflicts.length}{" "}
+            {result.usesShifts ? "shift" : "day"}
             {result.conflicts.length === 1 ? "" : "s"} in{" "}
             <strong>{result.regionName}</strong>.
           </p>
           <ul className="space-y-0.5 text-amber-900">
             {result.conflicts.slice(0, 5).map((c) => (
-              <li key={c.date}>
-                {formatDay(c.date)}: {c.available}/{c.required} available
+              <li key={`${c.date}:${c.shiftId ?? ""}`}>
+                {formatDay(c.date)}
+                {c.shiftName ? ` · ${c.shiftName}` : ""}: {c.available}/
+                {c.required} available
                 {c.staffOff.length > 0 && (
                   <span className="text-amber-700">
                     {" "}

@@ -12,7 +12,9 @@ type RegionCoverRow = {
   available: number;
   ok: boolean;
   staffOff: Array<{ id: string; name: string }>;
-  isWeekendOrHoliday: boolean;
+  coverNotRequired: boolean;
+  /** Enforced shifts today; empty for regions without shift types. */
+  shifts: Array<{ id: string; name: string; available: number; required: number }>;
 };
 
 /**
@@ -82,23 +84,33 @@ export async function RegionCoverWidget({
         end: today,
       });
       const day = days[0];
-      const skip = !day || day.isWeekend || day.isBankHoliday;
+      const skip = !day || !day.coverRequired;
+      const shifts = (day?.shifts ?? [])
+        .filter((s) => s.coverRequired)
+        .map((s) => ({
+          id: s.shiftId,
+          name: s.name,
+          available: s.available,
+          required: s.required,
+        }));
       return {
         id: r.id,
         name: r.name,
         color: r.color,
-        minCover: r.minCover,
+        minCover: day?.required ?? r.minCover,
         available: day?.available ?? 0,
         ok: skip ? true : day.available >= day.required,
+        shifts,
         staffOff: day?.staffOff ?? [],
-        isWeekendOrHoliday: skip,
+        coverNotRequired: skip,
       };
     })
   );
 
   const breachCount = rows.filter(
-    (r) => !r.isWeekendOrHoliday && !r.ok
+    (r) => !r.coverNotRequired && !r.ok
   ).length;
+  const noCoverToday = rows.every((r) => r.coverNotRequired);
 
   return (
     <Card>
@@ -110,8 +122,8 @@ export async function RegionCoverWidget({
               Regional cover today
             </CardTitle>
             <CardDescription>
-              {rows[0]?.isWeekendOrHoliday
-                ? "Cover requirements don't apply on weekends or bank holidays."
+              {noCoverToday
+                ? "None of your regions require cover today."
                 : breachCount > 0
                 ? `${breachCount} region${breachCount === 1 ? "" : "s"} below minimum cover.`
                 : "All regions meeting minimum cover."}
@@ -138,6 +150,22 @@ export async function RegionCoverWidget({
                   >
                     {r.name}
                   </Link>
+                  {r.shifts.length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {r.shifts.map((s) => (
+                        <span
+                          key={s.id}
+                          className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                            s.available >= s.required
+                              ? "bg-gray-50 text-gray-600"
+                              : "bg-amber-50 text-amber-800"
+                          }`}
+                        >
+                          {s.name} {s.available}/{s.required}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   {r.staffOff.length > 0 ? (
                     <p className="mt-0.5 text-xs text-gray-500">
                       Off: {r.staffOff.map((s) => s.name).join(", ")}
@@ -150,7 +178,7 @@ export async function RegionCoverWidget({
                 </div>
               </div>
               <div className="shrink-0 text-right">
-                {r.isWeekendOrHoliday ? (
+                {r.coverNotRequired ? (
                   <span className="text-xs text-gray-400">—</span>
                 ) : r.ok ? (
                   <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">

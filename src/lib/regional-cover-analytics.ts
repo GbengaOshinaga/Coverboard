@@ -14,13 +14,24 @@
  * worth the complexity for a weekly-grained signal.
  */
 
+import type { CoverDaySettings } from "./coverDays";
+import {
+  computeShiftCover,
+  type EngineLeave,
+  type EnginePattern,
+  type EngineShift,
+} from "./shiftCover";
+
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-export type RegionForAnalytics = {
+export type RegionForAnalytics = CoverDaySettings & {
   id: string;
   name: string;
   minCover: number;
   memberIds: ReadonlyArray<string>;
+  /** Shift types and working patterns; omit for per-day cover. */
+  shifts?: EngineShift[];
+  patterns?: EnginePattern[];
 };
 
 export type LeaveForAnalytics = {
@@ -35,7 +46,10 @@ export type WeekStat = {
   /** UTC midnight Monday of the week. */
   weekStart: Date;
   weekKey: string;
-  /** Days that week the region was below `minCover` (0–7). */
+  /**
+   * Days that week the region was below `minCover` (0–7). Weekends and bank
+   * holidays only count when the region enforces cover on them.
+   */
   daysBelowCover: number;
   /** Lowest staffing observed any day that week (after absences). */
   minCoverageObserved: number;
@@ -68,11 +82,15 @@ function startOfWeekUtc(d: Date): Date {
   );
 }
 
-function weekKey(monday: Date): string {
-  const y = monday.getUTCFullYear();
-  const m = String(monday.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(monday.getUTCDate()).padStart(2, "0");
+function isoDateUtc(date: Date): string {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(date.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+function weekKey(monday: Date): string {
+  return isoDateUtc(monday);
 }
 
 function utcMidnight(d: Date): Date {
@@ -92,9 +110,15 @@ function utcMidnight(d: Date): Date {
 export function computeRegionalCover(
   regions: ReadonlyArray<RegionForAnalytics>,
   leaves: ReadonlyArray<LeaveForAnalytics>,
-  options: { now?: Date; weeksBack?: number } = {}
+  options: {
+    now?: Date;
+    weeksBack?: number;
+    /** YYYY-MM-DD bank holiday dates in the period. */
+    bankHolidayDates?: ReadonlySet<string>;
+  } = {}
 ): RegionCoverReport[] {
   const now = options.now ?? new Date();
+  const bankHolidayDates = options.bankHolidayDates ?? new Set<string>();
   const weeksBack = options.weeksBack ?? 13;
 
   const currentWeekStart = startOfWeekUtc(utcMidnight(now));
@@ -123,7 +147,33 @@ export function computeRegionalCover(
     if (region.memberIds.length === 0) continue;
 
     const memberSet = new Set(region.memberIds);
-    const regionLeaves = relevantLeaves.filter((l) => memberSet.has(l.userId));
+    const leavesByUser = new Map<string, EngineLeave[]>();
+    for (const l of relevantLeaves) {
+      if (!memberSet.has(l.userId)) continue;
+      const list = leavesByUser.get(l.userId) ?? [];
+      list.push({
+        start: isoDateUtc(l.startDate),
+        end: isoDateUtc(l.endDate),
+        leaveTypeName: "",
+      });
+      leavesByUser.set(l.userId, list);
+    }
+
+    const days: string[] = [];
+    for (let t = periodStart.getTime(); t <= periodEnd.getTime(); t += MS_PER_DAY) {
+      days.push(isoDateUtc(new Date(t)));
+    }
+    const coverByDate = new Map(
+      computeShiftCover({
+        region,
+        shifts: region.shifts ?? [],
+        patterns: region.patterns ?? [],
+        members: region.memberIds.map((id) => ({ id, name: "" })),
+        leavesByUser,
+        bankHolidayDates,
+        days,
+      }).map((d) => [d.date, d])
+    );
 
     let totalDaysBelow = 0;
     let minCoverageOverall = region.memberIds.length;
@@ -135,22 +185,17 @@ export function computeRegionalCover(
 
       for (let d = 0; d < 7; d++) {
         const dayStart = new Date(weekStart.getTime() + d * MS_PER_DAY);
-        // Skip days outside the overall period (shouldn't happen but be
-        // defensive at the edges).
-        if (dayStart > periodEnd) continue;
+        const day = coverByDate.get(isoDateUtc(dayStart));
+        if (!day) continue;
 
-        const dayEnd = new Date(dayStart.getTime() + MS_PER_DAY - 1);
-        // Count distinct users on leave that day (a user with two
-        // overlapping leaves still counts once).
-        const usersOff = new Set<string>();
-        for (const leave of regionLeaves) {
-          if (leave.endDate < dayStart) continue;
-          if (leave.startDate > dayEnd) continue;
-          usersOff.add(leave.userId);
+        // Lowest staffing on any running shift (the whole team in per-day
+        // mode); a day counts once however many shifts fall short.
+        for (const shift of day.shifts) {
+          if (shift.available < minCoverageWeek) minCoverageWeek = shift.available;
         }
-        const coverage = region.memberIds.length - usersOff.size;
-        if (coverage < minCoverageWeek) minCoverageWeek = coverage;
-        if (coverage < region.minCover) daysBelow++;
+        if (day.shifts.some((sh) => sh.coverRequired && sh.available < sh.required)) {
+          daysBelow++;
+        }
       }
 
       totalDaysBelow += daysBelow;

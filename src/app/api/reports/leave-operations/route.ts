@@ -8,6 +8,11 @@ import {
   type SicknessLeaveRow,
 } from "@/lib/fit-note-alerts";
 import { computeRegionalCover } from "@/lib/regional-cover-analytics";
+import {
+  loadBankHolidaySet,
+  shiftTypesSelect,
+  toEngineShiftData,
+} from "@/lib/regionCover";
 import { recordReadAudit, requestAuditContext } from "@/lib/audit";
 import type { AnyPlan } from "@/lib/plans";
 
@@ -141,6 +146,9 @@ export async function GET(request: Request) {
         id: true,
         name: true,
         minCover: true,
+        coverWeekends: true,
+        coverBankHolidays: true,
+        shiftTypes: shiftTypesSelect(thirteenWeeksAgo, now),
         members: {
           where: { isActive: true },
           select: { id: true },
@@ -187,10 +195,21 @@ export async function GET(request: Request) {
         id: r.id,
         name: r.name,
         minCover: r.minCover,
+        coverWeekends: r.coverWeekends,
+        coverBankHolidays: r.coverBankHolidays,
         memberIds: r.members.map((m) => m.id),
+        ...toEngineShiftData(r.shiftTypes),
       })),
       coverLeaves,
-      { now, weeksBack: 1 }
+      {
+        now,
+        weeksBack: 1,
+        bankHolidayDates: await loadBankHolidaySet(
+          orgId,
+          new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000),
+          new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+        ),
+      }
     );
     regionsUnderCoverThisWeek = coverReport
       .filter((r) => r.totalDaysBelowCover > 0)

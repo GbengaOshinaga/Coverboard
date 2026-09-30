@@ -39,6 +39,7 @@ type DailyCover = {
   required: number;
   isWeekend: boolean;
   isBankHoliday: boolean;
+  coverRequired: boolean;
 };
 
 export default function CalendarPage() {
@@ -173,7 +174,7 @@ export default function CalendarPage() {
           />
           {regionFilter !== "ALL" && regionFilter !== "UNASSIGNED" && (
             <span className="text-xs text-gray-500">
-              Cover indicators show whether minimum cover is met each weekday.
+              Cover indicators show whether minimum cover is met on each day the region requires it.
             </span>
           )}
         </div>

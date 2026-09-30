@@ -153,6 +153,7 @@ model User {
   regionHistory       UserRegionHistory[]     @relation("UserRegionHistorySubject")
   regionChangesMade   UserRegionHistory[]     @relation("UserRegionHistoryActor")
   coverOverrides      LeaveRequest[]          @relation("CoverOverrideBy")
+  workPatterns        WorkPattern[]
 
   @@index([organizationId, countryCode])
   @@index([organizationId, workCountry, isActive])
@@ -419,6 +420,11 @@ model Region {
   name           String
   description    String?
   minCover       Int      @default(1)
+  // Whether minCover is enforced on Sat/Sun and on bank holidays. New regions
+  // default on (shift teams staff these days); regions that predate the flags
+  // were migrated to false to keep their old weekday-only behaviour.
+  coverWeekends     Boolean @default(true)
+  coverBankHolidays Boolean @default(true)
   color          String?
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
@@ -427,9 +433,53 @@ model Region {
   organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   members      User[]
   history      UserRegionHistory[]
+  shiftTypes   ShiftType[]
 
   @@unique([organizationId, name])
   @@index([organizationId, isActive])
+}
+
+// A recurring shift within a region/team ("Early", "Night"). When a region has
+// active shift types, cover is checked per shift instead of per day.
+model ShiftType {
+  id        String   @id @default(cuid())
+  regionId  String
+  name      String
+  // Local (Europe/London) "HH:MM". endTime <= startTime means the shift ends
+  // the next day; a shift always belongs to the date it starts on.
+  startTime String
+  endTime   String
+  // Minimum staff per weekday, Monday first (length 7). 0 = no minimum.
+  minCoverByWeekday Int[]
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  region   Region        @relation(fields: [regionId], references: [id], onDelete: Cascade)
+  patterns WorkPattern[]
+
+  @@unique([regionId, name])
+  @@index([regionId])
+}
+
+// A member's recurring working pattern: one row per (shift, weekday). Rows are
+// closed (effectiveTo) rather than deleted when a pattern changes, so past
+// cover reports stay accurate.
+model WorkPattern {
+  id            String    @id @default(cuid())
+  userId        String
+  shiftTypeId   String
+  // Monday = 0 … Sunday = 6.
+  weekday       Int
+  effectiveFrom DateTime  @db.Date
+  effectiveTo   DateTime? @db.Date
+  createdAt     DateTime  @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shiftType ShiftType @relation(fields: [shiftTypeId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([shiftTypeId, weekday])
 }
 
 model UserRegionHistory {

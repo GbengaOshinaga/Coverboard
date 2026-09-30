@@ -23,7 +23,9 @@ import {
   Trash2,
   MapPin,
   Users,
+  Clock,
 } from "lucide-react";
+import { RegionShiftsDialog } from "@/components/settings/region-shifts-dialog";
 import { REGION_PRESET_COLORS } from "@/lib/regionCover";
 
 type Region = {
@@ -31,13 +33,69 @@ type Region = {
   name: string;
   description: string | null;
   minCover: number;
+  coverWeekends: boolean;
+  coverBankHolidays: boolean;
   color: string | null;
   isActive: boolean;
   createdAt: string;
   memberCount: number;
+  shiftCount: number;
 };
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
+
+function CoverDaysFields({
+  weekends,
+  bankHolidays,
+  onWeekendsChange,
+  onBankHolidaysChange,
+  usesShifts = false,
+}: {
+  weekends: boolean;
+  bankHolidays: boolean;
+  onWeekendsChange: (next: boolean) => void;
+  onBankHolidaysChange: (next: boolean) => void;
+  usesShifts?: boolean;
+}) {
+  return (
+    <fieldset className="space-y-2">
+      <legend className="block text-sm font-medium text-gray-700">
+        Check cover on
+      </legend>
+      <label className={`flex items-center gap-2 text-sm ${usesShifts ? "opacity-50" : ""}`}>
+        <input
+          type="checkbox"
+          disabled={usesShifts}
+          checked={weekends}
+          onChange={(e) => onWeekendsChange(e.target.checked)}
+          className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+        />
+        Weekends
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={bankHolidays}
+          onChange={(e) => onBankHolidaysChange(e.target.checked)}
+          className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+        />
+        Bank holidays
+      </label>
+      <p className="text-xs text-gray-500">
+        {usesShifts
+          ? "This region uses shifts, so weekend minimums are set per shift. The bank holiday setting still applies."
+          : "Untick for teams that don't work these days."}
+      </p>
+    </fieldset>
+  );
+}
+
+function coverDaysLabel(r: Pick<Region, "coverWeekends" | "coverBankHolidays">) {
+  if (r.coverWeekends && r.coverBankHolidays) return "Every day";
+  if (r.coverWeekends) return "Every day except bank holidays";
+  if (r.coverBankHolidays) return "Weekdays incl. bank holidays";
+  return "Weekdays only";
+}
 
 function ColorPicker({
   value,
@@ -87,6 +145,7 @@ export default function RegionsSettingsPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<Region | null>(null);
   const [deleting, setDeleting] = useState<Region | null>(null);
+  const [shiftsFor, setShiftsFor] = useState<Region | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingBusy, setDeletingBusy] = useState(false);
 
@@ -94,12 +153,16 @@ export default function RegionsSettingsPage() {
   const [newDescription, setNewDescription] = useState("");
   const [newMinCover, setNewMinCover] = useState("1");
   const [newColor, setNewColor] = useState(REGION_PRESET_COLORS[0]);
+  const [newCoverWeekends, setNewCoverWeekends] = useState(true);
+  const [newCoverBankHolidays, setNewCoverBankHolidays] = useState(true);
 
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editMinCover, setEditMinCover] = useState("1");
   const [editColor, setEditColor] = useState(REGION_PRESET_COLORS[0]);
   const [editIsActive, setEditIsActive] = useState(true);
+  const [editCoverWeekends, setEditCoverWeekends] = useState(true);
+  const [editCoverBankHolidays, setEditCoverBankHolidays] = useState(true);
 
   const userRole = (session?.user as Record<string, unknown> | undefined)
     ?.role as string | undefined;
@@ -152,6 +215,8 @@ export default function RegionsSettingsPage() {
     setNewName("");
     setNewDescription("");
     setNewMinCover("1");
+    setNewCoverWeekends(true);
+    setNewCoverBankHolidays(true);
     setNewColor(
       REGION_PRESET_COLORS[regions.length % REGION_PRESET_COLORS.length]
     );
@@ -165,6 +230,8 @@ export default function RegionsSettingsPage() {
     setEditMinCover(String(r.minCover));
     setEditColor(r.color ?? REGION_PRESET_COLORS[0]);
     setEditIsActive(r.isActive);
+    setEditCoverWeekends(r.coverWeekends);
+    setEditCoverBankHolidays(r.coverBankHolidays);
   }
 
   async function handleAdd(e: React.FormEvent) {
@@ -187,6 +254,8 @@ export default function RegionsSettingsPage() {
           name: newName.trim(),
           description: newDescription.trim() || null,
           minCover,
+          coverWeekends: newCoverWeekends,
+          coverBankHolidays: newCoverBankHolidays,
           color: newColor,
         }),
       });
@@ -224,6 +293,8 @@ export default function RegionsSettingsPage() {
           name: editName.trim(),
           description: editDescription.trim() || null,
           minCover,
+          coverWeekends: editCoverWeekends,
+          coverBankHolidays: editCoverBankHolidays,
           color: editColor,
           isActive: editIsActive,
         }),
@@ -321,8 +392,8 @@ export default function RegionsSettingsPage() {
                 Your regions
               </CardTitle>
               <CardDescription>
-                Each region needs at least its minimum cover level on every
-                weekday (excluding bank holidays).
+                Each region needs at least its minimum cover level on the days
+                it&apos;s set to check: every day, or weekdays only.
               </CardDescription>
             </div>
             {canManage && (
@@ -384,18 +455,37 @@ export default function RegionsSettingsPage() {
                           {r.description}
                         </p>
                       )}
-                      <div className="mt-1 flex items-center gap-3 text-xs text-gray-500">
+                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
                         <span className="inline-flex items-center gap-1">
                           <Users className="h-3 w-3" />
                           {r.memberCount} member
                           {r.memberCount === 1 ? "" : "s"}
                         </span>
-                        <span>Min cover: {r.minCover}</span>
+                        {r.shiftCount > 0 ? (
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {r.shiftCount} shift{r.shiftCount === 1 ? "" : "s"}
+                          </span>
+                        ) : (
+                          <>
+                            <span>Min cover: {r.minCover}</span>
+                            <span>{coverDaysLabel(r)}</span>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShiftsFor(r)}
+                    >
+                      <Clock className="mr-1 h-3.5 w-3.5" />
+                      Shifts
+                    </Button>
                   {canManage && (
-                    <div className="flex items-center gap-2">
+                    <>
                       <Button
                         size="sm"
                         variant="outline"
@@ -413,8 +503,9 @@ export default function RegionsSettingsPage() {
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
-                    </div>
+                    </>
                   )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -422,6 +513,13 @@ export default function RegionsSettingsPage() {
         </CardContent>
       </Card>
       )}
+
+      <RegionShiftsDialog
+        region={shiftsFor}
+        canManage={canManage}
+        onClose={() => setShiftsFor(null)}
+        onChanged={refresh}
+      />
 
       <Dialog
         open={showAdd}
@@ -455,6 +553,12 @@ export default function RegionsSettingsPage() {
             value={newMinCover}
             onChange={(e) => setNewMinCover(e.target.value)}
             required
+          />
+          <CoverDaysFields
+            weekends={newCoverWeekends}
+            bankHolidays={newCoverBankHolidays}
+            onWeekendsChange={setNewCoverWeekends}
+            onBankHolidaysChange={setNewCoverBankHolidays}
           />
           <div className="space-y-1">
             <label className="block text-sm font-medium text-gray-700">
@@ -507,6 +611,13 @@ export default function RegionsSettingsPage() {
             value={editMinCover}
             onChange={(e) => setEditMinCover(e.target.value)}
             required
+          />
+          <CoverDaysFields
+            weekends={editCoverWeekends}
+            bankHolidays={editCoverBankHolidays}
+            onWeekendsChange={setEditCoverWeekends}
+            onBankHolidaysChange={setEditCoverBankHolidays}
+            usesShifts={(editing?.shiftCount ?? 0) > 0}
           />
           <div className="space-y-1">
             <label className="block text-sm font-medium text-gray-700">

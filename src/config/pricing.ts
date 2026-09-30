@@ -71,7 +71,6 @@ export const PRICING: PricingConfig = {
       headcount: "Unlimited employees",
       cta: "Start free trial",
       highlighted: true,
-      badge: "Most popular",
       features: [
         "Everything in Starter",
         "All UK statutory leave types",

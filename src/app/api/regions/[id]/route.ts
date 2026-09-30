@@ -16,6 +16,8 @@ const updateSchema = z
     name: z.string().trim().min(1).max(80).optional(),
     description: z.string().trim().max(500).nullable().optional(),
     minCover: z.number().int().min(1).max(1000).optional(),
+    coverWeekends: z.boolean().optional(),
+    coverBankHolidays: z.boolean().optional(),
     color: z
       .string()
       .trim()
@@ -75,6 +77,10 @@ export async function PUT(
   if (parsed.data.name !== undefined) data.name = parsed.data.name;
   if (parsed.data.description !== undefined) data.description = parsed.data.description;
   if (parsed.data.minCover !== undefined) data.minCover = parsed.data.minCover;
+  if (parsed.data.coverWeekends !== undefined) data.coverWeekends = parsed.data.coverWeekends;
+  if (parsed.data.coverBankHolidays !== undefined) {
+    data.coverBankHolidays = parsed.data.coverBankHolidays;
+  }
   if (parsed.data.color !== undefined) {
     data.color = parsed.data.color === "" ? null : parsed.data.color;
   }

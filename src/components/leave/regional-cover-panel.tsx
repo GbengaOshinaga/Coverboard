@@ -3,14 +3,25 @@
 import { useEffect, useState } from "react";
 import { ShieldCheck, AlertTriangle, MapPin } from "lucide-react";
 
+type ShiftCover = {
+  shiftId: string;
+  name: string;
+  available: number;
+  required: number;
+  coverRequired: boolean;
+  staffOff: Array<{ id: string; name: string; leaveType: string | null }>;
+};
+
 type DailyCover = {
   date: string;
   available: number;
   required: number;
   isWeekend: boolean;
   isBankHoliday: boolean;
+  coverRequired: boolean;
   staffOff: Array<{ id: string; name: string; leaveType: string | null }>;
   staffAvailable: Array<{ id: string; name: string }>;
+  shifts: ShiftCover[];
 };
 
 type CoverCheckResult = {
@@ -25,6 +36,8 @@ type CoverCheckResult = {
   regionId: string | null;
   regionName: string | null;
   minCover: number | null;
+  usesShifts: boolean;
+  requesterScheduled: boolean;
 };
 
 const FMT = new Intl.DateTimeFormat("en-GB", {
@@ -36,6 +49,39 @@ const FMT = new Intl.DateTimeFormat("en-GB", {
 function formatDay(iso: string) {
   const [y, m, d] = iso.split("-").map(Number);
   return FMT.format(new Date(y, m - 1, d));
+}
+
+function CoverRow({
+  label,
+  available,
+  required,
+  staffOff,
+}: {
+  label: string;
+  available: number;
+  required: number;
+  staffOff: Array<{ id: string; name: string }>;
+}) {
+  const ok = available >= required;
+  return (
+    <li className="flex items-start justify-between gap-3 py-1.5">
+      <div>
+        <p className="text-gray-700">{label}</p>
+        {staffOff.length > 0 && (
+          <p className="mt-0.5 text-[11px] text-gray-500">
+            Off: {staffOff.map((s) => s.name).join(", ")}
+          </p>
+        )}
+      </div>
+      <span
+        className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium ${
+          ok ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"
+        }`}
+      >
+        {available}/{required}
+      </span>
+    </li>
+  );
 }
 
 export function RegionalCoverPanel({
@@ -112,7 +158,7 @@ export function RegionalCoverPanel({
     );
   }
 
-  const workingDays = days.filter((d) => !d.isWeekend && !d.isBankHoliday);
+  const workingDays = days.filter((d) => d.coverRequired);
   const coverState = check.hasConflict ? "conflict" : "ok";
 
   return (
@@ -121,9 +167,11 @@ export function RegionalCoverPanel({
         <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
           <MapPin className="h-3.5 w-3.5 text-gray-500" />
           {check.regionName}
-          <span className="text-xs font-normal text-gray-500">
-            min cover {check.minCover}
-          </span>
+          {!check.usesShifts && (
+            <span className="text-xs font-normal text-gray-500">
+              min cover {check.minCover}
+            </span>
+          )}
         </div>
         {coverState === "ok" ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
@@ -144,38 +192,41 @@ export function RegionalCoverPanel({
         </div>
       )}
 
+      {check.usesShifts && !check.requesterScheduled && (
+        <p className="text-gray-500">
+          The requester has no shifts in their working pattern on these dates.
+        </p>
+      )}
+
       {workingDays.length === 0 ? (
         <p className="text-gray-500">
-          No working days in this range (weekends/bank holidays only).
+          Cover isn&apos;t required on any day in this range.
         </p>
       ) : (
         <ul className="divide-y divide-gray-100">
-          {workingDays.map((d) => {
-            const ok = d.available >= d.required;
-            return (
-              <li
+          {workingDays.flatMap((d) => {
+            if (d.shifts.length > 0) {
+              return d.shifts
+                .filter((s) => s.coverRequired)
+                .map((s) => (
+                  <CoverRow
+                    key={`${d.date}:${s.shiftId}`}
+                    label={`${formatDay(d.date)} · ${s.name}`}
+                    available={s.available}
+                    required={s.required}
+                    staffOff={s.staffOff}
+                  />
+                ));
+            }
+            return [
+              <CoverRow
                 key={d.date}
-                className="flex items-start justify-between gap-3 py-1.5"
-              >
-                <div>
-                  <p className="text-gray-700">{formatDay(d.date)}</p>
-                  {d.staffOff.length > 0 && (
-                    <p className="mt-0.5 text-[11px] text-gray-500">
-                      Off: {d.staffOff.map((s) => s.name).join(", ")}
-                    </p>
-                  )}
-                </div>
-                <span
-                  className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium ${
-                    ok
-                      ? "bg-emerald-50 text-emerald-700"
-                      : "bg-amber-50 text-amber-800"
-                  }`}
-                >
-                  {d.available}/{d.required}
-                </span>
-              </li>
-            );
+                label={formatDay(d.date)}
+                available={d.available}
+                required={d.required}
+                staffOff={d.staffOff}
+              />,
+            ];
           })}
         </ul>
       )}

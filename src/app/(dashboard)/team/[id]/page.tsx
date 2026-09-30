@@ -26,6 +26,7 @@ import { useToast } from "@/components/ui/toast";
 import { COUNTRY_NAMES } from "@/lib/utils";
 import { formatEmploymentType } from "@/lib/employment-types";
 import { ActivityLog } from "@/components/team/activity-log";
+import { WorkPatternCard } from "@/components/team/work-pattern-card";
 import { hasAuditTrail, type AnyPlan } from "@/lib/plans";
 import {
   parseEarningsCsv,
@@ -920,6 +921,8 @@ export default function EmployeeProfilePage({
           </Button>
         </div>
       </Dialog>
+
+      <WorkPatternCard memberId={memberId} canManage={canManage} />
 
       {/* Holiday pay earnings history (UK-only) */}
       {member.workCountry === "GB" && (
