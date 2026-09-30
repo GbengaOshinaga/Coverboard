@@ -12,7 +12,7 @@ import { canSeeCoverCandidates } from "@/lib/regionCover";
 import { ActivationChecklist } from "@/components/dashboard/activation-checklist";
 import { ActivationCelebration } from "@/components/dashboard/activation-celebration";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, CalendarDays, Clock, AlertTriangle, Plus, Wallet } from "lucide-react";
+import { Users, CalendarDays, Clock, AlertTriangle, Plus, Thermometer, Wallet } from "lucide-react";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -164,13 +164,24 @@ export default async function DashboardPage() {
             })}
           </p>
         </div>
-        <Link
-          href="/requests/new"
-          className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-700"
-        >
-          <Plus className="h-4 w-4" />
-          Request time off
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          {canSeeCoverCandidates(userRole) && (
+            <Link
+              href="/requests/log-sickness"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-800 shadow-sm transition-colors hover:bg-gray-50"
+            >
+              <Thermometer className="h-4 w-4" />
+              Log sickness
+            </Link>
+          )}
+          <Link
+            href="/requests/new"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-700"
+          >
+            <Plus className="h-4 w-4" />
+            Request time off
+          </Link>
+        </div>
       </div>
 
       {isAdmin && !activationComplete && (

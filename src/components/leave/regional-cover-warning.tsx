@@ -37,11 +37,18 @@ export function RegionalCoverWarning({
   startDate,
   endDate,
   userId,
+  excludeRequestId,
+  variant = "request",
 }: {
   startDate: string;
   endDate: string;
   userId?: string;
+  /** Leave already saved: exclude it so it isn't counted twice. */
+  excludeRequestId?: string;
+  /** "logged": the absence is already recorded, so describe the gap as current. */
+  variant?: "request" | "logged";
 }) {
+  const logged = variant === "logged";
   const [result, setResult] = useState<CoverCheckResult | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -57,7 +64,7 @@ export function RegionalCoverWarning({
         const res = await fetch("/api/cover-check", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ startDate, endDate, userId }),
+          body: JSON.stringify({ startDate, endDate, userId, excludeRequestId }),
         });
         if (res.ok && !cancelled) setResult(await res.json());
       } catch {
@@ -70,7 +77,7 @@ export function RegionalCoverWarning({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [startDate, endDate, userId]);
+  }, [startDate, endDate, userId, excludeRequestId]);
 
   if (loading) {
     return (
@@ -96,9 +103,14 @@ export function RegionalCoverWarning({
       <div className="flex items-start gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
         <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <span>
-          Cover OK in <strong>{result.regionName}</strong> across this date
-          range
-          {result.usesShifts ? " for the shifts you work" : ` (minimum cover: ${result.minCover})`}.
+          {logged ? "Cover is still OK" : "Cover OK"} in{" "}
+          <strong>{result.regionName}</strong> across this date range
+          {result.usesShifts
+            ? logged
+              ? " for the shifts they work"
+              : " for the shifts you work"
+            : ` (minimum cover: ${result.minCover})`}
+          .
         </span>
       </div>
     );
@@ -110,7 +122,7 @@ export function RegionalCoverWarning({
         <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
         <div className="space-y-1.5">
           <p className="font-medium">
-            Regional cover would drop below minimum on{" "}
+            {logged ? "Now short on" : "Regional cover would drop below minimum on"}{" "}
             {result.conflicts.length}{" "}
             {result.usesShifts ? "shift" : "day"}
             {result.conflicts.length === 1 ? "" : "s"} in{" "}
@@ -142,10 +154,12 @@ export function RegionalCoverWarning({
               </li>
             )}
           </ul>
-          <p className="text-amber-700">
-            You can still submit — a manager will need to override cover when
-            approving.
-          </p>
+          {!logged && (
+            <p className="text-amber-700">
+              You can still submit — a manager will need to override cover when
+              approving.
+            </p>
+          )}
         </div>
       </div>
     </div>
