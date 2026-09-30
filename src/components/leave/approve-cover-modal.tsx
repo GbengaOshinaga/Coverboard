@@ -2,6 +2,8 @@
 
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import type { CoverCandidate, RuledOutMember } from "@/lib/shiftCover";
+import { CoverOptions } from "./cover-options";
 import { AlertTriangle } from "lucide-react";
 
 export type CoverConflict = {
@@ -12,7 +14,8 @@ export type CoverConflict = {
   staffOff: Array<{ id: string; name: string; leaveType: string | null }>;
   shiftId?: string | null;
   shiftName?: string | null;
-  coverCandidates?: Array<{ id: string; name: string }>;
+  coverCandidates?: CoverCandidate[];
+  ruledOut?: RuledOutMember[];
 };
 
 const FMT = new Intl.DateTimeFormat("en-GB", {
@@ -53,7 +56,7 @@ export function ApproveCoverModal({
       <div className="space-y-4">
         <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-          <div className="space-y-1.5">
+          <div className="min-w-0 flex-1 space-y-1.5">
             <p className="font-medium">
               Approving {requesterName}&apos;s leave will leave{" "}
               <strong>{regionName ?? "this region"}</strong> below its minimum
@@ -73,12 +76,10 @@ export function ApproveCoverModal({
                       {c.staffOff.map((s) => s.name).join(", ")}
                     </span>
                   )}
-                  {c.coverCandidates && c.coverCandidates.length > 0 && (
-                    <span className="block text-amber-800">
-                      Could cover:{" "}
-                      {c.coverCandidates.map((s) => s.name).join(", ")}
-                    </span>
-                  )}
+                  <CoverOptions
+                    candidates={c.coverCandidates ?? []}
+                    ruledOut={c.ruledOut ?? []}
+                  />
                 </li>
               ))}
               {conflicts.length > 8 && (

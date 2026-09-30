@@ -212,7 +212,13 @@ test("cover candidates: free, rested members are suggested for a short shift", (
   const dayShift = day.shifts.find((s) => s.shiftId === "day")!;
   // Ben is on leave, Amara is already on it, Cleo works the night straight
   // after (no gap) — only Dev is free.
-  assert.deepEqual(dayShift.coverCandidates, [{ id: "d", name: "Dev" }]);
+  assert.deepEqual(dayShift.coverCandidates, [
+    { id: "d", name: "Dev", employmentType: null },
+  ]);
+  // Ben is rostered on the shift, so he's in staffOff, not ruledOut.
+  assert.deepEqual(dayShift.ruledOut, [
+    { id: "c", name: "Cleo", reason: "rest", note: "Night shift from 20:00" },
+  ]);
 });
 
 test("cover candidates: empty when the shift is not short", () => {
@@ -247,7 +253,13 @@ test("cover candidates: respect 11h rest across adjacent days", () => {
   );
   const night = day.shifts.find((s) => s.shiftId === "night")!;
   assert.equal(night.available, 1);
-  assert.deepEqual(night.coverCandidates, [{ id: "a", name: "Amara" }]);
+  assert.deepEqual(night.coverCandidates, [
+    { id: "a", name: "Amara", employmentType: null },
+  ]);
+  assert.deepEqual(night.ruledOut, [
+    { id: "b", name: "Ben", reason: "rest", note: "Day shift from 08:00 the next day" },
+    { id: "c", name: "Cleo", reason: "rest", note: "Late shift from 14:00 the next day" },
+  ]);
 });
 
 test("cover candidates: never in legacy mode", () => {
@@ -259,4 +271,74 @@ test("cover candidates: never in legacy mode", () => {
   );
   assert.equal(day.shifts[0].available, 3);
   assert.deepEqual(day.shifts[0].coverCandidates, []);
+});
+
+test("cover candidates: carry the member's contract type", () => {
+  const [day] = computeShiftCover(
+    input({
+      shifts: [DAY],
+      patterns: [pattern("a", "day", 3)],
+      members: [
+        { id: "a", name: "Amara" },
+        { id: "z", name: "Zoe", employmentType: "ZERO_HOURS" },
+      ],
+    })
+  );
+  assert.deepEqual(day.shifts[0].coverCandidates, [
+    { id: "z", name: "Zoe", employmentType: "ZERO_HOURS" },
+  ]);
+});
+
+test("ruled out: names the clashing shift the day before", () => {
+  // Thu day (08:00–20:00) is short. Ben worked Wed night until Thu 08:00;
+  // Cleo worked a Wed late until 23:00 (9h rest).
+  const LATE: EngineShift = {
+    id: "late",
+    name: "Late",
+    startTime: "15:00",
+    endTime: "23:00",
+    minCoverByWeekday: [0, 0, 0, 0, 0, 0, 0],
+  };
+  const [day] = computeShiftCover(
+    input({
+      shifts: [DAY, NIGHT, LATE],
+      patterns: [
+        pattern("a", "day", 3),
+        pattern("b", "night", 2),
+        pattern("c", "late", 2),
+      ],
+    })
+  );
+  const dayShift = day.shifts.find((s) => s.shiftId === "day")!;
+  assert.deepEqual(dayShift.ruledOut, [
+    { id: "b", name: "Ben", reason: "rest", note: "Night shift until 08:00" },
+    { id: "c", name: "Cleo", reason: "rest", note: "Late shift until 23:00 the day before" },
+  ]);
+  assert.deepEqual(dayShift.coverCandidates, [
+    { id: "d", name: "Dev", employmentType: null },
+  ]);
+});
+
+test("ruled out: empty when the shift is not short", () => {
+  const [day] = computeShiftCover(
+    input({
+      shifts: [DAY],
+      patterns: [pattern("a", "day", 3), pattern("b", "day", 3)],
+      leavesByUser: new Map([["c", [{ start: THU, end: THU, leaveTypeName: "Annual" }]]]),
+    })
+  );
+  assert.deepEqual(day.shifts[0].ruledOut, []);
+});
+
+test("ruled out: off-rota members on leave say so", () => {
+  const [day] = computeShiftCover(
+    input({
+      shifts: [DAY],
+      patterns: [pattern("a", "day", 3)],
+      leavesByUser: new Map([["b", [{ start: THU, end: THU, leaveTypeName: "Annual" }]]]),
+    })
+  );
+  assert.deepEqual(day.shifts[0].ruledOut, [
+    { id: "b", name: "Ben", reason: "on_leave", note: null },
+  ]);
 });

@@ -61,13 +61,38 @@ export type EngineLeave = {
   leaveTypeName: string;
 };
 
+export type EngineMember = {
+  id: string;
+  name: string;
+  /** Contract type, shown next to cover suggestions. */
+  employmentType?: string | null;
+};
+
+export type CoverCandidate = {
+  id: string;
+  name: string;
+  employmentType: string | null;
+};
+
+/**
+ * Someone not on the short shift who can't cover it, and why. Shown so a
+ * manager doesn't ring them.
+ */
+export type RuledOutMember = {
+  id: string;
+  name: string;
+  reason: "on_leave" | "rest";
+  /** For "rest": the clashing shift, e.g. "Night shift until 08:00". */
+  note: string | null;
+};
+
 export type EngineInput = {
   region: EngineRegion;
   /** Active shift types; empty = legacy mode. */
   shifts: EngineShift[];
   patterns: EnginePattern[];
   /** Active region members, minus anyone the caller wants excluded. */
-  members: Array<{ id: string; name: string }>;
+  members: EngineMember[];
   leavesByUser: ReadonlyMap<string, ReadonlyArray<EngineLeave>>;
   bankHolidayDates: ReadonlySet<string>;
   /** YYYY-MM-DD strings, in order. */
@@ -91,7 +116,9 @@ export type ShiftCover = {
    * MIN_REST_MINUTES of it. Empty otherwise (and always in legacy mode, where
    * everyone already counts).
    */
-  coverCandidates: Array<{ id: string; name: string }>;
+  coverCandidates: CoverCandidate[];
+  /** For a short shift: other members who can't cover it, with the reason. */
+  ruledOut: RuledOutMember[];
 };
 
 export type EngineDay = {
@@ -152,6 +179,23 @@ function tooClose(a: [number, number], b: [number, number]): boolean {
   return a[0] < b[1] + MIN_REST_MINUTES && b[0] < a[1] + MIN_REST_MINUTES;
 }
 
+/** Describes the shift that breaks rest, relative to the target shift. */
+function restClashNote(
+  target: [number, number],
+  other: EngineShift,
+  otherInterval: [number, number]
+): string {
+  if (otherInterval[1] <= target[0]) {
+    const dayBefore = Math.floor((otherInterval[1] - 1) / MINUTES_PER_DAY) < 0;
+    return `${other.name} shift until ${other.endTime}${dayBefore ? " the day before" : ""}`;
+  }
+  if (otherInterval[0] >= target[1]) {
+    const nextDay = Math.floor(otherInterval[0] / MINUTES_PER_DAY) > 0;
+    return `${other.name} shift from ${other.startTime}${nextDay ? " the next day" : ""}`;
+  }
+  return `On the ${other.name} shift, ${other.startTime}–${other.endTime}`;
+}
+
 export function computeShiftCover(input: EngineInput): EngineDay[] {
   const memberById = new Map(input.members.map((m) => [m.id, m]));
 
@@ -173,18 +217,38 @@ export function computeShiftCover(input: EngineInput): EngineDay[] {
     shift: EngineShift,
     date: string,
     scheduledIds: ReadonlySet<string>
-  ): Array<{ id: string; name: string }> => {
+  ): { candidates: CoverCandidate[]; ruledOut: RuledOutMember[] } => {
     const target = shiftInterval(shift, 0);
-    return input.members.filter((m) => {
-      if (scheduledIds.has(m.id)) return false;
-      if (leaveOn(input.leavesByUser.get(m.id), date)) return false;
+    const candidates: CoverCandidate[] = [];
+    const ruledOut: RuledOutMember[] = [];
+    for (const m of input.members) {
+      if (scheduledIds.has(m.id)) continue;
+      if (leaveOn(input.leavesByUser.get(m.id), date)) {
+        ruledOut.push({ id: m.id, name: m.name, reason: "on_leave", note: null });
+        continue;
+      }
+      let clash: string | null = null;
       for (const offset of [-1, 0, 1]) {
         for (const other of scheduledShifts(m.id, addDays(date, offset))) {
-          if (tooClose(target, shiftInterval(other, offset))) return false;
+          const interval = shiftInterval(other, offset);
+          if (tooClose(target, interval)) {
+            clash = restClashNote(target, other, interval);
+            break;
+          }
         }
+        if (clash) break;
       }
-      return true;
-    });
+      if (clash) {
+        ruledOut.push({ id: m.id, name: m.name, reason: "rest", note: clash });
+      } else {
+        candidates.push({
+          id: m.id,
+          name: m.name,
+          employmentType: m.employmentType ?? null,
+        });
+      }
+    }
+    return { candidates, ruledOut };
   };
 
   return input.days.map((date) => {
@@ -201,7 +265,7 @@ export function computeShiftCover(input: EngineInput): EngineDay[] {
       endTime: string | null;
       required: number;
       coverRequired: boolean;
-      scheduled: Array<{ id: string; name: string }>;
+      scheduled: EngineMember[];
       shift: EngineShift | null;
     }> = [];
 
@@ -260,6 +324,10 @@ export function computeShiftCover(input: EngineInput): EngineDay[] {
         }
       }
       const short = s.coverRequired && staffAvailable.length < s.required;
+      const cover =
+        short && s.shift
+          ? candidatesFor(s.shift, date, new Set(s.scheduled.map((m) => m.id)))
+          : { candidates: [], ruledOut: [] };
       return {
         shiftId: s.id,
         name: s.name,
@@ -271,10 +339,8 @@ export function computeShiftCover(input: EngineInput): EngineDay[] {
         scheduledUserIds: s.scheduled.map((m) => m.id),
         staffOff,
         staffAvailable,
-        coverCandidates:
-          short && s.shift
-            ? candidatesFor(s.shift, date, new Set(s.scheduled.map((m) => m.id)))
-            : [],
+        coverCandidates: cover.candidates,
+        ruledOut: cover.ruledOut,
       };
     });
 

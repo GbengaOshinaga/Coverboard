@@ -6,7 +6,10 @@ import {
   LEGACY_SHIFT_ID,
   type EngineLeave,
   type EnginePattern,
+  type CoverCandidate,
+  type EngineMember,
   type EngineShift,
+  type RuledOutMember,
   type ShiftCover,
 } from "@/lib/shiftCover";
 
@@ -20,7 +23,9 @@ export type ConflictDay = {
   shiftId: string | null;
   shiftName: string | null;
   /** Who could cover this shift (shift mode only). See ShiftCover. */
-  coverCandidates: Array<{ id: string; name: string }>;
+  coverCandidates: CoverCandidate[];
+  /** Who can't, and why (shift mode only). See ShiftCover. */
+  ruledOut: RuledOutMember[];
 };
 
 export type CoverCheckResult = {
@@ -137,14 +142,14 @@ export async function loadBankHolidaySet(
 async function loadRegionMembers(
   regionId: string,
   excludeUserId?: string
-): Promise<Array<{ id: string; name: string }>> {
+): Promise<EngineMember[]> {
   return prisma.user.findMany({
     where: {
       regionId,
       isActive: true,
       ...(excludeUserId ? { id: { not: excludeUserId } } : {}),
     },
-    select: { id: true, name: true },
+    select: { id: true, name: true, employmentType: true },
     orderBy: { name: "asc" },
   });
 }
@@ -463,7 +468,7 @@ export type PureCheckInput = {
   employeeId: string;
   start: Date;
   end: Date;
-  members: Array<{ id: string; name: string }>; // excluding the requesting employee
+  members: EngineMember[]; // excluding the requesting employee
   approvedLeavesByUser: ReadonlyMap<string, ReadonlyArray<EngineLeave>>;
   bankHolidayDates: Set<string>;
   /** Active shift types; omit or [] for per-day cover. */
@@ -522,6 +527,7 @@ export function checkRegionalCoverPure(input: PureCheckInput): CoverCheckResult 
         shiftId: s.shiftId === LEGACY_SHIFT_ID ? null : s.shiftId,
         shiftName: s.shiftId === LEGACY_SHIFT_ID ? null : s.name,
         coverCandidates: s.coverCandidates,
+        ruledOut: s.ruledOut.filter((o) => o.id !== input.employeeId),
       });
     }
   }
@@ -548,13 +554,13 @@ export function canSeeCoverCandidates(role: string | undefined): boolean {
 export function withoutCoverCandidates(result: CoverCheckResult): CoverCheckResult {
   return {
     ...result,
-    conflicts: result.conflicts.map((c) => ({ ...c, coverCandidates: [] })),
+    conflicts: result.conflicts.map((c) => ({ ...c, coverCandidates: [], ruledOut: [] })),
   };
 }
 
 export function dailyWithoutCoverCandidates(days: DailyCover[]): DailyCover[] {
   return days.map((d) => ({
     ...d,
-    shifts: d.shifts.map((s) => ({ ...s, coverCandidates: [] })),
+    shifts: d.shifts.map((s) => ({ ...s, coverCandidates: [], ruledOut: [] })),
   }));
 }

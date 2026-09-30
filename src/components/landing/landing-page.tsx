@@ -3,7 +3,8 @@
 import Link from "next/link";
 import {
   AlertTriangle,
-  Clock,
+  Phone,
+  Users,
   Globe,
   ShieldCheck,
   Check,
@@ -31,7 +32,7 @@ function HeroSection() {
         </h1>
 
         <p className="mt-6 text-lg md:text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
-          Coverboard helps care homes, pubs and restaurants, pharmacies and other shift-based teams manage leave, sickness and staff cover, so you see a gap before it becomes a problem.
+          When someone calls in sick, log it and see exactly which shift is short and who&apos;s free to cover. Coverboard helps shift-based teams manage leave, absence and cover in one place.
         </p>
 
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -70,116 +71,98 @@ function HeroSection() {
         </div>
       </div>
 
-      {/* Dashboard Preview */}
-      <div className="mt-16 mx-auto max-w-5xl px-6">
-        <div className="rounded-2xl border border-gray-200 bg-white shadow-2xl shadow-gray-200/50 overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 border-b border-gray-100">
-            <div className="w-3 h-3 rounded-full bg-red-400" />
-            <div className="w-3 h-3 rounded-full bg-yellow-400" />
-            <div className="w-3 h-3 rounded-full bg-green-400" />
-            <span className="ml-3 text-xs text-gray-400">coverboard.io/dashboard</span>
+      <SickCallSequence />
+    </section>
+  );
+}
+
+// The 7:10am story, told with what the product really does: a manager logs the
+// call, the short shift shows up, and the cover list matches CoverOptions
+// (contract type for who's free; the clashing shift for who isn't). No
+// "notify" or "ask to cover" step: Coverboard doesn't message staff.
+const sickCallCandidates = [
+  { name: "Sarah T.", note: "Variable hours", free: true, reason: "Free" },
+  { name: "Priya K.", note: "Zero-hours", free: true, reason: "Free" },
+  { name: "Tom R.", note: "Night shift until 08:00", free: false, reason: "Needs 11h rest" },
+];
+
+function SickCallSequence() {
+  return (
+    <div className="mt-16 mx-auto max-w-5xl px-6">
+      <p className="mb-4 text-center text-sm font-medium text-gray-500">
+        Tuesday, 7:10am. Your phone rings.
+      </p>
+      <div className="grid gap-4 md:grid-cols-3" aria-label="Example: logging a sick call and finding cover">
+        <div className="flex flex-col rounded-2xl border border-gray-200 bg-white p-5 shadow-xl shadow-gray-200/50 motion-safe:animate-rise">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold tabular-nums text-gray-400">07:10</span>
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-600">
+              <Phone className="h-4 w-4" aria-hidden />
+            </span>
           </div>
-          <div className="p-6 md:p-8">
-            <div className="grid md:grid-cols-5 gap-4">
-              <div className="md:col-span-3 rounded-xl border border-gray-100 p-4 md:p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <p className="font-semibold text-gray-900">Today&apos;s coverage</p>
-                  <span className="text-xs text-gray-400">Tue 18</span>
-                </div>
-                <div className="grid grid-cols-3 gap-2 md:gap-3 mb-5">
-                  {[
-                    { label: "Teams covered", value: "3", icon: ShieldCheck, color: "text-emerald-700 bg-emerald-50 border-emerald-100" },
-                    { label: "Team at risk", value: "1", icon: AlertTriangle, color: "text-amber-700 bg-amber-50 border-amber-200" },
-                    { label: "Days below minimum", value: "2", icon: Clock, color: "text-red-700 bg-red-50 border-red-100" },
-                  ].map((stat) => (
-                    <div key={stat.label} className={`rounded-xl border p-3 md:p-4 ${stat.color}`}>
-                      <stat.icon size={18} className="mb-2 opacity-80" aria-hidden />
-                      <p className="text-2xl md:text-3xl font-bold">{stat.value}</p>
-                      <p className="text-xs md:text-sm font-medium opacity-80 mt-1">{stat.label}</p>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">By team</p>
-                {[
-                  { team: "Care staff – days", on: 6, min: 5 },
-                  { team: "Care staff – nights", on: 3, min: 4, gaps: ["Thu", "Fri"] },
-                  { team: "Kitchen", on: 3, min: 2 },
-                  { team: "Housekeeping", on: 2, min: 2 },
-                ].map((t) => {
-                  const atRisk = t.on < t.min;
-                  return (
-                    <div key={t.team} className="py-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-medium text-gray-900">{t.team}</p>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">
-                            {t.on} on / {t.min} min
-                          </span>
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                              atRisk ? "bg-amber-100 text-amber-800" : "bg-emerald-50 text-emerald-700"
-                            }`}
-                          >
-                            {atRisk ? "At risk" : "Covered"}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="mt-1.5 h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${atRisk ? "bg-amber-500" : "bg-emerald-500"}`}
-                          style={{ width: `${Math.min(100, (t.on / t.min) * 100)}%` }}
-                        />
-                      </div>
-                      {t.gaps && (
-                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          <span className="text-xs text-gray-500">Below minimum this week:</span>
-                          {t.gaps.map((gap) => (
-                            <span
-                              key={gap}
-                              className="rounded-full border border-red-100 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700"
-                            >
-                              {gap}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="md:col-span-2 rounded-xl border border-gray-100 p-4 md:p-5">
-                <p className="font-semibold text-gray-900 text-sm mb-2">Out today</p>
-                {[
-                  { name: "Amara O.", detail: "Annual leave · Care (days)" },
-                  { name: "Diego R.", detail: "Sick · Care (nights)" },
-                ].map((p) => (
-                  <div key={p.name} className="py-1.5">
-                    <p className="text-sm font-medium text-gray-900">{p.name}</p>
-                    <p className="text-xs text-gray-500">{p.detail}</p>
-                  </div>
-                ))}
-                <p className="font-semibold text-gray-900 text-sm mt-3 mb-2">Upcoming</p>
-                {[
-                  { name: "Fatima K.", dates: "Wed 19 – Fri 21" },
-                  { name: "Carlos M.", dates: "Thu 20" },
-                ].map((p) => (
-                  <div key={p.name} className="flex items-center justify-between py-1.5">
-                    <p className="text-sm font-medium text-gray-900">{p.name}</p>
-                    <span className="text-xs text-gray-400">{p.dates}</span>
-                  </div>
-                ))}
-                <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between text-xs text-gray-500">
-                  <span>
-                    <span className="font-semibold text-brand-600">3</span> pending requests
-                  </span>
-                  <span>12 team members</span>
-                </div>
-              </div>
-            </div>
+          <p className="mt-3 text-lg font-semibold text-gray-900">Amara calls in sick</p>
+          <p className="mt-1 text-sm text-gray-500">Care · Day shift, 08:00–20:00</p>
+          <div className="mt-5 flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-700 md:mt-auto">
+            <Check className="h-4 w-4 shrink-0 text-brand-600" aria-hidden />
+            Logged by the manager on shift
           </div>
         </div>
+
+        <div className="rounded-2xl border border-red-200 bg-white p-5 shadow-xl shadow-gray-200/50 motion-safe:animate-rise motion-safe:[animation-delay:400ms]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold tabular-nums text-gray-400">07:11</span>
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-red-50 text-red-600">
+              <AlertTriangle className="h-4 w-4" aria-hidden />
+            </span>
+          </div>
+          <p className="mt-3 text-lg font-semibold text-gray-900">Day shift is short</p>
+          <p className="mt-1 text-sm text-gray-500">Care · minimum 5 on shift</p>
+          <div className="mt-5 flex items-end justify-between">
+            <p className="text-4xl font-bold tabular-nums text-red-600">
+              4<span className="text-xl font-semibold text-gray-400"> / 5</span>
+            </p>
+            <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
+              1 person needed
+            </span>
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-100">
+            <div className="h-full w-4/5 rounded-full bg-red-500" />
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-xl shadow-gray-200/50 motion-safe:animate-rise motion-safe:[animation-delay:800ms]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold tabular-nums text-gray-400">07:11</span>
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+              <Users className="h-4 w-4" aria-hidden />
+            </span>
+          </div>
+          <p className="mt-3 text-lg font-semibold text-gray-900">Who could cover</p>
+          <ul className="mt-3 divide-y divide-gray-100">
+            {sickCallCandidates.map((c) => (
+              <li key={c.name} className="flex items-center justify-between gap-3 py-2">
+                <div className="min-w-0">
+                  <p className={`text-sm font-medium ${c.free ? "text-gray-900" : "text-gray-400 line-through"}`}>
+                    {c.name}
+                  </p>
+                  <p className="truncate text-xs text-gray-500">{c.note}</p>
+                </div>
+                <span
+                  className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                    c.free ? "bg-emerald-50 text-emerald-700" : "bg-gray-50 text-gray-500"
+                  }`}
+                >
+                  {c.reason}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
-    </section>
+      <p className="mt-5 text-center text-sm text-gray-500">
+        From the call to knowing who to ring, without digging through the rota.
+      </p>
+    </div>
   );
 }
 
@@ -282,14 +265,14 @@ const pillars = [
   },
 ];
 
-// Mirrors the real cover-candidate rules: not on leave, not already on the
-// shift, and 11 hours' rest either side (see src/lib/shiftCover.ts). Don't add
-// "ask to cover", qualifications or hours here until the product has them.
+// Mirrors what CoverOptions shows (src/components/leave/cover-options.tsx),
+// built on the rules in src/lib/shiftCover.ts. Don't add "ask to cover",
+// qualifications or hours here until the product has them.
 const coverRows = [
-  { name: "Sarah T.", note: "Zero-hours", free: true, reason: "Free" },
-  { name: "Priya K.", note: "Bank", free: true, reason: "Free" },
-  { name: "Tom R.", note: "Days until 20:00", free: false, reason: "Needs 11h rest" },
-  { name: "Nia O.", note: "Part-time", free: false, reason: "On leave" },
+  { name: "Leah W.", note: "Zero-hours", free: true, reason: "Free" },
+  { name: "Ben C.", note: "Part-time", free: true, reason: "Free" },
+  { name: "Jas P.", note: "Lunch shift until 16:00", free: false, reason: "Needs 11h rest" },
+  { name: "Dan M.", note: "", free: false, reason: "On leave" },
 ];
 
 const findCoverPoints = [
@@ -299,9 +282,9 @@ const findCoverPoints = [
       "Minimums are set per shift and per day of the week, so a short night shows up even when the day looks fine.",
   },
   {
-    title: "See who's free to cover",
+    title: "See who's free, and who isn't",
     description:
-      "Bank, zero-hours and part-time staff who aren't working, aren't on leave and would still get 11 hours' rest.",
+      "Everyone who isn't working, isn't on leave and would still get 11 hours' rest, with their contract type. Anyone ruled out shows why.",
   },
   {
     title: "Decide, and keep a record",
@@ -362,11 +345,11 @@ function FindCoverSection() {
         <div>
           <p className="text-sm font-semibold text-brand-600 mb-3">Finding cover</p>
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight">
-            Short on a shift? See who can step in.
+            Before you say yes, see the gap.
           </h2>
           <p className="mt-4 text-gray-600 text-lg">
-            When a shift drops below minimum, Coverboard shows you who could step in,
-            so you&apos;re not scrolling through a rota at 6am.
+            When a holiday request would leave a shift below minimum, you see it
+            before you approve, along with who could step in.
           </p>
           <ul className="mt-8 space-y-5">
             {findCoverPoints.map((p) => (
@@ -384,15 +367,16 @@ function FindCoverSection() {
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm" aria-hidden>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold text-gray-900">Thursday · Night</p>
-              <p className="text-xs text-gray-500">Care staff · 20:00–08:00</p>
+              <p className="text-xs font-medium text-gray-500">Holiday request · Marcus J.</p>
+              <p className="mt-1 text-sm font-semibold text-gray-900">Saturday · Evening</p>
+              <p className="text-xs text-gray-500">Kitchen · 17:00–23:00</p>
             </div>
             <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
               <AlertTriangle className="h-3 w-3" />
               1 person needed
             </span>
           </div>
-          <p className="mt-1 text-xs text-gray-500">1 of 2 available · Amara off sick</p>
+          <p className="mt-1 text-xs text-gray-500">Approving leaves 2 of 3 on shift</p>
 
           <p className="mt-5 mb-1 text-[11px] font-medium uppercase tracking-wide text-gray-500">
             Could cover
@@ -404,7 +388,7 @@ function FindCoverSection() {
                   <p className={r.free ? "text-gray-900" : "text-gray-400 line-through"}>
                     {r.name}
                   </p>
-                  <p className="text-xs text-gray-500">{r.note}</p>
+                  {r.note && <p className="text-xs text-gray-500">{r.note}</p>}
                 </div>
                 <span
                   className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium ${
@@ -418,8 +402,8 @@ function FindCoverSection() {
           </ul>
 
           <div className="mt-4 rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-600">
-            Cover arranged? Approve the request, and any override is recorded in the
-            audit history.
+            Cover arranged? Approve the request. If you approve below minimum, the
+            override is recorded in the audit history.
           </div>
         </div>
       </div>
@@ -430,9 +414,9 @@ function FindCoverSection() {
 const steps = [
   {
     step: "01",
-    title: "Someone requests leave",
+    title: "Leave is booked or sickness is logged",
     description:
-      "Staff book holiday or report sickness from their phone. If the dates would leave their team short, they're told before they submit.",
+      "Staff book holiday from their phone. When someone calls in sick, a manager logs it in a few taps. Either way, a gap shows up straight away.",
   },
   {
     step: "02",
