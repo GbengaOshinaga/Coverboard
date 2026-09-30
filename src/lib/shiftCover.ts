@@ -85,6 +85,13 @@ export type ShiftCover = {
   scheduledUserIds: string[];
   staffOff: Array<{ id: string; name: string; leaveType: string | null }>;
   staffAvailable: Array<{ id: string; name: string }>;
+  /**
+   * For a short, enforced shift: members who could cover it — not already on
+   * it, not on leave, and with no scheduled shift overlapping it or within
+   * MIN_REST_MINUTES of it. Empty otherwise (and always in legacy mode, where
+   * everyone already counts).
+   */
+  coverCandidates: Array<{ id: string; name: string }>;
 };
 
 export type EngineDay = {
@@ -116,13 +123,72 @@ function patternActive(p: EnginePattern, isoDate: string): boolean {
   return p.effectiveFrom <= isoDate && (p.effectiveTo === null || p.effectiveTo >= isoDate);
 }
 
+/** UK Working Time Regulations: 11 consecutive hours' daily rest. */
+export const MIN_REST_MINUTES = 11 * 60;
+const MINUTES_PER_DAY = 24 * 60;
+
+function addDays(isoDate: string, n: number): string {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+}
+
+function toMinutes(time: string): number {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+}
+
+/**
+ * [start, end) in minutes relative to midnight of the candidate shift's date.
+ * Overnight shifts (end <= start) run into the next day.
+ */
+function shiftInterval(shift: EngineShift, dayOffset: number): [number, number] {
+  const start = dayOffset * MINUTES_PER_DAY + toMinutes(shift.startTime);
+  const length = (toMinutes(shift.endTime) - toMinutes(shift.startTime) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
+  return [start, start + (length || MINUTES_PER_DAY)];
+}
+
+/** True when two shifts overlap or leave less than the minimum rest between them. */
+function tooClose(a: [number, number], b: [number, number]): boolean {
+  return a[0] < b[1] + MIN_REST_MINUTES && b[0] < a[1] + MIN_REST_MINUTES;
+}
+
 export function computeShiftCover(input: EngineInput): EngineDay[] {
   const memberById = new Map(input.members.map((m) => [m.id, m]));
 
-  return input.days.map((date) => {
-    const shiftsToday = input.shifts.filter(
-      (s) => !s.activeFrom || s.activeFrom <= date
+  const shiftsOn = (date: string) =>
+    input.shifts.filter((s) => !s.activeFrom || s.activeFrom <= date);
+
+  /** Shifts a member is scheduled on for a date, per their pattern. */
+  const scheduledShifts = (userId: string, date: string): EngineShift[] => {
+    const weekday = weekdayIndex(date);
+    const ids = new Set(
+      input.patterns
+        .filter((p) => p.userId === userId && p.weekday === weekday && patternActive(p, date))
+        .map((p) => p.shiftTypeId)
     );
+    return shiftsOn(date).filter((s) => ids.has(s.id));
+  };
+
+  const candidatesFor = (
+    shift: EngineShift,
+    date: string,
+    scheduledIds: ReadonlySet<string>
+  ): Array<{ id: string; name: string }> => {
+    const target = shiftInterval(shift, 0);
+    return input.members.filter((m) => {
+      if (scheduledIds.has(m.id)) return false;
+      if (leaveOn(input.leavesByUser.get(m.id), date)) return false;
+      for (const offset of [-1, 0, 1]) {
+        for (const other of scheduledShifts(m.id, addDays(date, offset))) {
+          if (tooClose(target, shiftInterval(other, offset))) return false;
+        }
+      }
+      return true;
+    });
+  };
+
+  return input.days.map((date) => {
+    const shiftsToday = shiftsOn(date);
     const legacy = shiftsToday.length === 0;
     const weekday = weekdayIndex(date);
     const isWeekend = weekday >= 5;
@@ -136,6 +202,7 @@ export function computeShiftCover(input: EngineInput): EngineDay[] {
       required: number;
       coverRequired: boolean;
       scheduled: Array<{ id: string; name: string }>;
+      shift: EngineShift | null;
     }> = [];
 
     if (legacy) {
@@ -147,6 +214,7 @@ export function computeShiftCover(input: EngineInput): EngineDay[] {
         required: input.region.minCover,
         coverRequired: coverAppliesOn({ isWeekend, isBankHoliday }, input.region),
         scheduled: input.members,
+        shift: null,
       });
     } else {
       for (const shift of shiftsToday) {
@@ -175,6 +243,7 @@ export function computeShiftCover(input: EngineInput): EngineDay[] {
           coverRequired:
             required > 0 && !(isBankHoliday && !input.region.coverBankHolidays),
           scheduled: input.members.filter((m) => scheduledIds.has(m.id)),
+          shift,
         });
       }
     }
@@ -190,6 +259,7 @@ export function computeShiftCover(input: EngineInput): EngineDay[] {
           staffAvailable.push({ id: m.id, name: m.name });
         }
       }
+      const short = s.coverRequired && staffAvailable.length < s.required;
       return {
         shiftId: s.id,
         name: s.name,
@@ -201,6 +271,10 @@ export function computeShiftCover(input: EngineInput): EngineDay[] {
         scheduledUserIds: s.scheduled.map((m) => m.id),
         staffOff,
         staffAvailable,
+        coverCandidates:
+          short && s.shift
+            ? candidatesFor(s.shift, date, new Set(s.scheduled.map((m) => m.id)))
+            : [],
       };
     });
 

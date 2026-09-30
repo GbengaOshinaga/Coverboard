@@ -200,3 +200,63 @@ test("days before a shift's activeFrom use the region's per-day rule", () => {
   assert.equal(days[1].shifts[0].shiftId, "day");
   assert.deepEqual(days[1].shifts[0].scheduledUserIds, ["a"]);
 });
+
+test("cover candidates: free, rested members are suggested for a short shift", () => {
+  const [day] = computeShiftCover(
+    input({
+      shifts: [DAY, NIGHT],
+      patterns: [pattern("a", "day", 3), pattern("b", "day", 3), pattern("c", "night", 3)],
+      leavesByUser: new Map([["b", [{ start: THU, end: THU, leaveTypeName: "Annual" }]]]),
+    })
+  );
+  const dayShift = day.shifts.find((s) => s.shiftId === "day")!;
+  // Ben is on leave, Amara is already on it, Cleo works the night straight
+  // after (no gap) — only Dev is free.
+  assert.deepEqual(dayShift.coverCandidates, [{ id: "d", name: "Dev" }]);
+});
+
+test("cover candidates: empty when the shift is not short", () => {
+  const [day] = computeShiftCover(
+    input({
+      shifts: [DAY],
+      patterns: [pattern("a", "day", 3), pattern("b", "day", 3)],
+    })
+  );
+  assert.deepEqual(day.shifts[0].coverCandidates, []);
+});
+
+test("cover candidates: respect 11h rest across adjacent days", () => {
+  // Thu night (20:00–08:00) needs 2; only Dev is on it.
+  const LATE: EngineShift = {
+    id: "late",
+    name: "Late",
+    startTime: "14:00",
+    endTime: "22:00",
+    minCoverByWeekday: [0, 0, 0, 0, 0, 0, 0],
+  };
+  const [day] = computeShiftCover(
+    input({
+      shifts: [DAY, NIGHT, LATE],
+      patterns: [
+        pattern("d", "night", 3),
+        pattern("a", "night", 2), // Wed night ends Thu 08:00 — 12h rest, OK
+        pattern("b", "day", 4), // Fri day starts 08:00 — no rest, excluded
+        pattern("c", "late", 4), // Fri late starts 14:00 — 6h rest, excluded
+      ],
+    })
+  );
+  const night = day.shifts.find((s) => s.shiftId === "night")!;
+  assert.equal(night.available, 1);
+  assert.deepEqual(night.coverCandidates, [{ id: "a", name: "Amara" }]);
+});
+
+test("cover candidates: never in legacy mode", () => {
+  const [day] = computeShiftCover(
+    input({
+      region: { ...REGION, minCover: 4 },
+      leavesByUser: new Map([["a", [{ start: THU, end: THU, leaveTypeName: "Sick" }]]]),
+    })
+  );
+  assert.equal(day.shifts[0].available, 3);
+  assert.deepEqual(day.shifts[0].coverCandidates, []);
+});

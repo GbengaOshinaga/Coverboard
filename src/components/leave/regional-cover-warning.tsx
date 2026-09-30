@@ -13,6 +13,7 @@ type CoverCheckResult = {
     staffOff: Array<{ id: string; name: string; leaveType: string | null }>;
     shiftId: string | null;
     shiftName: string | null;
+    coverCandidates?: Array<{ id: string; name: string }>;
   }>;
   regionId: string | null;
   regionName: string | null;
@@ -125,6 +126,12 @@ export function RegionalCoverWarning({
                   <span className="text-amber-700">
                     {" "}
                     — off: {c.staffOff.map((s) => s.name).join(", ")}
+                  </span>
+                )}
+                {c.coverCandidates && c.coverCandidates.length > 0 && (
+                  <span className="block text-amber-800">
+                    Could cover:{" "}
+                    {c.coverCandidates.map((s) => s.name).join(", ")}
                   </span>
                 )}
               </li>

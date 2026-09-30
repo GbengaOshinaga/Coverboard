@@ -3,7 +3,11 @@ import { getServerSession } from "next-auth";
 import { format } from "date-fns";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { checkRegionalCover } from "@/lib/regionCover";
+import {
+  canSeeCoverCandidates,
+  checkRegionalCover,
+  withoutCoverCandidates,
+} from "@/lib/regionCover";
 
 function isAdminOrManager(role: string | undefined) {
   return role === "ADMIN" || role === "MANAGER";
@@ -49,5 +53,7 @@ export async function POST(
     excludeRequestId: leaveRequest.id,
   });
 
-  return NextResponse.json(result);
+  return NextResponse.json(
+    canSeeCoverCandidates(myRole) ? result : withoutCoverCandidates(result)
+  );
 }

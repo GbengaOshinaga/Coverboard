@@ -3,7 +3,11 @@ import { getServerSession } from "next-auth";
 import { parseISO, isValid } from "date-fns";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { computeDailyCover } from "@/lib/regionCover";
+import {
+  canSeeCoverCandidates,
+  computeDailyCover,
+  dailyWithoutCoverCandidates,
+} from "@/lib/regionCover";
 import { isRegionsEnabled, regionsDisabledResponse } from "@/lib/regionsFeature";
 
 export async function GET(
@@ -39,7 +43,11 @@ export async function GET(
     start: date,
     end: date,
   });
-  const day = days[0];
+  const day = (
+    canSeeCoverCandidates(sessionUser.role as string)
+      ? days
+      : dailyWithoutCoverCandidates(days)
+  )[0];
   if (!day) {
     return NextResponse.json({
       date: dateStr,
@@ -50,6 +58,7 @@ export async function GET(
       isWeekend: false,
       isBankHoliday: false,
       coverRequired: false,
+      shifts: [],
       region,
     });
   }

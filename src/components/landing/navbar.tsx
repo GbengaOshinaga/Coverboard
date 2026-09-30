@@ -18,9 +18,9 @@ export function LandingNavbar() {
         </Link>
 
         <div className="hidden md:flex items-center gap-8 text-sm text-gray-600">
-          <a href="#features" className="hover:text-gray-900 transition-colors">Features</a>
-          <a href="#how-it-works" className="hover:text-gray-900 transition-colors">How it works</a>
-          <a href="#pricing" className="hover:text-gray-900 transition-colors">Pricing</a>
+          <a href="/#features" className="hover:text-gray-900 transition-colors">Features</a>
+          <a href="/#how-it-works" className="hover:text-gray-900 transition-colors">How it works</a>
+          <a href="/pricing" className="hover:text-gray-900 transition-colors">Pricing</a>
           <Link href="/guides" className="hover:text-gray-900 transition-colors">Guides</Link>
         </div>
 
@@ -50,9 +50,9 @@ export function LandingNavbar() {
 
       {mobileOpen && (
         <div className="md:hidden border-t border-gray-100 bg-white px-6 py-4 space-y-3">
-          <a href="#features" onClick={() => setMobileOpen(false)} className="block text-sm text-gray-600 py-2">Features</a>
-          <a href="#how-it-works" onClick={() => setMobileOpen(false)} className="block text-sm text-gray-600 py-2">How it works</a>
-          <a href="#pricing" onClick={() => setMobileOpen(false)} className="block text-sm text-gray-600 py-2">Pricing</a>
+          <a href="/#features" onClick={() => setMobileOpen(false)} className="block text-sm text-gray-600 py-2">Features</a>
+          <a href="/#how-it-works" onClick={() => setMobileOpen(false)} className="block text-sm text-gray-600 py-2">How it works</a>
+          <a href="/pricing" onClick={() => setMobileOpen(false)} className="block text-sm text-gray-600 py-2">Pricing</a>
           <Link href="/guides" onClick={() => setMobileOpen(false)} className="block text-sm text-gray-600 py-2">Guides</Link>
           <div className="flex flex-col gap-2 pt-2">
             <Link href="/login" className="text-sm font-medium text-gray-700 text-center py-2">Log in</Link>

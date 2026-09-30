@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
-import { checkRegionalCover } from "@/lib/regionCover";
+import {
+  canSeeCoverCandidates,
+  checkRegionalCover,
+  withoutCoverCandidates,
+} from "@/lib/regionCover";
 
 const schema = z.object({
   startDate: z.string().min(10),
@@ -48,5 +52,7 @@ export async function POST(request: Request) {
     excludeRequestId: parsed.data.excludeRequestId,
   });
 
-  return NextResponse.json(result);
+  return NextResponse.json(
+    canSeeCoverCandidates(myRole) ? result : withoutCoverCandidates(result)
+  );
 }

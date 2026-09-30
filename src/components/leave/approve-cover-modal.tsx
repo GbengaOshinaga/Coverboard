@@ -12,6 +12,7 @@ export type CoverConflict = {
   staffOff: Array<{ id: string; name: string; leaveType: string | null }>;
   shiftId?: string | null;
   shiftName?: string | null;
+  coverCandidates?: Array<{ id: string; name: string }>;
 };
 
 const FMT = new Intl.DateTimeFormat("en-GB", {
@@ -70,6 +71,12 @@ export function ApproveCoverModal({
                       {" "}
                       — already off:{" "}
                       {c.staffOff.map((s) => s.name).join(", ")}
+                    </span>
+                  )}
+                  {c.coverCandidates && c.coverCandidates.length > 0 && (
+                    <span className="block text-amber-800">
+                      Could cover:{" "}
+                      {c.coverCandidates.map((s) => s.name).join(", ")}
                     </span>
                   )}
                 </li>

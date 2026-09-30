@@ -8,6 +8,7 @@ import { getUserLeaveBalances } from "@/lib/leave-balances";
 import { WhoIsOut } from "@/components/dashboard/who-is-out";
 import { UpcomingAbsences } from "@/components/dashboard/upcoming-absences";
 import { RegionCoverWidget } from "@/components/dashboard/region-cover-widget";
+import { canSeeCoverCandidates } from "@/lib/regionCover";
 import { ActivationChecklist } from "@/components/dashboard/activation-checklist";
 import { ActivationCelebration } from "@/components/dashboard/activation-celebration";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -183,7 +184,12 @@ export default async function DashboardPage() {
       {isAdmin && activationComplete && <ActivationCelebration />}
 
       {/* Cover leads the dashboard — are we covered today, and where are we short? */}
-      <RegionCoverWidget organizationId={orgId} today={today} isAdmin={isAdmin} />
+      <RegionCoverWidget
+        organizationId={orgId}
+        today={today}
+        isAdmin={isAdmin}
+        showCoverCandidates={canSeeCoverCandidates(userRole)}
+      />
 
       {showTeamAbsencesFirst && absenceCards}
 

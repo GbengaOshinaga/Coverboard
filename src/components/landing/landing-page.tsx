@@ -8,10 +8,10 @@ import {
   ShieldCheck,
   Check,
   ArrowRight,
-  Building2,
 } from "lucide-react";
 import { LandingNavbar } from "./navbar";
 import { PricingSection } from "./pricing-section";
+import { LandingFooter } from "./footer";
 import { PRICING } from "@/config/pricing";
 
 function HeroSection() {
@@ -31,7 +31,7 @@ function HeroSection() {
         </h1>
 
         <p className="mt-6 text-lg md:text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
-          Coverboard helps shift-based teams manage leave, sickness and staff cover so you can spot coverage gaps before they become a problem.
+          Coverboard helps care homes, pubs and restaurants, pharmacies and other shift-based teams manage leave, sickness and staff cover, so you see a gap before it becomes a problem.
         </p>
 
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -183,140 +183,6 @@ function HeroSection() {
   );
 }
 
-const scaleHighlights = [
-  "Parental leave tracker, KIT & SPLIT day tracking",
-  "Holiday pay earnings history & 52-week average calculation",
-  "Custom carry-over rules & absence analytics dashboard",
-  "UK compliance report pack & priority response",
-];
-
-const proHighlights = [
-  "Activity log — see who viewed each profile, sickness note, and report",
-  "Audit trail exports for governance and investigations",
-  "Priority email support (2 working-day target) — everything in Scale included",
-];
-
-function TierPrice({ name }: { name: string }) {
-  const tier = PRICING.tiers.find((t) => t.name === name);
-  if (!tier) return null;
-  return (
-    <p className="mt-4 flex items-baseline gap-1">
-      <span className="text-2xl font-bold text-gray-900">
-        {PRICING.currency}
-        {tier.price_monthly}
-      </span>
-      <span className="text-sm text-gray-500">/mo, excl. VAT</span>
-    </p>
-  );
-}
-
-function TierTrialLink({ name }: { name: string }) {
-  return (
-    <Link
-      href={`/signup?plan=${name.toLowerCase()}`}
-      className="mt-8 block rounded-xl border-2 border-brand-600 py-2.5 text-center text-sm font-semibold text-brand-600 transition-colors hover:bg-brand-50"
-    >
-      Start free trial
-    </Link>
-  );
-}
-
-function ScaleAndProSection() {
-  return (
-    <section id="scale-pro" className="py-20 md:py-28 bg-slate-50 border-y border-slate-100">
-      <div className="mx-auto max-w-6xl px-6">
-        <div className="text-center max-w-3xl mx-auto mb-14">
-          <div className="inline-flex items-center justify-center gap-2 rounded-full bg-white border border-slate-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600 mb-4">
-            <Building2 className="h-3.5 w-3.5 text-brand-600" />
-            Scale &amp; Pro
-          </div>
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight">
-            When leave touches payroll, compliance, and audits
-          </h2>
-          <p className="mt-4 text-gray-600 text-lg leading-relaxed">
-            Starter and Growth keep day-to-day leave effortless.{" "}
-            <span className="font-medium text-gray-800">Scale</span> adds HR
-            operations depth — statutory tracking, payroll-ready figures, and
-            reporting your finance team can rely on.{" "}
-            <span className="font-medium text-gray-800">Pro</span> layers on
-            tamper-evident activity logs and exportable audit history for
-            organisations that answer to regulators, boards, or insurers.
-          </p>
-        </div>
-
-        <div className="grid gap-6 md:grid-cols-2">
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 md:p-8 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">
-              Scale
-            </p>
-            <p className="mt-1 text-sm text-gray-500">Advanced HR operations</p>
-            <TierPrice name="Scale" />
-            <p className="mt-4 text-sm text-gray-700 leading-relaxed">
-              For People teams who need parental programmes, holiday pay
-              defensibility, and compliance reporting — without bolting on a
-              second HRIS.
-            </p>
-            <ul className="mt-6 space-y-3">
-              {scaleHighlights.map((item) => (
-                <li
-                  key={item}
-                  className="flex items-start gap-3 text-sm text-gray-800"
-                >
-                  <Check
-                    size={16}
-                    className="text-brand-600 mt-0.5 shrink-0"
-                    aria-hidden
-                  />
-                  {item}
-                </li>
-              ))}
-            </ul>
-            <TierTrialLink name="Scale" />
-          </div>
-
-          <div className="rounded-2xl border border-brand-200 bg-white p-6 md:p-8 shadow-md shadow-brand-100/30 ring-1 ring-brand-100">
-            <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">
-              Pro
-            </p>
-            <p className="mt-1 text-sm text-gray-500">Enterprise controls</p>
-            <TierPrice name="Pro" />
-            <p className="mt-4 text-sm text-gray-700 leading-relaxed">
-              For employers who need a tamper-evident activity trail, SAR
-              exports, and priority email support alongside the same leave
-              engine your managers already use.
-            </p>
-            <ul className="mt-6 space-y-3">
-              {proHighlights.map((item) => (
-                <li
-                  key={item}
-                  className="flex items-start gap-3 text-sm text-gray-800"
-                >
-                  <Check
-                    size={16}
-                    className="text-brand-600 mt-0.5 shrink-0"
-                    aria-hidden
-                  />
-                  {item}
-                </li>
-              ))}
-            </ul>
-            <TierTrialLink name="Pro" />
-          </div>
-        </div>
-
-        <p className="mt-10 text-center text-sm text-gray-600">
-          <a
-            href="#pricing"
-            className="font-medium text-brand-600 hover:text-brand-700 underline underline-offset-2"
-          >
-            Compare plans and pricing
-          </a>
-        </p>
-      </div>
-    </section>
-  );
-}
-
 function MiniCard({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm" aria-hidden>
@@ -411,28 +277,48 @@ const pillars = [
   },
   {
     title: "Cover",
-    description: "Spot gaps and get warned before you approve a request that leaves you short.",
+    description: "See who's available and get warned before a request leaves you short.",
     preview: CoverPreview,
   },
 ];
 
-const variableHoursWeeks = [
-  { week: "Wk 1", hours: 24 },
-  { week: "Wk 2", hours: 18 },
-  { week: "Wk 3", hours: 31 },
+// Mirrors the real cover-candidate rules: not on leave, not already on the
+// shift, and 11 hours' rest either side (see src/lib/shiftCover.ts). Don't add
+// "ask to cover", qualifications or hours here until the product has them.
+const coverRows = [
+  { name: "Sarah T.", note: "Zero-hours", free: true, reason: "Free" },
+  { name: "Priya K.", note: "Bank", free: true, reason: "Free" },
+  { name: "Tom R.", note: "Days until 20:00", free: false, reason: "Needs 11h rest" },
+  { name: "Nia O.", note: "Part-time", free: false, reason: "On leave" },
 ];
 
-const alsoIncluded = [
-  "SSP & family pay on the 2026 rules",
-  "Bradford Factor",
-  "Bank holidays by region",
-  "Payroll export",
-  "Slack & email approvals",
-  "Month-to-month, no contract",
+const findCoverPoints = [
+  {
+    title: "See the gap, shift by shift",
+    description:
+      "Minimums are set per shift and per day of the week, so a short night shows up even when the day looks fine.",
+  },
+  {
+    title: "See who's free to cover",
+    description:
+      "Bank, zero-hours and part-time staff who aren't working, aren't on leave and would still get 11 hours' rest.",
+  },
+  {
+    title: "Decide, and keep a record",
+    description:
+      "Arrange cover with the people listed, then approve. If you approve below minimum, the override is logged.",
+  },
+];
+
+// Kept deliberately quiet: cover is the pitch. Per-plan detail lives in pricing.
+const hrEssentials = [
+  "Holiday entitlement",
+  "statutory leave & SSP",
+  "payroll export",
+  "audit trail",
 ];
 
 function FeaturesSection() {
-  const totalHours = variableHoursWeeks.reduce((sum, w) => sum + w.hours, 0);
   return (
     <section id="features" className="py-20 md:py-28 bg-white">
       <div className="mx-auto max-w-6xl px-6">
@@ -442,8 +328,8 @@ function FeaturesSection() {
             Everything you need to keep shifts covered.
           </h2>
           <p className="mt-4 text-gray-600 text-lg">
-            Leave, sickness and minimum staffing in one place, so you see a gap
-            before it becomes a problem.
+            Leave and absence change your staffing. Coverboard shows you the
+            impact before it becomes a problem.
           </p>
         </div>
 
@@ -457,47 +343,84 @@ function FeaturesSection() {
           ))}
         </div>
 
-        <div className="mt-8 rounded-2xl border border-brand-100 bg-brand-50/60 p-5 md:p-6 flex flex-col md:flex-row md:items-center gap-5 md:gap-8">
-          <div className="flex-1">
-            <h3 className="font-semibold text-gray-900">
-              Built for variable-hours, part-time and zero-hours teams.
-            </h3>
-            <p className="mt-1 text-sm text-gray-600 leading-relaxed">
-              Calculate entitlement correctly, even when working patterns change.
-              Irregular-hours holiday accrues at 12.07% of hours worked, tracked in
-              hours, not fudged into days.
-            </p>
-          </div>
-          <div className="md:w-72 shrink-0 rounded-xl border border-gray-200 bg-white p-4 shadow-sm" aria-hidden>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium text-gray-900">Sarah T.</p>
-              <span className="text-xs text-gray-500">Zero-hours</span>
-            </div>
-            {variableHoursWeeks.map((w) => (
-              <div key={w.week} className="flex justify-between py-0.5 text-xs text-gray-600">
-                <span>{w.week}</span>
-                <span>{w.hours}h worked</span>
-              </div>
+        <p className="mt-8 text-center text-sm text-gray-500">
+          <span className="font-medium text-gray-700">Plus the HR essentials:</span>{" "}
+          {hrEssentials.join(" · ")}.{" "}
+          <Link href="/pricing" className="whitespace-nowrap text-brand-600 hover:text-brand-700">
+            See what&apos;s in each plan
+          </Link>
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function FindCoverSection() {
+  return (
+    <section id="find-cover" className="py-20 md:py-28 bg-brand-50/40 border-y border-brand-100">
+      <div className="mx-auto max-w-6xl px-6 grid md:grid-cols-2 gap-10 md:gap-14 items-center">
+        <div>
+          <p className="text-sm font-semibold text-brand-600 mb-3">Finding cover</p>
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight">
+            Short on a shift? See who can step in.
+          </h2>
+          <p className="mt-4 text-gray-600 text-lg">
+            When a shift drops below minimum, Coverboard shows you who could step in,
+            so you&apos;re not scrolling through a rota at 6am.
+          </p>
+          <ul className="mt-8 space-y-5">
+            {findCoverPoints.map((p) => (
+              <li key={p.title} className="flex gap-3">
+                <Check className="mt-0.5 h-5 w-5 shrink-0 text-brand-600" />
+                <div>
+                  <h3 className="font-semibold text-gray-900">{p.title}</h3>
+                  <p className="mt-0.5 text-sm text-gray-600 leading-relaxed">{p.description}</p>
+                </div>
+              </li>
             ))}
-            <div className="mt-2 pt-2 border-t border-gray-100 flex justify-between text-xs">
-              <span className="text-gray-600">Holiday accrued</span>
-              <span className="font-semibold text-brand-700">
-                {(totalHours * 0.1207).toFixed(1)}h
-              </span>
-            </div>
-          </div>
+          </ul>
         </div>
 
-        <div className="mt-8 flex flex-wrap justify-center gap-2">
-          <span className="text-sm text-gray-500 mr-1 self-center">Also included:</span>
-          {alsoIncluded.map((item) => (
-            <span
-              key={item}
-              className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-600"
-            >
-              {item}
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm" aria-hidden>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Thursday · Night</p>
+              <p className="text-xs text-gray-500">Care staff · 20:00–08:00</p>
+            </div>
+            <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
+              <AlertTriangle className="h-3 w-3" />
+              1 person needed
             </span>
-          ))}
+          </div>
+          <p className="mt-1 text-xs text-gray-500">1 of 2 available · Amara off sick</p>
+
+          <p className="mt-5 mb-1 text-[11px] font-medium uppercase tracking-wide text-gray-500">
+            Could cover
+          </p>
+          <ul className="divide-y divide-gray-100 text-sm">
+            {coverRows.map((r) => (
+              <li key={r.name} className="flex items-center justify-between gap-3 py-2">
+                <div className="min-w-0">
+                  <p className={r.free ? "text-gray-900" : "text-gray-400 line-through"}>
+                    {r.name}
+                  </p>
+                  <p className="text-xs text-gray-500">{r.note}</p>
+                </div>
+                <span
+                  className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                    r.free ? "bg-emerald-50 text-emerald-700" : "bg-gray-50 text-gray-500"
+                  }`}
+                >
+                  {r.reason}
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          <div className="mt-4 rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-600">
+            Cover arranged? Approve the request, and any override is recorded in the
+            audit history.
+          </div>
         </div>
       </div>
     </section>
@@ -515,19 +438,19 @@ const steps = [
     step: "02",
     title: "Coverboard checks cover",
     description:
-      "You see, day by day, whether approving leaves the team below its minimum, and who else is already off.",
+      "You see, shift by shift, whether approving leaves the team below its minimum, and who else is already off.",
   },
   {
     step: "03",
-    title: "You decide with the full picture",
+    title: "Find cover",
     description:
-      "Approve, decline, or approve anyway when you've sorted cover yourself. Overrides are recorded, so there's a clear trail.",
+      "For each short shift, you see who could cover it: not working, not on leave, and with 11 hours' rest either side.",
   },
   {
     step: "04",
     title: "Everyone stays in the loop",
     description:
-      "Balances and the team calendar update straight away, and the employee hears back by email or Slack.",
+      "Approve once cover is sorted. Balances and the team calendar update straight away, the employee hears back by email or Slack, and any override is recorded.",
   },
 ];
 
@@ -538,7 +461,7 @@ function HowItWorksSection() {
         <div className="text-center max-w-2xl mx-auto mb-16">
           <p className="text-sm font-semibold text-brand-600 mb-3">How it works</p>
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight">
-            From &ldquo;someone&apos;s off&rdquo; to a decision you can trust.
+            From &ldquo;someone&apos;s off&rdquo; to &ldquo;you&apos;re covered.&rdquo;
           </h2>
         </div>
 
@@ -599,65 +522,6 @@ function CTASection() {
   );
 }
 
-function Footer() {
-  return (
-    <footer className="bg-gray-900 py-12 md:py-16">
-      <div className="mx-auto max-w-6xl px-6">
-        <div className="flex flex-col md:flex-row justify-between gap-8">
-          <div>
-            <div className="flex items-center gap-2 mb-4">
-              <div className="h-8 w-8 rounded-lg bg-brand-600 flex items-center justify-center text-white font-bold text-sm">
-                CB
-              </div>
-              <span className="font-semibold text-white text-lg">Coverboard</span>
-            </div>
-            <p className="text-gray-400 text-sm max-w-xs leading-relaxed">
-              Team leave management for distributed teams and People Ops. Know who&apos;s out, plan coverage, stay compliant.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-12 text-sm sm:grid-cols-3">
-            <div>
-              <p className="font-semibold text-white mb-3">Product</p>
-              <ul className="space-y-2 text-gray-400">
-                <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
-                <li><a href="#scale-pro" className="hover:text-white transition-colors">Scale &amp; Pro</a></li>
-                <li><a href="#pricing" className="hover:text-white transition-colors">Pricing</a></li>
-                <li><a href="#how-it-works" className="hover:text-white transition-colors">How it works</a></li>
-              </ul>
-            </div>
-            <div>
-              <p className="font-semibold text-white mb-3">Account</p>
-              <ul className="space-y-2 text-gray-400">
-                <li><Link href="/login" className="hover:text-white transition-colors">Log in</Link></li>
-                <li><Link href="/signup" className="hover:text-white transition-colors">Sign up</Link></li>
-              </ul>
-            </div>
-            <div>
-              <p className="font-semibold text-white mb-3">Legal</p>
-              <ul className="space-y-2 text-gray-400">
-                <li><Link href="/terms" className="hover:text-white transition-colors">Terms of Service</Link></li>
-                <li><Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link></li>
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-12 pt-8 border-t border-gray-800 text-center text-sm text-gray-500 space-y-2">
-          <p>
-            UK-resident data &mdash; stored in London on AWS{" "}
-            <code className="font-mono text-xs">eu-west-2</code> via Supabase.
-            Compliant with the UK GDPR.
-          </p>
-          <p>
-            &copy; {new Date().getFullYear()} Coverboard. All rights reserved.
-          </p>
-        </div>
-      </div>
-    </footer>
-  );
-}
-
 const COUNTRIES = [
   "UK",
   "Nigeria",
@@ -696,12 +560,12 @@ export function LandingPage() {
       <LandingNavbar />
       <HeroSection />
       <FeaturesSection />
+      <FindCoverSection />
       <HowItWorksSection />
       <PricingSection />
-      <ScaleAndProSection />
       <CTASection />
       <CountriesSection />
-      <Footer />
+      <LandingFooter />
     </div>
   );
 }

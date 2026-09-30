@@ -14,7 +14,13 @@ type RegionCoverRow = {
   staffOff: Array<{ id: string; name: string }>;
   coverNotRequired: boolean;
   /** Enforced shifts today; empty for regions without shift types. */
-  shifts: Array<{ id: string; name: string; available: number; required: number }>;
+  shifts: Array<{
+    id: string;
+    name: string;
+    available: number;
+    required: number;
+    coverCandidates: Array<{ id: string; name: string }>;
+  }>;
 };
 
 /**
@@ -51,10 +57,13 @@ export async function RegionCoverWidget({
   organizationId,
   today,
   isAdmin = false,
+  showCoverCandidates = false,
 }: {
   organizationId: string;
   today: Date;
   isAdmin?: boolean;
+  /** Managers and admins only — see canSeeCoverCandidates. */
+  showCoverCandidates?: boolean;
 }) {
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
@@ -92,6 +101,7 @@ export async function RegionCoverWidget({
           name: s.name,
           available: s.available,
           required: s.required,
+          coverCandidates: showCoverCandidates ? s.coverCandidates : [],
         }));
       return {
         id: r.id,
@@ -166,6 +176,14 @@ export async function RegionCoverWidget({
                       ))}
                     </div>
                   )}
+                  {r.shifts
+                    .filter((s) => s.coverCandidates.length > 0)
+                    .map((s) => (
+                      <p key={s.id} className="mt-0.5 text-xs text-emerald-700">
+                        Could cover {s.name}:{" "}
+                        {s.coverCandidates.map((m) => m.name).join(", ")}
+                      </p>
+                    ))}
                   {r.staffOff.length > 0 ? (
                     <p className="mt-0.5 text-xs text-gray-500">
                       Off: {r.staffOff.map((s) => s.name).join(", ")}

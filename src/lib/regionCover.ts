@@ -19,6 +19,8 @@ export type ConflictDay = {
   /** Set when the region uses shifts; null for per-day (legacy) cover. */
   shiftId: string | null;
   shiftName: string | null;
+  /** Who could cover this shift (shift mode only). See ShiftCover. */
+  coverCandidates: Array<{ id: string; name: string }>;
 };
 
 export type CoverCheckResult = {
@@ -519,6 +521,7 @@ export function checkRegionalCoverPure(input: PureCheckInput): CoverCheckResult 
         staffOff: s.staffOff.filter((o) => o.id !== input.employeeId),
         shiftId: s.shiftId === LEGACY_SHIFT_ID ? null : s.shiftId,
         shiftName: s.shiftId === LEGACY_SHIFT_ID ? null : s.name,
+        coverCandidates: s.coverCandidates,
       });
     }
   }
@@ -532,4 +535,26 @@ export function checkRegionalCoverPure(input: PureCheckInput): CoverCheckResult 
     usesShifts,
     requesterScheduled,
   };
+}
+
+/**
+ * Cover-candidate suggestions are a manager tool; staff checking their own
+ * leave see the gap but not a list of colleagues to lean on.
+ */
+export function canSeeCoverCandidates(role: string | undefined): boolean {
+  return role === "ADMIN" || role === "MANAGER";
+}
+
+export function withoutCoverCandidates(result: CoverCheckResult): CoverCheckResult {
+  return {
+    ...result,
+    conflicts: result.conflicts.map((c) => ({ ...c, coverCandidates: [] })),
+  };
+}
+
+export function dailyWithoutCoverCandidates(days: DailyCover[]): DailyCover[] {
+  return days.map((d) => ({
+    ...d,
+    shifts: d.shifts.map((s) => ({ ...s, coverCandidates: [] })),
+  }));
 }

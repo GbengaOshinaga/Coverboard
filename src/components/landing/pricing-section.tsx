@@ -8,7 +8,7 @@ function tierSignupHref(tier: PricingTier) {
   return `/signup?plan=${tier.name.toLowerCase()}`;
 }
 
-function PricingCard({ tier }: { tier: PricingTier }) {
+export function PricingCard({ tier }: { tier: PricingTier }) {
   const isFree = tier.price_monthly === 0;
   const signupHref = tierSignupHref(tier);
 
@@ -62,10 +62,6 @@ function PricingCard({ tier }: { tier: PricingTier }) {
 
 const HOMEPAGE_TIERS = ["Free", "Starter", "Growth"];
 
-const upgradePaths = [
-  { tierName: "Scale", label: "Advanced HR operations" },
-  { tierName: "Pro", label: "Enterprise controls" },
-];
 
 export function PricingSection() {
   const tiers = PRICING.tiers.filter((t) => HOMEPAGE_TIERS.includes(t.name));
@@ -76,11 +72,11 @@ export function PricingSection() {
         <div className="mx-auto mb-12 max-w-2xl text-center">
           <p className="mb-3 text-sm font-semibold text-brand-600">Pricing</p>
           <h2 className="text-3xl font-bold tracking-tight text-gray-900 md:text-4xl">
-            Start free. Upgrade when you need more.
+            Cover is included on every plan.
           </h2>
           <p className="mt-4 text-lg text-gray-600">
-            Minimum cover warnings are included on every plan, even Free.
-            Month-to-month, no contract.
+            Pay for team size and the HR extras you need. Month-to-month, no
+            contract.
           </p>
         </div>
 
@@ -90,26 +86,17 @@ export function PricingSection() {
           ))}
         </div>
 
-        <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-8">
-          {upgradePaths.map((u) => {
-            const tier = PRICING.tiers.find((t) => t.name === u.tierName);
-            if (!tier) return null;
-            return (
-              <a
-                key={u.tierName}
-                href="#scale-pro"
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
-              >
-                {u.label}
-                <span className="font-normal text-gray-500">
-                  ({tier.name}, {PRICING.currency}
-                  {tier.price_monthly}/mo)
-                </span>
-                <ArrowRight size={14} aria-hidden />
-              </a>
-            );
-          })}
-        </div>
+        <p className="mt-8 text-center text-sm text-gray-600">
+          Running several sites? Scale and Pro add analytics, audit logs and
+          priority support.{" "}
+          <Link
+            href="/pricing"
+            className="inline-flex items-center gap-1 font-medium text-brand-600 hover:text-brand-700"
+          >
+            Compare all plans
+            <ArrowRight size={14} aria-hidden />
+          </Link>
+        </p>
 
         <p className="mt-10 text-center text-sm text-gray-500">
           Free up to 5 employees, no card required. Paid plans include a 14-day

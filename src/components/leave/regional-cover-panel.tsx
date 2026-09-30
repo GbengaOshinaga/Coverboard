@@ -10,6 +10,7 @@ type ShiftCover = {
   required: number;
   coverRequired: boolean;
   staffOff: Array<{ id: string; name: string; leaveType: string | null }>;
+  coverCandidates: Array<{ id: string; name: string }>;
 };
 
 type DailyCover = {
@@ -56,11 +57,13 @@ function CoverRow({
   available,
   required,
   staffOff,
+  coverCandidates = [],
 }: {
   label: string;
   available: number;
   required: number;
   staffOff: Array<{ id: string; name: string }>;
+  coverCandidates?: Array<{ id: string; name: string }>;
 }) {
   const ok = available >= required;
   return (
@@ -70,6 +73,11 @@ function CoverRow({
         {staffOff.length > 0 && (
           <p className="mt-0.5 text-[11px] text-gray-500">
             Off: {staffOff.map((s) => s.name).join(", ")}
+          </p>
+        )}
+        {!ok && coverCandidates.length > 0 && (
+          <p className="mt-0.5 text-[11px] text-emerald-700">
+            Could cover: {coverCandidates.map((s) => s.name).join(", ")}
           </p>
         )}
       </div>
@@ -215,6 +223,7 @@ export function RegionalCoverPanel({
                     available={s.available}
                     required={s.required}
                     staffOff={s.staffOff}
+                    coverCandidates={s.coverCandidates}
                   />
                 ));
             }
