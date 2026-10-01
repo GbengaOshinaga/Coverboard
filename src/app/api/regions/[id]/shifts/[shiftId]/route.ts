@@ -78,7 +78,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     });
     if (duplicate) {
       return NextResponse.json(
-        { error: "This region already has a shift with that name" },
+        { error: "This location already has a shift with that name" },
         { status: 409 }
       );
     }

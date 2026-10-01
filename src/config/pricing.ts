@@ -86,7 +86,7 @@ export const PRICING: PricingConfig = {
     },
     {
       name: "Scale",
-      tagline: "For groups with several sites",
+      tagline: "For groups with several locations",
       price_monthly: 99,
       headcount: "Unlimited employees",
       cta: "Start free trial",
@@ -94,7 +94,7 @@ export const PRICING: PricingConfig = {
       features: [
         "Everything in Growth",
         "Absence trend analysis",
-        "Regional cover analytics",
+        "Cover analytics by location",
         "Custom leave types",
         "Scheduled report delivery (email)",
         "Data export in multiple formats",

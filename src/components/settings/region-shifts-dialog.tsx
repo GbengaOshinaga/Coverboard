@@ -162,7 +162,7 @@ export function RegionShiftsDialog({
           <p className="text-sm text-gray-500">Loading shifts…</p>
         ) : shifts.length === 0 && editingId !== "new" ? (
           <p className="rounded-md border border-dashed border-gray-200 px-3 py-4 text-center text-sm text-gray-500">
-            No shifts yet. This region uses its single daily minimum.
+            No shifts yet. This location uses its single daily minimum.
           </p>
         ) : (
           <ul className="space-y-2">

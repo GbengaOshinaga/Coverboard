@@ -49,7 +49,7 @@ export async function PUT(
   const orgId = sessionUser.organizationId as string;
   if (!(await isRegionsEnabled(orgId))) return regionsDisabledResponse();
   const region = await loadOwnedRegion(id, orgId);
-  if (!region) return NextResponse.json({ error: "Region not found" }, { status: 404 });
+  if (!region) return NextResponse.json({ error: "Location not found" }, { status: 404 });
 
   const body = await request.json().catch(() => ({}));
   const parsed = updateSchema.safeParse(body);
@@ -67,7 +67,7 @@ export async function PUT(
     });
     if (conflict) {
       return NextResponse.json(
-        { error: "A region with this name already exists" },
+        { error: "A location with this name already exists" },
         { status: 409 }
       );
     }
@@ -120,7 +120,7 @@ export async function DELETE(
   const orgId = sessionUser.organizationId as string;
   if (!(await isRegionsEnabled(orgId))) return regionsDisabledResponse();
   const region = await loadOwnedRegion(id, orgId);
-  if (!region) return NextResponse.json({ error: "Region not found" }, { status: 404 });
+  if (!region) return NextResponse.json({ error: "Location not found" }, { status: 404 });
 
   const actorId = sessionUser.id as string;
 
@@ -136,7 +136,7 @@ export async function DELETE(
           userId: u.id,
           regionId: null,
           changedById: actorId,
-          notes: `Region '${region.name}' deleted`,
+          notes: `Location '${region.name}' deleted`,
         },
       })
     ),

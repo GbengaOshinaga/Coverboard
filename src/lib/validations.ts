@@ -40,7 +40,7 @@ export const teamMemberSchema = z
       .string()
       .trim()
       .toUpperCase()
-      .length(2, "Work location (country) is required"),
+      .length(2, "Work country is required"),
     serviceStartDate: z.string().date().nullable().optional(),
   })
   .transform((data) =>

@@ -177,7 +177,7 @@ export default function RegionsSettingsPage() {
         setRegions(await res.json());
       } else if (res.status === 403) {
         // Regions feature toggle is off — show the enable prompt instead of an
-        // empty list whose "Add region" button would 403.
+        // empty list whose "Add location" button would 403.
         const data = await res.json().catch(() => null);
         if (data?.error === "FEATURE_DISABLED") setEnabled(false);
       }
@@ -195,12 +195,12 @@ export default function RegionsSettingsPage() {
         body: JSON.stringify({ regionsEnabled: true }),
       });
       if (res.ok) {
-        toast("Regions enabled", "success");
+        toast("Locations enabled", "success");
         setEnabled(true);
         await refresh();
       } else {
         const data = await res.json().catch(() => null);
-        toast(data?.error ?? "Failed to enable regions", "error");
+        toast(data?.error ?? "Failed to enable locations", "error");
       }
     } finally {
       setEnabling(false);
@@ -260,12 +260,12 @@ export default function RegionsSettingsPage() {
         }),
       });
       if (res.ok) {
-        toast("Region added", "success");
+        toast("Location added", "success");
         setShowAdd(false);
         await refresh();
       } else {
         const data = await res.json().catch(() => null);
-        toast(data?.error ?? "Failed to add region", "error");
+        toast(data?.error ?? "Failed to add location", "error");
       }
     } finally {
       setSaving(false);
@@ -300,7 +300,7 @@ export default function RegionsSettingsPage() {
         }),
       });
       if (res.ok) {
-        toast("Region updated", "success");
+        toast("Location updated", "success");
         setEditing(null);
         await refresh();
       } else {
@@ -323,8 +323,8 @@ export default function RegionsSettingsPage() {
         const data = await res.json().catch(() => ({ unassignedMembers: 0 }));
         toast(
           data.unassignedMembers > 0
-            ? `Region deleted. ${data.unassignedMembers} member(s) unassigned.`
-            : "Region deleted",
+            ? `Location deleted. ${data.unassignedMembers} member(s) unassigned.`
+            : "Location deleted",
           "success"
         );
         setDeleting(null);
@@ -349,10 +349,10 @@ export default function RegionsSettingsPage() {
           Back to settings
         </Link>
         <h1 className="mt-2 text-xl font-bold text-gray-900 sm:text-2xl">
-          Regions
+          Locations
         </h1>
         <p className="text-sm text-gray-500">
-          Group team members by region or location and set minimum cover
+          Group team members by location and set minimum cover
           levels for each.
         </p>
       </div>
@@ -362,22 +362,22 @@ export default function RegionsSettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <MapPin className="h-5 w-5 text-brand-500" />
-              Turn on regions &amp; cover
+              Turn on locations &amp; cover
             </CardTitle>
             <CardDescription>
-              Regions let you set a minimum cover level per location and warn you
-              before a leave request would leave one short-staffed. It&apos;s
+              Locations let you set a minimum cover level for each place you run
+              and warn you before a leave request would leave one short-staffed. It&apos;s
               switched off by default &mdash; enable it to get started.
             </CardDescription>
           </CardHeader>
           <CardContent>
             {canManage ? (
               <Button onClick={handleEnable} disabled={enabling}>
-                {enabling ? "Enabling…" : "Enable regions"}
+                {enabling ? "Enabling…" : "Enable locations"}
               </Button>
             ) : (
               <p className="text-sm text-gray-500">
-                Ask an admin to enable regions in Settings.
+                Ask an admin to enable locations in Settings.
               </p>
             )}
           </CardContent>
@@ -389,17 +389,17 @@ export default function RegionsSettingsPage() {
             <div className="min-w-0 flex-1 space-y-1.5">
               <CardTitle className="flex items-center gap-2">
                 <MapPin className="h-5 w-5" />
-                Your regions
+                Your locations
               </CardTitle>
               <CardDescription>
-                Each region needs at least its minimum cover level on the days
+                Each location needs at least its minimum cover level on the days
                 it&apos;s set to check: every day, or weekdays only.
               </CardDescription>
             </div>
             {canManage && (
               <Button size="sm" className="shrink-0" onClick={openAdd}>
                 <Plus className="mr-1 h-3.5 w-3.5" />
-                Add region
+                Add location
               </Button>
             )}
           </div>
@@ -423,7 +423,7 @@ export default function RegionsSettingsPage() {
           ) : regions.length === 0 ? (
             <div className="py-8 text-center">
               <p className="text-sm text-gray-500">
-                No regions yet. Add your first region to start tracking cover
+                No locations yet. Add your first location to start tracking cover
                 requirements.
               </p>
             </div>
@@ -524,7 +524,7 @@ export default function RegionsSettingsPage() {
       <Dialog
         open={showAdd}
         onClose={() => setShowAdd(false)}
-        title="Add region"
+        title="Add location"
       >
         <form onSubmit={handleAdd} className="space-y-4">
           <Input
@@ -541,7 +541,7 @@ export default function RegionsSettingsPage() {
             label="Description (optional)"
             value={newDescription}
             onChange={(e) => setNewDescription(e.target.value)}
-            placeholder="What this region covers"
+            placeholder="What this location covers"
             maxLength={500}
           />
           <Input
@@ -568,7 +568,7 @@ export default function RegionsSettingsPage() {
           </div>
           <div className="flex items-center gap-3 pt-2">
             <Button type="submit" disabled={saving}>
-              {saving ? "Adding..." : "Add region"}
+              {saving ? "Adding..." : "Add location"}
             </Button>
             <Button
               type="button"
@@ -584,7 +584,7 @@ export default function RegionsSettingsPage() {
       <Dialog
         open={!!editing}
         onClose={() => setEditing(null)}
-        title="Edit region"
+        title="Edit location"
       >
         <form onSubmit={handleEdit} className="space-y-4">
           <Input
@@ -652,7 +652,7 @@ export default function RegionsSettingsPage() {
       <Dialog
         open={!!deleting}
         onClose={() => (deletingBusy ? null : setDeleting(null))}
-        title="Delete region?"
+        title="Delete location?"
       >
         {deleting && (
           <div className="space-y-4">
@@ -664,7 +664,7 @@ export default function RegionsSettingsPage() {
                 <p className="mt-1 text-red-800">
                   {deleting.memberCount} team member
                   {deleting.memberCount === 1 ? "" : "s"} assigned to this
-                  region will become unassigned. Their region history will
+                  location will become unassigned. Their location history will
                   record this change. This cannot be undone.
                 </p>
               ) : (
@@ -680,7 +680,7 @@ export default function RegionsSettingsPage() {
                 disabled={deletingBusy}
                 className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
               >
-                {deletingBusy ? "Deleting..." : "Delete region"}
+                {deletingBusy ? "Deleting..." : "Delete location"}
               </Button>
               <Button
                 type="button"

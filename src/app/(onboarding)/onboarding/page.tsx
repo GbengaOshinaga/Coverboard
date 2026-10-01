@@ -277,13 +277,13 @@ export default function OnboardingPage() {
           setRegionsPromptAnswered(true);
           setStep(1);
         }}
-        title="Enable regional workforce management?"
+        title="Enable cover by location?"
       >
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            It looks like you&apos;re in healthcare. Would you like to enable
-            regional workforce management? This helps you track cover levels
-            when staff take leave.
+            It looks like you&apos;re in healthcare. Would you like to set up
+            cover by location? This helps you track cover levels when staff
+            take leave.
           </p>
           <div className="flex flex-wrap items-center gap-3 pt-2">
             <Button
@@ -295,7 +295,7 @@ export default function OnboardingPage() {
                 setStep(1);
               }}
             >
-              Yes, enable regions
+              Yes, enable locations
             </Button>
             <Button
               type="button"

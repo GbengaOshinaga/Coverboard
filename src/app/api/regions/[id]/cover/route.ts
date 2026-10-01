@@ -35,7 +35,7 @@ export async function GET(
     where: { id, organizationId: orgId },
     select: { id: true, name: true, color: true, minCover: true, isActive: true },
   });
-  if (!region) return NextResponse.json({ error: "Region not found" }, { status: 404 });
+  if (!region) return NextResponse.json({ error: "Location not found" }, { status: 404 });
 
   const days = await computeDailyCover({
     organizationId: orgId,

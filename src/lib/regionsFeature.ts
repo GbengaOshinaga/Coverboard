@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 export const FEATURE_DISABLED_MESSAGE =
-  "Regional management is not enabled for your account. Enable it in Settings → General.";
+  "Locations aren't enabled for your account. Turn them on in Settings → Optional features.";
 
 export async function isRegionsEnabled(organizationId: string): Promise<boolean> {
   const org = await prisma.organization.findUnique({

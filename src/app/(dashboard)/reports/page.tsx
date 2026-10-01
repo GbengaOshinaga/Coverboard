@@ -596,7 +596,7 @@ export default function ReportsPage() {
       },
       {
         id: "regional-cover",
-        label: "Regional cover",
+        label: "Cover by location",
         requiresAnalytics: true,
       },
       { id: "right-to-work", label: "Right to work", requiresUk: true },

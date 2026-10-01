@@ -60,7 +60,7 @@ const PLANS: ReadonlyArray<{
     key: "scale",
     name: "Scale",
     priceGbp: 99,
-    blurb: "For groups with several sites",
+    blurb: "For groups with several locations",
     features: [
       "Everything in Growth",
       "Absence trend analysis",

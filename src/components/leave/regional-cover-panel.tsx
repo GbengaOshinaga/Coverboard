@@ -149,7 +149,7 @@ export function RegionalCoverPanel({
   if (loading) {
     return (
       <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-500">
-        Loading regional cover…
+        Loading cover…
       </div>
     );
   }
@@ -157,7 +157,7 @@ export function RegionalCoverPanel({
   if (!check || !check.regionId) {
     return (
       <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2.5 text-xs text-gray-600">
-        <p className="font-medium text-gray-700">No region assigned</p>
+        <p className="font-medium text-gray-700">No location assigned</p>
         <p className="mt-0.5">
           This requester isn&apos;t in a region, so cover is not tracked for
           their absences.

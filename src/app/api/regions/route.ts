@@ -92,7 +92,7 @@ export async function POST(request: Request) {
   });
   if (existing) {
     return NextResponse.json(
-      { error: "A region with this name already exists" },
+      { error: "A location with this name already exists" },
       { status: 409 }
     );
   }

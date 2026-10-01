@@ -35,7 +35,7 @@ export async function GET(request: Request) {
 
   if (!hasFeatureForEnum(plan ?? null, "absence_analytics")) {
     return NextResponse.json(
-      { error: "Regional cover analytics are available on the Scale plan." },
+      { error: "Cover analytics by location are available on the Scale plan." },
       { status: 403 }
     );
   }

@@ -101,7 +101,7 @@ export async function PUT(
   if (!member) return NextResponse.json({ error: "Member not found" }, { status: 404 });
   if (!member.region) {
     return NextResponse.json(
-      { error: "Assign this member to a region before setting a working pattern" },
+      { error: "Assign this member to a location before setting a working pattern" },
       { status: 400 }
     );
   }
@@ -117,7 +117,7 @@ export async function PUT(
   for (const e of parsed.data.entries) {
     if (!allowed.has(e.shiftTypeId)) {
       return NextResponse.json(
-        { error: "Shifts must belong to the member's region" },
+        { error: "Shifts must belong to the member's location" },
         { status: 400 }
       );
     }

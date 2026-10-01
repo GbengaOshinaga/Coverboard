@@ -59,7 +59,7 @@ export function ApproveCoverModal({
           <div className="min-w-0 flex-1 space-y-1.5">
             <p className="font-medium">
               Approving {requesterName}&apos;s leave will leave{" "}
-              <strong>{regionName ?? "this region"}</strong> below its minimum
+              <strong>{regionName ?? "this location"}</strong> below its minimum
               cover on {conflicts.length} {unit}
               {conflicts.length === 1 ? "" : "s"}.
             </p>

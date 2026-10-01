@@ -755,7 +755,7 @@ export default function EmployeeProfilePage({
                 </Badge>
                 <Badge variant="outline">{member.memberType}</Badge>
                 <Badge variant="outline">
-                  Work location:{" "}
+                  Work country:{" "}
                   {member.workCountry
                     ? COUNTRY_NAMES[member.workCountry] ?? member.workCountry
                     : "Not set"}

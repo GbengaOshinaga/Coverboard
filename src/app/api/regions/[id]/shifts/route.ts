@@ -33,7 +33,7 @@ export async function GET(
     where: { id, organizationId: orgId },
     select: { id: true },
   });
-  if (!region) return NextResponse.json({ error: "Region not found" }, { status: 404 });
+  if (!region) return NextResponse.json({ error: "Location not found" }, { status: 404 });
 
   const shifts = await prisma.shiftType.findMany({
     where: { regionId: id },
@@ -66,7 +66,7 @@ export async function POST(
     where: { id, organizationId: orgId },
     select: { id: true },
   });
-  if (!region) return NextResponse.json({ error: "Region not found" }, { status: 404 });
+  if (!region) return NextResponse.json({ error: "Location not found" }, { status: 404 });
 
   const body = await request.json().catch(() => ({}));
   const parsed = shiftTypeCreateSchema.safeParse(body);
@@ -80,7 +80,7 @@ export async function POST(
   });
   if (duplicate) {
     return NextResponse.json(
-      { error: "This region already has a shift with that name" },
+      { error: "This location already has a shift with that name" },
       { status: 409 }
     );
   }

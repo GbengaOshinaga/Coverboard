@@ -87,8 +87,9 @@ export function PricingSection() {
         </div>
 
         <p className="mt-8 text-center text-sm text-gray-600">
-          Running several sites? Scale and Pro add analytics, audit logs and
-          priority support.{" "}
+          Running several locations? Every plan handles cover across them.
+          Scale adds analytics across locations, and Pro adds the audit log
+          and priority support.{" "}
           <Link
             href="/pricing"
             className="inline-flex items-center gap-1 font-medium text-brand-600 hover:text-brand-700"

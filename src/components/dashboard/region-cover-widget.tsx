@@ -36,7 +36,7 @@ function CoverSetupPrompt() {
           Set up cover
         </CardTitle>
         <CardDescription>
-          Tell Coverboard the minimum staff each team or region needs, and we&apos;ll
+          Tell Coverboard the minimum staff each team or location needs, and we&apos;ll
           warn you before a leave request would leave you short-staffed.
         </CardDescription>
       </CardHeader>
@@ -129,14 +129,14 @@ export async function RegionCoverWidget({
           <div>
             <CardTitle className="flex items-center gap-2">
               <MapPin className="h-5 w-5 text-brand-500" />
-              Regional cover today
+              Cover today
             </CardTitle>
             <CardDescription>
               {noCoverToday
-                ? "None of your regions require cover today."
+                ? "None of your locations require cover today."
                 : breachCount > 0
-                ? `${breachCount} region${breachCount === 1 ? "" : "s"} below minimum cover.`
-                : "All regions meeting minimum cover."}
+                ? `${breachCount} location${breachCount === 1 ? "" : "s"} below minimum cover.`
+                : "All locations meeting minimum cover."}
             </CardDescription>
           </div>
         </div>

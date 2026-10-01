@@ -158,13 +158,13 @@ export default function CalendarPage() {
 
       {regionsEnabled && (
         <div className="flex flex-wrap items-center gap-2">
-          <label className="text-xs font-medium text-gray-500">Region</label>
+          <label className="text-xs font-medium text-gray-500">Location</label>
           <Select
             id="calendarRegionFilter"
             value={regionFilter}
             onChange={(e) => setRegionFilter(e.target.value)}
             options={[
-              { value: "ALL", label: "All regions" },
+              { value: "ALL", label: "All locations" },
               { value: "UNASSIGNED", label: "Unassigned" },
               ...regions.map((r) => ({
                 value: r.id,
@@ -174,7 +174,7 @@ export default function CalendarPage() {
           />
           {regionFilter !== "ALL" && regionFilter !== "UNASSIGNED" && (
             <span className="text-xs text-gray-500">
-              Cover indicators show whether minimum cover is met on each day the region requires it.
+              Cover indicators show whether minimum cover is met on each day the location requires it.
             </span>
           )}
         </div>

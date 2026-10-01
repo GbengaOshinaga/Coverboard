@@ -85,7 +85,7 @@ export function RegionalCoverWarning({
   if (loading) {
     return (
       <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-500">
-        Checking regional cover…
+        Checking cover…
       </div>
     );
   }
@@ -125,7 +125,7 @@ export function RegionalCoverWarning({
         <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
         <div className="min-w-0 flex-1 space-y-1.5">
           <p className="font-medium">
-            {logged ? "Now short on" : "Regional cover would drop below minimum on"}{" "}
+            {logged ? "Now short on" : "Cover would drop below minimum on"}{" "}
             {result.conflicts.length}{" "}
             {result.usesShifts ? "shift" : "day"}
             {result.conflicts.length === 1 ? "" : "s"} in{" "}
