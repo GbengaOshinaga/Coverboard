@@ -12,6 +12,8 @@ const REGION = {
   name: "London",
   minCover: 2,
   isActive: true,
+  coverWeekends: false,
+  coverBankHolidays: false,
 };
 
 function local(year: number, month: number, day: number): Date {
@@ -69,8 +71,8 @@ test("checkRegionalCoverPure: conflict on a single day", () => {
         "a",
         [
           {
-            startDate: utc(2026, 5, 4),
-            endDate: utc(2026, 5, 4),
+            start: "2026-05-04",
+            end: "2026-05-04",
             leaveTypeName: "Annual",
           },
         ],
@@ -105,8 +107,8 @@ test("checkRegionalCoverPure: conflict on multiple days", () => {
         "a",
         [
           {
-            startDate: utc(2026, 5, 4),
-            endDate: utc(2026, 5, 6),
+            start: "2026-05-04",
+            end: "2026-05-06",
             leaveTypeName: "Annual",
           },
         ],
@@ -206,8 +208,8 @@ test("checkRegionalCoverPure: counts only the requesting employee's coworkers", 
         "a",
         [
           {
-            startDate: utc(2026, 5, 4),
-            endDate: utc(2026, 5, 4),
+            start: "2026-05-04",
+            end: "2026-05-04",
             leaveTypeName: "Sick",
           },
         ],
@@ -233,4 +235,144 @@ test("pickPresetColor: cycles through 8 presets deterministically", () => {
   assert.equal(pickPresetColor(7), REGION_PRESET_COLORS[7]);
   assert.equal(pickPresetColor(8), REGION_PRESET_COLORS[0]);
   assert.equal(pickPresetColor(15), REGION_PRESET_COLORS[7]);
+});
+
+// ---------- weekend / bank holiday cover ----------
+
+function weekendRangeInput(
+  region: typeof REGION,
+  bankHolidayDates: Set<string> = new Set()
+) {
+  // Fri 8 – Mon 11 May 2026; A is off the whole range so only B is available.
+  const r = range(2026, 5, 8, 2026, 5, 11);
+  return {
+    region,
+    employeeRegionId: region.id,
+    employeeId: "emp-1",
+    start: r.start,
+    end: r.end,
+    members: [
+      { id: "a", name: "A" },
+      { id: "b", name: "B" },
+    ],
+    approvedLeavesByUser: new Map([
+      [
+        "a",
+        [
+          {
+            start: "2026-05-08",
+            end: "2026-05-11",
+            leaveTypeName: "Annual Leave",
+          },
+        ],
+      ],
+    ]),
+    bankHolidayDates,
+  };
+}
+
+test("checkRegionalCoverPure: weekday-only region skips Sat/Sun", () => {
+  const result = checkRegionalCoverPure(weekendRangeInput(REGION));
+  assert.deepEqual(
+    result.conflicts.map((c) => c.date),
+    ["2026-05-08", "2026-05-11"]
+  );
+});
+
+test("checkRegionalCoverPure: coverWeekends flags Sat/Sun shortfalls", () => {
+  const result = checkRegionalCoverPure(
+    weekendRangeInput({ ...REGION, coverWeekends: true })
+  );
+  assert.deepEqual(
+    result.conflicts.map((c) => c.date),
+    ["2026-05-08", "2026-05-09", "2026-05-10", "2026-05-11"]
+  );
+});
+
+test("checkRegionalCoverPure: bank holiday skipped unless coverBankHolidays", () => {
+  const bankHoliday = new Set(["2026-05-11"]);
+  const skipped = checkRegionalCoverPure(
+    weekendRangeInput({ ...REGION, coverWeekends: true }, bankHoliday)
+  );
+  assert.equal(
+    skipped.conflicts.some((c) => c.date === "2026-05-11"),
+    false
+  );
+
+  const checked = checkRegionalCoverPure(
+    weekendRangeInput(
+      { ...REGION, coverWeekends: true, coverBankHolidays: true },
+      bankHoliday
+    )
+  );
+  assert.equal(
+    checked.conflicts.some((c) => c.date === "2026-05-11"),
+    true
+  );
+});
+
+// ---------- shift-aware cover ----------
+
+const SHIFT_REGION = { ...REGION, coverWeekends: true, coverBankHolidays: true };
+const NIGHT_SHIFT = {
+  id: "night",
+  name: "Night",
+  startTime: "20:00",
+  endTime: "08:00",
+  minCoverByWeekday: [2, 2, 2, 2, 2, 2, 2],
+};
+
+function nightPattern(userId: string, weekday: number) {
+  return {
+    userId,
+    shiftTypeId: "night",
+    weekday,
+    effectiveFrom: "2026-01-01",
+    effectiveTo: null,
+  };
+}
+
+test("checkRegionalCoverPure (shifts): conflict names the shift the requester works", () => {
+  const r = range(2026, 5, 7, 2026, 5, 8); // Thu-Fri
+  const result = checkRegionalCoverPure({
+    region: SHIFT_REGION,
+    employeeRegionId: SHIFT_REGION.id,
+    employeeId: "emp-1",
+    start: r.start,
+    end: r.end,
+    members: [
+      { id: "a", name: "A" },
+      { id: "b", name: "B" },
+    ],
+    approvedLeavesByUser: new Map(),
+    bankHolidayDates: new Set(),
+    shifts: [NIGHT_SHIFT],
+    // emp-1 and A work Thursday nights; B works Friday nights only.
+    patterns: [nightPattern("emp-1", 3), nightPattern("a", 3), nightPattern("b", 4)],
+  });
+  assert.equal(result.usesShifts, true);
+  assert.equal(result.requesterScheduled, true);
+  // Thursday night drops to 1 of 2. Friday isn't flagged: emp-1 doesn't work it.
+  assert.deepEqual(
+    result.conflicts.map((c) => [c.date, c.shiftName, c.available, c.required]),
+    [["2026-05-07", "Night", 1, 2]]
+  );
+});
+
+test("checkRegionalCoverPure (shifts): no working pattern means no impact", () => {
+  const r = range(2026, 5, 7, 2026, 5, 8);
+  const result = checkRegionalCoverPure({
+    region: SHIFT_REGION,
+    employeeRegionId: SHIFT_REGION.id,
+    employeeId: "emp-1",
+    start: r.start,
+    end: r.end,
+    members: [{ id: "a", name: "A" }],
+    approvedLeavesByUser: new Map(),
+    bankHolidayDates: new Set(),
+    shifts: [NIGHT_SHIFT],
+    patterns: [nightPattern("a", 3)],
+  });
+  assert.equal(result.hasConflict, false);
+  assert.equal(result.requesterScheduled, false);
 });

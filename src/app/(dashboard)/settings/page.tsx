@@ -595,7 +595,7 @@ export default function SettingsPage() {
         </Link>
       )}
 
-      {/* Regions link */}
+      {/* Locations link */}
       {canManage && orgSettings?.regionsEnabled && (
         <Link href="/settings/regions">
           <Card className="hover:border-brand-200 hover:shadow-sm transition-all cursor-pointer">
@@ -606,8 +606,8 @@ export default function SettingsPage() {
                     <MapPin size={18} />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-gray-900">Regions</p>
-                    <p className="text-xs text-gray-500">Group team members by region and set minimum cover levels</p>
+                    <p className="text-sm font-semibold text-gray-900">Locations</p>
+                    <p className="text-xs text-gray-500">Group team members by location and set minimum cover levels</p>
                   </div>
                 </div>
                 <ChevronRight size={18} className="text-gray-400" />
@@ -653,7 +653,7 @@ export default function SettingsPage() {
                 <div className="flex items-center gap-2">
                   <MapPin className="h-4 w-4 text-brand-500" />
                   <p className="text-sm font-medium text-gray-900">
-                    Regional workforce management
+                    Cover by location
                   </p>
                 </div>
                 <p className="mt-1 text-xs text-gray-500">
@@ -681,8 +681,8 @@ export default function SettingsPage() {
 
       {orgSettings && orgSettings.missingWorkLocationCount > 0 && canManage && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          We&apos;ve added work location to employee profiles. Please update your
-          team&apos;s work locations to ensure the right compliance features are
+          We&apos;ve added work country to employee profiles. Please update your
+          team&apos;s work countries to ensure the right compliance features are
           shown for your account.{" "}
           <Link href="/team" className="font-medium underline hover:no-underline">
             Update now &rarr;
@@ -1790,11 +1790,11 @@ export default function SettingsPage() {
       <Dialog
         open={confirmRegionsEnable}
         onClose={() => setConfirmRegionsEnable(false)}
-        title="Enable regional workforce management?"
+        title="Enable cover by location?"
       >
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            This will add region management to your employee profiles and team
+            This will add locations to your employee profiles and team
             calendar. You can turn it off at any time.
           </p>
           <div className="flex items-center gap-3 pt-2">
@@ -1805,7 +1805,7 @@ export default function SettingsPage() {
                 setConfirmRegionsEnable(false);
               }}
             >
-              Enable regions
+              Enable locations
             </Button>
             <Button
               type="button"

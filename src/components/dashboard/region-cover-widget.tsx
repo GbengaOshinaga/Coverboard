@@ -12,7 +12,15 @@ type RegionCoverRow = {
   available: number;
   ok: boolean;
   staffOff: Array<{ id: string; name: string }>;
-  isWeekendOrHoliday: boolean;
+  coverNotRequired: boolean;
+  /** Enforced shifts today; empty for regions without shift types. */
+  shifts: Array<{
+    id: string;
+    name: string;
+    available: number;
+    required: number;
+    coverCandidates: Array<{ id: string; name: string }>;
+  }>;
 };
 
 /**
@@ -28,7 +36,7 @@ function CoverSetupPrompt() {
           Set up cover
         </CardTitle>
         <CardDescription>
-          Tell Coverboard the minimum staff each team or region needs, and we&apos;ll
+          Tell Coverboard the minimum staff each team or location needs, and we&apos;ll
           warn you before a leave request would leave you short-staffed.
         </CardDescription>
       </CardHeader>
@@ -49,10 +57,13 @@ export async function RegionCoverWidget({
   organizationId,
   today,
   isAdmin = false,
+  showCoverCandidates = false,
 }: {
   organizationId: string;
   today: Date;
   isAdmin?: boolean;
+  /** Managers and admins only — see canSeeCoverCandidates. */
+  showCoverCandidates?: boolean;
 }) {
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
@@ -82,23 +93,34 @@ export async function RegionCoverWidget({
         end: today,
       });
       const day = days[0];
-      const skip = !day || day.isWeekend || day.isBankHoliday;
+      const skip = !day || !day.coverRequired;
+      const shifts = (day?.shifts ?? [])
+        .filter((s) => s.coverRequired)
+        .map((s) => ({
+          id: s.shiftId,
+          name: s.name,
+          available: s.available,
+          required: s.required,
+          coverCandidates: showCoverCandidates ? s.coverCandidates : [],
+        }));
       return {
         id: r.id,
         name: r.name,
         color: r.color,
-        minCover: r.minCover,
+        minCover: day?.required ?? r.minCover,
         available: day?.available ?? 0,
         ok: skip ? true : day.available >= day.required,
+        shifts,
         staffOff: day?.staffOff ?? [],
-        isWeekendOrHoliday: skip,
+        coverNotRequired: skip,
       };
     })
   );
 
   const breachCount = rows.filter(
-    (r) => !r.isWeekendOrHoliday && !r.ok
+    (r) => !r.coverNotRequired && !r.ok
   ).length;
+  const noCoverToday = rows.every((r) => r.coverNotRequired);
 
   return (
     <Card>
@@ -107,14 +129,14 @@ export async function RegionCoverWidget({
           <div>
             <CardTitle className="flex items-center gap-2">
               <MapPin className="h-5 w-5 text-brand-500" />
-              Regional cover today
+              Cover today
             </CardTitle>
             <CardDescription>
-              {rows[0]?.isWeekendOrHoliday
-                ? "Cover requirements don't apply on weekends or bank holidays."
+              {noCoverToday
+                ? "None of your locations require cover today."
                 : breachCount > 0
-                ? `${breachCount} region${breachCount === 1 ? "" : "s"} below minimum cover.`
-                : "All regions meeting minimum cover."}
+                ? `${breachCount} location${breachCount === 1 ? "" : "s"} below minimum cover.`
+                : "All locations meeting minimum cover."}
             </CardDescription>
           </div>
         </div>
@@ -138,6 +160,30 @@ export async function RegionCoverWidget({
                   >
                     {r.name}
                   </Link>
+                  {r.shifts.length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {r.shifts.map((s) => (
+                        <span
+                          key={s.id}
+                          className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                            s.available >= s.required
+                              ? "bg-gray-50 text-gray-600"
+                              : "bg-amber-50 text-amber-800"
+                          }`}
+                        >
+                          {s.name} {s.available}/{s.required}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {r.shifts
+                    .filter((s) => s.coverCandidates.length > 0)
+                    .map((s) => (
+                      <p key={s.id} className="mt-0.5 text-xs text-emerald-700">
+                        Could cover {s.name}:{" "}
+                        {s.coverCandidates.map((m) => m.name).join(", ")}
+                      </p>
+                    ))}
                   {r.staffOff.length > 0 ? (
                     <p className="mt-0.5 text-xs text-gray-500">
                       Off: {r.staffOff.map((s) => s.name).join(", ")}
@@ -150,7 +196,7 @@ export async function RegionCoverWidget({
                 </div>
               </div>
               <div className="shrink-0 text-right">
-                {r.isWeekendOrHoliday ? (
+                {r.coverNotRequired ? (
                   <span className="text-xs text-gray-400">—</span>
                 ) : r.ok ? (
                   <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">

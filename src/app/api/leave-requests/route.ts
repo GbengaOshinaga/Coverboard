@@ -118,6 +118,7 @@ const createSchema = z.object({
   childBirthDate: z.string().transform((s) => new Date(s)).optional(),
   expectedDueDate: z.string().transform((s) => new Date(s)).optional(),
   splCurtailmentConfirmed: z.boolean().optional(),
+  onBehalfOfUserId: z.string().optional(),
 });
 
 export async function POST(request: Request) {

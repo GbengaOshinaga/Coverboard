@@ -16,6 +16,8 @@ const updateSchema = z
     name: z.string().trim().min(1).max(80).optional(),
     description: z.string().trim().max(500).nullable().optional(),
     minCover: z.number().int().min(1).max(1000).optional(),
+    coverWeekends: z.boolean().optional(),
+    coverBankHolidays: z.boolean().optional(),
     color: z
       .string()
       .trim()
@@ -47,7 +49,7 @@ export async function PUT(
   const orgId = sessionUser.organizationId as string;
   if (!(await isRegionsEnabled(orgId))) return regionsDisabledResponse();
   const region = await loadOwnedRegion(id, orgId);
-  if (!region) return NextResponse.json({ error: "Region not found" }, { status: 404 });
+  if (!region) return NextResponse.json({ error: "Location not found" }, { status: 404 });
 
   const body = await request.json().catch(() => ({}));
   const parsed = updateSchema.safeParse(body);
@@ -65,7 +67,7 @@ export async function PUT(
     });
     if (conflict) {
       return NextResponse.json(
-        { error: "A region with this name already exists" },
+        { error: "A location with this name already exists" },
         { status: 409 }
       );
     }
@@ -75,6 +77,10 @@ export async function PUT(
   if (parsed.data.name !== undefined) data.name = parsed.data.name;
   if (parsed.data.description !== undefined) data.description = parsed.data.description;
   if (parsed.data.minCover !== undefined) data.minCover = parsed.data.minCover;
+  if (parsed.data.coverWeekends !== undefined) data.coverWeekends = parsed.data.coverWeekends;
+  if (parsed.data.coverBankHolidays !== undefined) {
+    data.coverBankHolidays = parsed.data.coverBankHolidays;
+  }
   if (parsed.data.color !== undefined) {
     data.color = parsed.data.color === "" ? null : parsed.data.color;
   }
@@ -114,7 +120,7 @@ export async function DELETE(
   const orgId = sessionUser.organizationId as string;
   if (!(await isRegionsEnabled(orgId))) return regionsDisabledResponse();
   const region = await loadOwnedRegion(id, orgId);
-  if (!region) return NextResponse.json({ error: "Region not found" }, { status: 404 });
+  if (!region) return NextResponse.json({ error: "Location not found" }, { status: 404 });
 
   const actorId = sessionUser.id as string;
 
@@ -130,7 +136,7 @@ export async function DELETE(
           userId: u.id,
           regionId: null,
           changedById: actorId,
-          notes: `Region '${region.name}' deleted`,
+          notes: `Location '${region.name}' deleted`,
         },
       })
     ),

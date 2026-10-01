@@ -26,7 +26,7 @@ function layout(content: string): string {
           </tr>
           <tr>
             <td style="padding:16px 32px;border-top:1px solid #f3f4f6;">
-              <p style="margin:0;font-size:12px;color:#9ca3af;">Sent by Coverboard &middot; Team leave management</p>
+              <p style="margin:0;font-size:12px;color:#9ca3af;">Sent by Coverboard &middot; Staff cover for shift-based teams</p>
             </td>
           </tr>
         </table>

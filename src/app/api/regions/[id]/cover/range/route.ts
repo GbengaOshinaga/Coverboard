@@ -3,7 +3,11 @@ import { getServerSession } from "next-auth";
 import { parseISO, isValid, differenceInDays } from "date-fns";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { computeDailyCover } from "@/lib/regionCover";
+import {
+  canSeeCoverCandidates,
+  computeDailyCover,
+  dailyWithoutCoverCandidates,
+} from "@/lib/regionCover";
 import { isRegionsEnabled, regionsDisabledResponse } from "@/lib/regionsFeature";
 
 const MAX_RANGE_DAYS = 366;
@@ -14,7 +18,8 @@ export async function GET(
 ) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const orgId = (session.user as Record<string, unknown>).organizationId as string;
+  const sessionUser = session.user as Record<string, unknown>;
+  const orgId = sessionUser.organizationId as string;
   if (!(await isRegionsEnabled(orgId))) return regionsDisabledResponse();
 
   const { id } = await params;
@@ -40,7 +45,7 @@ export async function GET(
     where: { id, organizationId: orgId },
     select: { id: true, name: true, color: true, minCover: true, isActive: true },
   });
-  if (!region) return NextResponse.json({ error: "Region not found" }, { status: 404 });
+  if (!region) return NextResponse.json({ error: "Location not found" }, { status: 404 });
 
   const days = await computeDailyCover({
     organizationId: orgId,
@@ -49,5 +54,10 @@ export async function GET(
     end,
   });
 
-  return NextResponse.json({ region, days });
+  return NextResponse.json({
+    region,
+    days: canSeeCoverCandidates(sessionUser.role as string)
+      ? days
+      : dailyWithoutCoverCandidates(days),
+  });
 }

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isRegionsEnabled, regionsDisabledResponse } from "@/lib/regionsFeature";
+import { dbDate, endWorkPatternOps, ukToday } from "@/lib/workPattern";
 
 function isAdminOrManager(role: string | undefined) {
   return role === "ADMIN" || role === "MANAGER";
@@ -88,11 +89,11 @@ export async function PUT(
       select: { id: true, isActive: true },
     });
     if (!region) {
-      return NextResponse.json({ error: "Region not found" }, { status: 404 });
+      return NextResponse.json({ error: "Location not found" }, { status: 404 });
     }
     if (!region.isActive) {
       return NextResponse.json(
-        { error: "Cannot assign to an inactive region" },
+        { error: "Cannot assign to an inactive location" },
         { status: 400 }
       );
     }
@@ -115,6 +116,8 @@ export async function PUT(
         notes: parsed.data.notes ?? null,
       },
     }),
+    // Their pattern points at the old region's shifts; it ends with the move.
+    ...endWorkPatternOps(id, dbDate(ukToday())),
   ]);
 
   const updated = await prisma.user.findUnique({

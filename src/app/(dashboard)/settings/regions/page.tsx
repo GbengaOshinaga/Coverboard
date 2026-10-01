@@ -23,7 +23,9 @@ import {
   Trash2,
   MapPin,
   Users,
+  Clock,
 } from "lucide-react";
+import { RegionShiftsDialog } from "@/components/settings/region-shifts-dialog";
 import { REGION_PRESET_COLORS } from "@/lib/regionCover";
 
 type Region = {
@@ -31,13 +33,69 @@ type Region = {
   name: string;
   description: string | null;
   minCover: number;
+  coverWeekends: boolean;
+  coverBankHolidays: boolean;
   color: string | null;
   isActive: boolean;
   createdAt: string;
   memberCount: number;
+  shiftCount: number;
 };
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
+
+function CoverDaysFields({
+  weekends,
+  bankHolidays,
+  onWeekendsChange,
+  onBankHolidaysChange,
+  usesShifts = false,
+}: {
+  weekends: boolean;
+  bankHolidays: boolean;
+  onWeekendsChange: (next: boolean) => void;
+  onBankHolidaysChange: (next: boolean) => void;
+  usesShifts?: boolean;
+}) {
+  return (
+    <fieldset className="space-y-2">
+      <legend className="block text-sm font-medium text-gray-700">
+        Check cover on
+      </legend>
+      <label className={`flex items-center gap-2 text-sm ${usesShifts ? "opacity-50" : ""}`}>
+        <input
+          type="checkbox"
+          disabled={usesShifts}
+          checked={weekends}
+          onChange={(e) => onWeekendsChange(e.target.checked)}
+          className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+        />
+        Weekends
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={bankHolidays}
+          onChange={(e) => onBankHolidaysChange(e.target.checked)}
+          className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+        />
+        Bank holidays
+      </label>
+      <p className="text-xs text-gray-500">
+        {usesShifts
+          ? "This region uses shifts, so weekend minimums are set per shift. The bank holiday setting still applies."
+          : "Untick for teams that don't work these days."}
+      </p>
+    </fieldset>
+  );
+}
+
+function coverDaysLabel(r: Pick<Region, "coverWeekends" | "coverBankHolidays">) {
+  if (r.coverWeekends && r.coverBankHolidays) return "Every day";
+  if (r.coverWeekends) return "Every day except bank holidays";
+  if (r.coverBankHolidays) return "Weekdays incl. bank holidays";
+  return "Weekdays only";
+}
 
 function ColorPicker({
   value,
@@ -87,6 +145,7 @@ export default function RegionsSettingsPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<Region | null>(null);
   const [deleting, setDeleting] = useState<Region | null>(null);
+  const [shiftsFor, setShiftsFor] = useState<Region | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingBusy, setDeletingBusy] = useState(false);
 
@@ -94,12 +153,16 @@ export default function RegionsSettingsPage() {
   const [newDescription, setNewDescription] = useState("");
   const [newMinCover, setNewMinCover] = useState("1");
   const [newColor, setNewColor] = useState(REGION_PRESET_COLORS[0]);
+  const [newCoverWeekends, setNewCoverWeekends] = useState(true);
+  const [newCoverBankHolidays, setNewCoverBankHolidays] = useState(true);
 
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editMinCover, setEditMinCover] = useState("1");
   const [editColor, setEditColor] = useState(REGION_PRESET_COLORS[0]);
   const [editIsActive, setEditIsActive] = useState(true);
+  const [editCoverWeekends, setEditCoverWeekends] = useState(true);
+  const [editCoverBankHolidays, setEditCoverBankHolidays] = useState(true);
 
   const userRole = (session?.user as Record<string, unknown> | undefined)
     ?.role as string | undefined;
@@ -114,7 +177,7 @@ export default function RegionsSettingsPage() {
         setRegions(await res.json());
       } else if (res.status === 403) {
         // Regions feature toggle is off — show the enable prompt instead of an
-        // empty list whose "Add region" button would 403.
+        // empty list whose "Add location" button would 403.
         const data = await res.json().catch(() => null);
         if (data?.error === "FEATURE_DISABLED") setEnabled(false);
       }
@@ -132,12 +195,12 @@ export default function RegionsSettingsPage() {
         body: JSON.stringify({ regionsEnabled: true }),
       });
       if (res.ok) {
-        toast("Regions enabled", "success");
+        toast("Locations enabled", "success");
         setEnabled(true);
         await refresh();
       } else {
         const data = await res.json().catch(() => null);
-        toast(data?.error ?? "Failed to enable regions", "error");
+        toast(data?.error ?? "Failed to enable locations", "error");
       }
     } finally {
       setEnabling(false);
@@ -152,6 +215,8 @@ export default function RegionsSettingsPage() {
     setNewName("");
     setNewDescription("");
     setNewMinCover("1");
+    setNewCoverWeekends(true);
+    setNewCoverBankHolidays(true);
     setNewColor(
       REGION_PRESET_COLORS[regions.length % REGION_PRESET_COLORS.length]
     );
@@ -165,6 +230,8 @@ export default function RegionsSettingsPage() {
     setEditMinCover(String(r.minCover));
     setEditColor(r.color ?? REGION_PRESET_COLORS[0]);
     setEditIsActive(r.isActive);
+    setEditCoverWeekends(r.coverWeekends);
+    setEditCoverBankHolidays(r.coverBankHolidays);
   }
 
   async function handleAdd(e: React.FormEvent) {
@@ -187,16 +254,18 @@ export default function RegionsSettingsPage() {
           name: newName.trim(),
           description: newDescription.trim() || null,
           minCover,
+          coverWeekends: newCoverWeekends,
+          coverBankHolidays: newCoverBankHolidays,
           color: newColor,
         }),
       });
       if (res.ok) {
-        toast("Region added", "success");
+        toast("Location added", "success");
         setShowAdd(false);
         await refresh();
       } else {
         const data = await res.json().catch(() => null);
-        toast(data?.error ?? "Failed to add region", "error");
+        toast(data?.error ?? "Failed to add location", "error");
       }
     } finally {
       setSaving(false);
@@ -224,12 +293,14 @@ export default function RegionsSettingsPage() {
           name: editName.trim(),
           description: editDescription.trim() || null,
           minCover,
+          coverWeekends: editCoverWeekends,
+          coverBankHolidays: editCoverBankHolidays,
           color: editColor,
           isActive: editIsActive,
         }),
       });
       if (res.ok) {
-        toast("Region updated", "success");
+        toast("Location updated", "success");
         setEditing(null);
         await refresh();
       } else {
@@ -252,8 +323,8 @@ export default function RegionsSettingsPage() {
         const data = await res.json().catch(() => ({ unassignedMembers: 0 }));
         toast(
           data.unassignedMembers > 0
-            ? `Region deleted. ${data.unassignedMembers} member(s) unassigned.`
-            : "Region deleted",
+            ? `Location deleted. ${data.unassignedMembers} member(s) unassigned.`
+            : "Location deleted",
           "success"
         );
         setDeleting(null);
@@ -278,10 +349,10 @@ export default function RegionsSettingsPage() {
           Back to settings
         </Link>
         <h1 className="mt-2 text-xl font-bold text-gray-900 sm:text-2xl">
-          Regions
+          Locations
         </h1>
         <p className="text-sm text-gray-500">
-          Group team members by region or location and set minimum cover
+          Group team members by location and set minimum cover
           levels for each.
         </p>
       </div>
@@ -291,22 +362,22 @@ export default function RegionsSettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <MapPin className="h-5 w-5 text-brand-500" />
-              Turn on regions &amp; cover
+              Turn on locations &amp; cover
             </CardTitle>
             <CardDescription>
-              Regions let you set a minimum cover level per location and warn you
-              before a leave request would leave one short-staffed. It&apos;s
+              Locations let you set a minimum cover level for each place you run
+              and warn you before a leave request would leave one short-staffed. It&apos;s
               switched off by default &mdash; enable it to get started.
             </CardDescription>
           </CardHeader>
           <CardContent>
             {canManage ? (
               <Button onClick={handleEnable} disabled={enabling}>
-                {enabling ? "Enabling…" : "Enable regions"}
+                {enabling ? "Enabling…" : "Enable locations"}
               </Button>
             ) : (
               <p className="text-sm text-gray-500">
-                Ask an admin to enable regions in Settings.
+                Ask an admin to enable locations in Settings.
               </p>
             )}
           </CardContent>
@@ -318,17 +389,17 @@ export default function RegionsSettingsPage() {
             <div className="min-w-0 flex-1 space-y-1.5">
               <CardTitle className="flex items-center gap-2">
                 <MapPin className="h-5 w-5" />
-                Your regions
+                Your locations
               </CardTitle>
               <CardDescription>
-                Each region needs at least its minimum cover level on every
-                weekday (excluding bank holidays).
+                Each location needs at least its minimum cover level on the days
+                it&apos;s set to check: every day, or weekdays only.
               </CardDescription>
             </div>
             {canManage && (
               <Button size="sm" className="shrink-0" onClick={openAdd}>
                 <Plus className="mr-1 h-3.5 w-3.5" />
-                Add region
+                Add location
               </Button>
             )}
           </div>
@@ -352,7 +423,7 @@ export default function RegionsSettingsPage() {
           ) : regions.length === 0 ? (
             <div className="py-8 text-center">
               <p className="text-sm text-gray-500">
-                No regions yet. Add your first region to start tracking cover
+                No locations yet. Add your first location to start tracking cover
                 requirements.
               </p>
             </div>
@@ -384,18 +455,37 @@ export default function RegionsSettingsPage() {
                           {r.description}
                         </p>
                       )}
-                      <div className="mt-1 flex items-center gap-3 text-xs text-gray-500">
+                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
                         <span className="inline-flex items-center gap-1">
                           <Users className="h-3 w-3" />
                           {r.memberCount} member
                           {r.memberCount === 1 ? "" : "s"}
                         </span>
-                        <span>Min cover: {r.minCover}</span>
+                        {r.shiftCount > 0 ? (
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {r.shiftCount} shift{r.shiftCount === 1 ? "" : "s"}
+                          </span>
+                        ) : (
+                          <>
+                            <span>Min cover: {r.minCover}</span>
+                            <span>{coverDaysLabel(r)}</span>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShiftsFor(r)}
+                    >
+                      <Clock className="mr-1 h-3.5 w-3.5" />
+                      Shifts
+                    </Button>
                   {canManage && (
-                    <div className="flex items-center gap-2">
+                    <>
                       <Button
                         size="sm"
                         variant="outline"
@@ -413,8 +503,9 @@ export default function RegionsSettingsPage() {
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
-                    </div>
+                    </>
                   )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -423,10 +514,17 @@ export default function RegionsSettingsPage() {
       </Card>
       )}
 
+      <RegionShiftsDialog
+        region={shiftsFor}
+        canManage={canManage}
+        onClose={() => setShiftsFor(null)}
+        onChanged={refresh}
+      />
+
       <Dialog
         open={showAdd}
         onClose={() => setShowAdd(false)}
-        title="Add region"
+        title="Add location"
       >
         <form onSubmit={handleAdd} className="space-y-4">
           <Input
@@ -443,7 +541,7 @@ export default function RegionsSettingsPage() {
             label="Description (optional)"
             value={newDescription}
             onChange={(e) => setNewDescription(e.target.value)}
-            placeholder="What this region covers"
+            placeholder="What this location covers"
             maxLength={500}
           />
           <Input
@@ -456,6 +554,12 @@ export default function RegionsSettingsPage() {
             onChange={(e) => setNewMinCover(e.target.value)}
             required
           />
+          <CoverDaysFields
+            weekends={newCoverWeekends}
+            bankHolidays={newCoverBankHolidays}
+            onWeekendsChange={setNewCoverWeekends}
+            onBankHolidaysChange={setNewCoverBankHolidays}
+          />
           <div className="space-y-1">
             <label className="block text-sm font-medium text-gray-700">
               Colour
@@ -464,7 +568,7 @@ export default function RegionsSettingsPage() {
           </div>
           <div className="flex items-center gap-3 pt-2">
             <Button type="submit" disabled={saving}>
-              {saving ? "Adding..." : "Add region"}
+              {saving ? "Adding..." : "Add location"}
             </Button>
             <Button
               type="button"
@@ -480,7 +584,7 @@ export default function RegionsSettingsPage() {
       <Dialog
         open={!!editing}
         onClose={() => setEditing(null)}
-        title="Edit region"
+        title="Edit location"
       >
         <form onSubmit={handleEdit} className="space-y-4">
           <Input
@@ -507,6 +611,13 @@ export default function RegionsSettingsPage() {
             value={editMinCover}
             onChange={(e) => setEditMinCover(e.target.value)}
             required
+          />
+          <CoverDaysFields
+            weekends={editCoverWeekends}
+            bankHolidays={editCoverBankHolidays}
+            onWeekendsChange={setEditCoverWeekends}
+            onBankHolidaysChange={setEditCoverBankHolidays}
+            usesShifts={(editing?.shiftCount ?? 0) > 0}
           />
           <div className="space-y-1">
             <label className="block text-sm font-medium text-gray-700">
@@ -541,7 +652,7 @@ export default function RegionsSettingsPage() {
       <Dialog
         open={!!deleting}
         onClose={() => (deletingBusy ? null : setDeleting(null))}
-        title="Delete region?"
+        title="Delete location?"
       >
         {deleting && (
           <div className="space-y-4">
@@ -553,7 +664,7 @@ export default function RegionsSettingsPage() {
                 <p className="mt-1 text-red-800">
                   {deleting.memberCount} team member
                   {deleting.memberCount === 1 ? "" : "s"} assigned to this
-                  region will become unassigned. Their region history will
+                  location will become unassigned. Their location history will
                   record this change. This cannot be undone.
                 </p>
               ) : (
@@ -569,7 +680,7 @@ export default function RegionsSettingsPage() {
                 disabled={deletingBusy}
                 className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
               >
-                {deletingBusy ? "Deleting..." : "Delete region"}
+                {deletingBusy ? "Deleting..." : "Delete location"}
               </Button>
               <Button
                 type="button"

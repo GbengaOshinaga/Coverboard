@@ -10,24 +10,24 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: {
-    default: "Coverboard — Team Leave Management",
+    default: "Coverboard — Staff Cover for Shift-Based Teams",
     template: "%s | Coverboard",
   },
   description:
-    "See who's out, plan coverage, and manage team leave in one place. Built for small, distributed teams with country-specific leave policies — including full UK statutory compliance.",
+    "Know who's off, where you're short and who can cover. Leave, sickness and minimum staffing for UK shift-based teams, with statutory rules built in.",
   metadataBase: new URL(getAppBaseUrl()),
   openGraph: {
-    title: "Coverboard — Team Leave Management",
+    title: "Coverboard — Staff Cover for Shift-Based Teams",
     description:
-      "See who's out, plan coverage, and manage team leave in one place. Built for distributed teams across the UK, Africa, LATAM, and beyond.",
+      "Know who's off, where you're short and who can cover. Leave, sickness and minimum staffing for UK shift-based teams, with statutory rules built in.",
     siteName: "Coverboard",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Coverboard — Team Leave Management",
+    title: "Coverboard — Staff Cover for Shift-Based Teams",
     description:
-      "See who's out, plan coverage, and manage team leave in one place.",
+      "Know who's off, where you're short and who can cover.",
   },
   icons: {
     icon: "/logo.svg",

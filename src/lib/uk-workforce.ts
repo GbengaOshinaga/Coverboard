@@ -6,7 +6,7 @@ export function ukComplianceUnavailablePayload() {
   return {
     error: NO_UK_EMPLOYEES_ERROR,
     message:
-      "UK compliance reports are only available for companies with UK-based employees. Add a UK work location to an employee profile to enable these reports.",
+      "UK compliance reports are only available for companies with UK-based employees. Set an employee's work country to the UK to enable these reports.",
   };
 }
 

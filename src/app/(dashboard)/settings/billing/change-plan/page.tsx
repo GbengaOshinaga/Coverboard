@@ -47,7 +47,7 @@ const PLANS: ReadonlyArray<{
     key: "growth",
     name: "Growth",
     priceGbp: 49,
-    blurb: "Stay compliant",
+    blurb: "For teams of any size",
     features: [
       "Everything in Starter",
       "SSP / SMP / SPL trackers",
@@ -60,7 +60,7 @@ const PLANS: ReadonlyArray<{
     key: "scale",
     name: "Scale",
     priceGbp: 99,
-    blurb: "Understand your workforce",
+    blurb: "For groups with several locations",
     features: [
       "Everything in Growth",
       "Absence trend analysis",

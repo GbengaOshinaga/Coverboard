@@ -182,12 +182,12 @@ export default function TeamPage() {
         }),
       });
       if (res.ok) {
-        toast("Region updated", "success");
+        toast("Location updated", "success");
         setAssigningRegion(null);
         await fetchMembers();
       } else {
         const data = await res.json().catch(() => null);
-        toast(data?.error ?? "Failed to update region", "error");
+        toast(data?.error ?? "Failed to update location", "error");
       }
     } finally {
       setSavingRegion(false);
@@ -318,13 +318,13 @@ export default function TeamPage() {
 
       {regionsEnabled && regions.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
-          <label className="text-xs font-medium text-gray-500">Region</label>
+          <label className="text-xs font-medium text-gray-500">Location</label>
           <Select
             id="regionFilter"
             value={regionFilter}
             onChange={(e) => setRegionFilter(e.target.value)}
             options={[
-              { value: "ALL", label: `All regions (${members.length})` },
+              { value: "ALL", label: `All locations (${members.length})` },
               {
                 value: "UNASSIGNED",
                 label: `Unassigned (${unassignedCount})`,
@@ -376,17 +376,17 @@ export default function TeamPage() {
               <p className="font-medium">
                 {unassignedOthersCount} team member
                 {unassignedOthersCount === 1 ? "" : "s"}{" "}
-                {unassignedOthersCount === 1 ? "has" : "have"} no region
+                {unassignedOthersCount === 1 ? "has" : "have"} no location
                 assigned.
               </p>
               <p className="mt-0.5 text-xs text-amber-700">
-                Cover requirements only apply to members assigned to a region.
+                Cover requirements only apply to members assigned to a location.
                 Assign them below or{" "}
                 <Link
                   href="/settings/regions"
                   className="font-medium underline hover:no-underline"
                 >
-                  manage regions →
+                  manage locations →
                 </Link>
               </p>
             </div>
@@ -399,9 +399,9 @@ export default function TeamPage() {
         regions.length > 0 && (
           <div className="rounded-md border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
             <p>
-              You don&apos;t have a region assigned. That&apos;s fine for setup
+              You don&apos;t have a location assigned. That&apos;s fine for setup
               — assign yourself on your card below only if you take leave and
-              want regional cover checks to apply to you.
+              want cover checks to apply to you.
             </p>
           </div>
         )}
@@ -502,19 +502,19 @@ export default function TeamPage() {
         onClose={() => (savingRegion ? null : setAssigningRegion(null))}
         title={
           assigningRegion
-            ? `Assign region — ${assigningRegion.name}`
-            : "Assign region"
+            ? `Assign location — ${assigningRegion.name}`
+            : "Assign location"
         }
       >
         {assigningRegion && (
           <form onSubmit={handleAssignRegion} className="space-y-4">
             <Select
               id="memberRegion"
-              label="Region"
+              label="Location"
               value={pendingRegionId}
               onChange={(e) => setPendingRegionId(e.target.value)}
               options={[
-                { value: "", label: "— No region —" },
+                { value: "", label: "— No location —" },
                 ...regions
                   .filter((r) => r.isActive || r.id === assigningRegion.regionId)
                   .map((r) => ({
@@ -540,7 +540,7 @@ export default function TeamPage() {
                 className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
               <p className="text-xs text-gray-500">
-                Recorded in the member&apos;s region history.
+                Recorded in the member&apos;s location history.
               </p>
             </div>
             <div className="flex items-center gap-3 pt-2">

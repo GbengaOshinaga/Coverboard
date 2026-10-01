@@ -31,10 +31,10 @@ export function TrialBanner({
   let linkCls = "text-blue-700 hover:text-blue-900";
   let label: string;
 
-  if (tone === "danger" && daysLeft <= 0) {
+  if (tone === "ended") {
     bg = "bg-red-50 border-red-200 text-red-900";
     linkCls = "text-red-700 hover:text-red-900";
-    label = "Your trial has ended. Add your card now to continue using Coverboard.";
+    label = `Your trial ended on ${DATE_FMT.format(endsAt)}. Add your card now to continue using Coverboard.`;
   } else if (tone === "danger") {
     bg = "bg-red-50 border-red-200 text-red-900";
     linkCls = "text-red-700 hover:text-red-900";

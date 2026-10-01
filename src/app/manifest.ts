@@ -13,10 +13,10 @@ import type { MetadataRoute } from "next";
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Coverboard — Team Leave Management",
+    name: "Coverboard — Staff Cover for Shift-Based Teams",
     short_name: "Coverboard",
     description:
-      "Know who's out and plan who's covered. Leave management for teams that work across countries.",
+      "Know who's off, where you're short and who can cover. Staff cover for shift-based teams.",
     start_url: "/",
     display: "standalone",
     background_color: "#ffffff",

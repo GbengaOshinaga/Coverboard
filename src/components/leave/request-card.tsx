@@ -246,7 +246,7 @@ export function RequestCard({
             ) : (
               <ChevronRight className="h-3.5 w-3.5" />
             )}
-            Regional cover
+            Cover by location
             {request.coverOverride && (
               <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
                 Override

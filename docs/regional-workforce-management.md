@@ -21,7 +21,8 @@ A region is a named group with three pieces of metadata:
 
 - **Name** — what people call this group (London Office, Site A, Pharmacy Counter). Must be unique within the organisation.
 - **Description** — optional, free text. Useful for explaining what counts as "this region" if it's ambiguous.
-- **Min cover** — the minimum number of region members who must be available on every weekday. This is the threshold cover warnings fire against. Must be at least 1.
+- **Min cover** — the minimum number of region members who must be available on each day cover is checked. This is the threshold cover warnings fire against. Must be at least 1.
+- **Check cover on weekends / bank holidays** — both on by default, because shift-based teams staff these days. Untick either for a team that doesn't work them (an office, a weekday-only clinic). Regions created before these settings existed were set to weekdays only, matching how they behaved before.
 - **Colour** — used on the team calendar to identify the region. Pick from a preset palette or set your own hex code.
 
 Add a region under **Settings → Regions → Add region**. Each region is independent — a member can only belong to one region at a time, and changing their region creates a `UserRegionHistory` entry (so you have an audit trail of moves).
@@ -30,18 +31,29 @@ You can mark a region as inactive without deleting it (preserves history; cover 
 
 ---
 
+## Shifts and working patterns
+
+For shift-based teams, a single daily minimum isn't enough: nights may need fewer people than days, and someone who only works Monday to Wednesday shouldn't count as available on Saturday.
+
+- **Shifts** — under **Settings → Regions → Shifts**, add shift types for a region (e.g. *Early 07:00–15:00*, *Night 20:00–08:00*) with a minimum for each day of the week. Set 0 on days a shift doesn't run. A shift that ends at or before its start time runs overnight and counts on the day it starts, so a Thursday night shift is "Thu".
+- **Working patterns** — on each team member's profile, tick the shifts they normally work on each weekday. Changes apply from today; earlier patterns are kept so past cover reports stay accurate. Moving someone to another region ends their pattern.
+
+Once a region has at least one shift, cover is checked **per shift**: available = people whose pattern puts them on that shift that day, minus anyone on approved leave. Leave only counts against the shifts the person would have worked. Weekend minimums come from each shift's weekday grid (the region's weekend setting no longer applies); the bank holiday setting still does. Regions with no shifts keep the single daily minimum described above.
+
+---
+
 ## How cover warnings work
 
 Cover is checked on every leave request — both at submission time and again when a manager approves it.
 
-For each weekday in the requested date range, Coverboard:
+For each day in the requested date range that the region checks, Coverboard:
 
 1. Finds the requester's region
 2. Counts how many other active region members are available that day (i.e. not on an approved leave for that date)
 3. Compares the available count against the region's **Min cover**
 4. If `available < min cover`, that day is flagged as a cover conflict
 
-Weekends and bank holidays in the org's configured **UK bank holiday region** are skipped — the check is for working-day cover.
+Weekends are skipped only for regions with weekend cover turned off. Bank holidays (from the org's configured **UK bank holiday region**) are skipped only for regions with bank holiday cover turned off. The same rule applies to the dashboard cover widget, the calendar cover indicators and the regional cover reports.
 
 If any day falls below cover, the requester sees an inline warning explaining which days are short, by how many, and which colleagues are already off. Managers see the same warning at approval time and can either:
 

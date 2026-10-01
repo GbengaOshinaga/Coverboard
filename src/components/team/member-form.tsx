@@ -172,7 +172,7 @@ export function MemberForm({
 
       <Select
         id="memberWorkCountry"
-        label="Work location (country)"
+        label="Work country"
         options={countryOptions}
         value={workCountry}
         onChange={(e) => setWorkCountry(e.target.value)}

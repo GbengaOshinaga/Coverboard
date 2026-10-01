@@ -2,6 +2,8 @@
 
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import type { CoverCandidate, RuledOutMember } from "@/lib/shiftCover";
+import { CoverOptions } from "./cover-options";
 import { AlertTriangle } from "lucide-react";
 
 export type CoverConflict = {
@@ -10,6 +12,10 @@ export type CoverConflict = {
   required: number;
   shortfall: number;
   staffOff: Array<{ id: string; name: string; leaveType: string | null }>;
+  shiftId?: string | null;
+  shiftName?: string | null;
+  coverCandidates?: CoverCandidate[];
+  ruledOut?: RuledOutMember[];
 };
 
 const FMT = new Intl.DateTimeFormat("en-GB", {
@@ -40,6 +46,7 @@ export function ApproveCoverModal({
   requesterName: string;
   loading?: boolean;
 }) {
+  const unit = conflicts.some((c) => c.shiftName) ? "shift" : "day";
   return (
     <Dialog
       open={open}
@@ -49,17 +56,19 @@ export function ApproveCoverModal({
       <div className="space-y-4">
         <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-          <div className="space-y-1.5">
+          <div className="min-w-0 flex-1 space-y-1.5">
             <p className="font-medium">
               Approving {requesterName}&apos;s leave will leave{" "}
-              <strong>{regionName ?? "this region"}</strong> below its minimum
-              cover on {conflicts.length} day
+              <strong>{regionName ?? "this location"}</strong> below its minimum
+              cover on {conflicts.length} {unit}
               {conflicts.length === 1 ? "" : "s"}.
             </p>
             <ul className="space-y-0.5 text-xs">
               {conflicts.slice(0, 8).map((c) => (
-                <li key={c.date}>
-                  {formatDay(c.date)}: {c.available}/{c.required} available
+                <li key={`${c.date}:${c.shiftId ?? ""}`}>
+                  {formatDay(c.date)}
+                  {c.shiftName ? ` · ${c.shiftName}` : ""}: {c.available}/
+                  {c.required} available
                   {c.staffOff.length > 0 && (
                     <span className="text-amber-700">
                       {" "}
@@ -67,6 +76,10 @@ export function ApproveCoverModal({
                       {c.staffOff.map((s) => s.name).join(", ")}
                     </span>
                   )}
+                  <CoverOptions
+                    candidates={c.coverCandidates ?? []}
+                    ruledOut={c.ruledOut ?? []}
+                  />
                 </li>
               ))}
               {conflicts.length > 8 && (

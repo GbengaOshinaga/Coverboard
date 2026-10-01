@@ -23,6 +23,15 @@ const config: Config = {
           950: "#172554",
         },
       },
+      keyframes: {
+        rise: {
+          from: { opacity: "0", transform: "translateY(8px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+      },
+      animation: {
+        rise: "rise 0.5s ease-out both",
+      },
     },
   },
   plugins: [typography],

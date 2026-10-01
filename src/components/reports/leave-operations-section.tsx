@@ -212,7 +212,7 @@ export function LeaveOperationsSection() {
         />
         <KpiCard
           icon={Building2}
-          label="Regions under cover"
+          label="Locations under cover"
           value={h.regionsUnderCoverCount}
           tone={h.regionsUnderCoverCount > 0 ? "warn" : "good"}
         />
@@ -390,7 +390,7 @@ export function LeaveOperationsSection() {
             {data.regionsUnderCoverThisWeek.length > 0 && (
               <div>
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                  Regions under cover this week
+                  Locations under cover this week
                 </p>
                 <ul className="divide-y divide-gray-100">
                   {data.regionsUnderCoverThisWeek.map((r) => (

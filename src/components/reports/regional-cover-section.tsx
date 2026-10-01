@@ -102,7 +102,7 @@ export function RegionalCoverSection() {
           setError(
             "error" in body && body.error
               ? body.error
-              : "Could not load regional cover analytics."
+              : "Could not load cover analytics."
           );
           setLoading(false);
           return;
@@ -111,7 +111,7 @@ export function RegionalCoverSection() {
         setLoading(false);
       } catch {
         if (cancelled) return;
-        setError("Could not load regional cover analytics.");
+        setError("Could not load cover analytics.");
         setLoading(false);
       }
     })();
@@ -125,7 +125,7 @@ export function RegionalCoverSection() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Building2 className="h-4 w-4 text-brand-600" />
-          Regional cover — last 13 weeks
+          Cover by location — last 13 weeks
         </CardTitle>
         <CardDescription>
           Each square is one week. Green = met cover every day; amber = 1–2
@@ -137,14 +137,14 @@ export function RegionalCoverSection() {
         {error && <p className="text-sm text-red-700">{error}</p>}
         {!loading && !error && data && !data.regionsEnabled && (
           <p className="text-sm text-gray-500">
-            Regions aren&rsquo;t enabled for this organisation. Turn them on
-            in <strong>Settings &rarr; UK Compliance &rarr; Regions</strong>{" "}
-            to start tracking cover by location or team.
+            Locations aren&rsquo;t enabled for this organisation. Turn them on
+            in <strong>Settings &rarr; Optional features</strong>{" "}
+            to start tracking cover by location.
           </p>
         )}
         {!loading && !error && data?.regionsEnabled && data.regions.length === 0 && (
           <p className="text-sm text-gray-500">
-            No active regions with members yet. Create at least one region
+            No active locations with members yet. Create at least one location
             from the team page to track cover.
           </p>
         )}
@@ -153,7 +153,7 @@ export function RegionalCoverSection() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                 <tr>
-                  <th className="px-3 py-2">Region</th>
+                  <th className="px-3 py-2">Location</th>
                   <th className="px-3 py-2 text-right">Members</th>
                   <th className="px-3 py-2 text-right">Min cover</th>
                   <th className="px-3 py-2 text-right">Days under (13wk)</th>

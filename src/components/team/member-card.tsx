@@ -84,10 +84,10 @@ export function MemberCard({
               {member.region.name}
             </p>
           ) : (
-            <p className="mt-1 text-xs italic text-gray-400">No region</p>
+            <p className="mt-1 text-xs italic text-gray-400">No location</p>
           ))}
         <p className="text-xs text-gray-400 mt-0.5">
-          Work location:{" "}
+          Work country:{" "}
           {member.workCountry
             ? COUNTRY_NAMES[member.workCountry] ?? member.workCountry
             : "Not set"}
@@ -137,7 +137,7 @@ export function MemberCard({
               onClick={() => onAssignRegion(member)}
               className="rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
             >
-              Region
+              Location
             </button>
           )}
         </div>

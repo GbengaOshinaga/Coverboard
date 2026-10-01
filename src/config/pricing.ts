@@ -42,6 +42,8 @@ export const PRICING: PricingConfig = {
       cta: "Start free",
       highlighted: false,
       features: [
+        "Minimum cover & shift alerts",
+        "See who's free to cover",
         "Annual leave tracking",
         "Team calendar",
         "Leave requests & approvals",
@@ -66,12 +68,11 @@ export const PRICING: PricingConfig = {
     },
     {
       name: "Growth",
-      tagline: "Stay compliant",
+      tagline: "For teams of any size",
       price_monthly: 49,
       headcount: "Unlimited employees",
       cta: "Start free trial",
       highlighted: true,
-      badge: "Most popular",
       features: [
         "Everything in Starter",
         "All UK statutory leave types",
@@ -85,7 +86,7 @@ export const PRICING: PricingConfig = {
     },
     {
       name: "Scale",
-      tagline: "Understand your workforce",
+      tagline: "For groups with several locations",
       price_monthly: 99,
       headcount: "Unlimited employees",
       cta: "Start free trial",
@@ -93,7 +94,7 @@ export const PRICING: PricingConfig = {
       features: [
         "Everything in Growth",
         "Absence trend analysis",
-        "Regional cover analytics",
+        "Cover analytics by location",
         "Custom leave types",
         "Scheduled report delivery (email)",
         "Data export in multiple formats",

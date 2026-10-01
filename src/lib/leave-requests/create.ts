@@ -21,6 +21,7 @@ import {
   isMaternityLeaveType,
   resolveAverageWeeklyEarnings,
 } from "@/lib/smpCalculator";
+import { checkOnBehalf, noticeError } from "./rules";
 
 /**
  * Shared core for creating a leave request. Used by both the web API
@@ -54,6 +55,11 @@ export type CreateLeaveInput = {
   /** Expected week of childbirth (due date) — maternity, for the SMP service test. */
   expectedDueDate?: Date;
   splCurtailmentConfirmed?: boolean;
+  /**
+   * An admin/manager recording sickness for a team member (e.g. a phone call
+   * before a shift). Recorded as approved straight away; evidence can follow.
+   */
+  onBehalfOfUserId?: string;
   context?: AuditContext;
 };
 
@@ -119,13 +125,16 @@ export async function createLeaveRequest(
     childBirthDate,
     expectedDueDate,
     splCurtailmentConfirmed,
+    onBehalfOfUserId,
     context,
   } = input;
-  const userId = actor.id;
+  const onBehalf = !!onBehalfOfUserId && onBehalfOfUserId !== actor.id;
+  const userId = onBehalf ? onBehalfOfUserId : actor.id;
 
   const leaveTypeConfig = await prisma.leaveType.findUnique({
     where: { id: leaveTypeId },
     select: {
+      organizationId: true,
       name: true,
       minNoticeDays: true,
       requiresEvidence: true,
@@ -134,19 +143,28 @@ export async function createLeaveRequest(
       isPaid: true,
     },
   });
-  if (!leaveTypeConfig) {
+  if (!leaveTypeConfig || leaveTypeConfig.organizationId !== orgId) {
     return { ok: false, status: 404, error: "Leave type not found" };
   }
-  const now = new Date();
-  const noticeDays = Math.floor(
-    (startDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-  );
-  if (noticeDays < leaveTypeConfig.minNoticeDays) {
-    return {
-      ok: false,
-      status: 400,
-      error: `This leave type requires at least ${leaveTypeConfig.minNoticeDays} days notice`,
-    };
+
+  let subjectName: string | null = null;
+  if (onBehalf) {
+    const subject = await prisma.user.findFirst({
+      where: { id: userId, organizationId: orgId, isActive: true },
+      select: { name: true },
+    });
+    const check = checkOnBehalf({
+      actorRole: actor.role,
+      subjectFound: !!subject,
+      leaveTypeName: leaveTypeConfig.name,
+    });
+    if (!check.ok) return check;
+    subjectName = subject!.name;
+  }
+
+  const noticeProblem = noticeError(leaveTypeConfig, startDate, new Date());
+  if (noticeProblem) {
+    return { ok: false, status: 400, error: noticeProblem };
   }
   const evidenceConfirmed =
     evidenceProvided === true ||
@@ -154,7 +172,10 @@ export async function createLeaveRequest(
       typeof sicknessNote === "string" &&
       sicknessNote.trim().length > 0);
 
-  if (leaveTypeConfig.requiresEvidence && !evidenceConfirmed) {
+  // A manager logging a sick call won't have a fit note yet: the first seven
+  // days are self-certified, and the fit-note alert cron flags day 7+ spells
+  // still missing evidence.
+  if (leaveTypeConfig.requiresEvidence && !evidenceConfirmed && !onBehalf) {
     return {
       ok: false,
       status: 400,
@@ -399,7 +420,8 @@ export async function createLeaveRequest(
       role: { in: ["ADMIN", "MANAGER"] },
     },
   });
-  const autoApprove = otherApprovers === 0;
+  // Sickness logged by a manager is a record of fact, not a request to review.
+  const autoApprove = onBehalf || otherApprovers === 0;
 
   const leaveRequest = await createRequestRow({
     startDate,
@@ -428,7 +450,7 @@ export async function createLeaveRequest(
     ...(autoApprove
       ? {
           status: "APPROVED" as const,
-          reviewedById: userId,
+          reviewedById: actor.id,
           reviewedAt: new Date(),
         }
       : {}),
@@ -490,10 +512,13 @@ export async function createLeaveRequest(
   }
 
   const actorMeta = {
-    id: userId,
-    email: leaveRequest.user.email,
+    id: actor.id,
+    email: onBehalf ? actor.email : leaveRequest.user.email,
     role: actor.role,
   };
+  const onBehalfMeta = onBehalf
+    ? { loggedOnBehalfOf: { id: userId, name: subjectName } }
+    : {};
 
   recordAudit({
     organizationId: orgId,
@@ -506,6 +531,7 @@ export async function createLeaveRequest(
       startDate,
       endDate,
       daysRequested,
+      ...onBehalfMeta,
     },
     context,
   });
@@ -523,6 +549,7 @@ export async function createLeaveRequest(
         startDate,
         endDate,
         autoApproved: true,
+        ...onBehalfMeta,
       },
       context,
     });
@@ -535,9 +562,10 @@ export async function createLeaveRequest(
       is_statutory: /SSP|Statutory/i.test(leaveRequest.leaveType.name),
       leave_category: leaveTypeConfig.category,
       is_paid: leaveTypeConfig.isPaid,
+      logged_on_behalf: onBehalf,
     },
     {
-      userId,
+      userId: actor.id,
       organizationId: orgId,
       role: actor.role,
       plan: actor.plan,

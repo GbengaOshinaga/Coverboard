@@ -4,6 +4,11 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { hasFeatureForEnum } from "@/lib/planFeatures";
 import { computeRegionalCover } from "@/lib/regional-cover-analytics";
+import {
+  loadBankHolidaySet,
+  shiftTypesSelect,
+  toEngineShiftData,
+} from "@/lib/regionCover";
 import { recordReadAudit, requestAuditContext } from "@/lib/audit";
 import type { AnyPlan } from "@/lib/plans";
 
@@ -30,7 +35,7 @@ export async function GET(request: Request) {
 
   if (!hasFeatureForEnum(plan ?? null, "absence_analytics")) {
     return NextResponse.json(
-      { error: "Regional cover analytics are available on the Scale plan." },
+      { error: "Cover analytics by location are available on the Scale plan." },
       { status: 403 }
     );
   }
@@ -59,6 +64,9 @@ export async function GET(request: Request) {
         id: true,
         name: true,
         minCover: true,
+        coverWeekends: true,
+        coverBankHolidays: true,
+        shiftTypes: shiftTypesSelect(thirteenWeeksAgo, now),
         members: {
           where: { isActive: true },
           select: { id: true },
@@ -75,15 +83,25 @@ export async function GET(request: Request) {
     }),
   ]);
 
+  // Window spans the full 13 report weeks plus the current partial week.
+  const bankHolidayDates = await loadBankHolidaySet(
+    orgId,
+    new Date(thirteenWeeksAgo.getTime() - 7 * 24 * 60 * 60 * 1000),
+    new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+  );
+
   const report = computeRegionalCover(
     regions.map((r) => ({
       id: r.id,
       name: r.name,
       minCover: r.minCover,
+      coverWeekends: r.coverWeekends,
+      coverBankHolidays: r.coverBankHolidays,
       memberIds: r.members.map((m) => m.id),
+      ...toEngineShiftData(r.shiftTypes),
     })),
     leaves,
-    { now }
+    { now, bankHolidayDates }
   );
 
   void recordReadAudit({
