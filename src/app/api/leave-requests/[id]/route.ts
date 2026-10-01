@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recomputeBradfordScore } from "@/lib/leave-requests/bradford";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -12,8 +13,6 @@ import {
   getAweForUser,
   isMaternityLeaveType,
 } from "@/lib/smpCalculator";
-import { calculateBradfordFactor } from "@/lib/uk-compliance";
-import { countWeekdays } from "@/lib/utils";
 import { reviewLeaveRequest } from "@/lib/leave-requests/review";
 import { changeSicknessEndDate } from "@/lib/leave-requests/change-end-date";
 import { z } from "zod";
@@ -29,6 +28,14 @@ const updateSchema = z.object({
   endDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "End date must be YYYY-MM-DD")
+    // Reject impossible dates rather than letting 2026-02-31 become 3 March.
+    .refine(
+      (v) => {
+        const d = new Date(`${v}T00:00:00.000Z`);
+        return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+      },
+      "End date isn't a real date"
+    )
     .optional(),
 });
 
@@ -265,31 +272,7 @@ export async function PATCH(
       status === "CANCELLED" &&
       /SSP|Sick/i.test(leaveRequest.leaveType.name)
     ) {
-      prisma.leaveRequest
-        .findMany({
-          where: {
-            userId: leaveRequest.userId,
-            OR: [
-              { leaveType: { name: { contains: "SSP" } } },
-              { leaveType: { name: { contains: "Sick" } } },
-            ],
-            status: "APPROVED",
-          },
-          select: { startDate: true, endDate: true },
-        })
-        .then((sickRequests) => {
-          const spells = sickRequests.length;
-          const days = sickRequests.reduce(
-            (sum, r) => sum + countWeekdays(r.startDate, r.endDate),
-            0
-          );
-          const score = calculateBradfordFactor(spells, days);
-          return prisma.user.update({
-            where: { id: leaveRequest.userId },
-            data: { bradfordScore: score },
-          });
-        })
-        .catch((err) => console.error("Bradford Factor update error:", err));
+      recomputeBradfordScore(leaveRequest.userId);
     }
 
     // When someone cancels leave that was already approved, let the other

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
+import { bradfordForSickness } from "@/lib/sickness-spells";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
   SSP_MAX_WEEKS,
   UK_LEL_WEEKLY,
-  calculateBradfordFactor,
   calculateEstimatedSspCost,
   calculateSspPayableDays,
   calculateSspDailyRate,
@@ -32,22 +32,6 @@ import {
   exportFilename,
   type ExportColumn,
 } from "@/lib/export-formats";
-
-function absenceSpells(requests: { startDate: Date; endDate: Date }[]): number {
-  if (requests.length === 0) return 0;
-  const sorted = [...requests].sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
-  let spells = 1;
-  let activeEnd = sorted[0].endDate;
-  for (let i = 1; i < sorted.length; i++) {
-    if (sorted[i].startDate > activeEnd) {
-      spells += 1;
-      activeEnd = sorted[i].endDate;
-    } else if (sorted[i].endDate > activeEnd) {
-      activeEnd = sorted[i].endDate;
-    }
-  }
-  return spells;
-}
 
 export async function GET(request: Request) {
   const session = await getServerSession(authOptions);
@@ -132,9 +116,7 @@ export async function GET(request: Request) {
 
   const bradfordReport = users.map((user) => {
     const sickness = user.leaveRequests.filter((r) => r.leaveType.name.includes("Sick") || r.leaveType.name.includes("SSP"));
-    const spells = absenceSpells(sickness);
-    const days = sickness.reduce((sum, r) => sum + countWeekdays(r.startDate, r.endDate), 0);
-    const score = calculateBradfordFactor(spells, days);
+    const { spells, days, score } = bradfordForSickness(sickness);
     return {
       userId: user.id,
       name: user.name,

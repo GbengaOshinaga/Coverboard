@@ -5,6 +5,7 @@ import {
   calculateSspEntitlement,
 } from "@/lib/uk-compliance";
 import { resolveAverageWeeklyEarnings } from "@/lib/smpCalculator";
+import { linkedPriorChain } from "@/lib/sickness-spells";
 
 export type SspInfo = {
   eligible: boolean;
@@ -32,9 +33,10 @@ export type SspSpellResult = {
  * (waiting days unless linked to a prior spell), and the 28-week cap. Shared
  * by creating a sickness request and changing its end date.
  *
- * Prior spells are those ending in the 56 days before this one starts.
- * Rejected and cancelled requests never happened, so they don't count towards
- * linking or the cap.
+ * Prior spells are the linked chain before this one: each within 56 days of
+ * the next, however far back that goes (a linked period can last up to 3
+ * years). Rejected and cancelled requests never happened, so they don't count
+ * towards linking or the cap.
  */
 export async function computeSspForSpell(input: {
   userId: string;
@@ -53,18 +55,19 @@ export async function computeSspForSpell(input: {
   });
   if (!employee) return null;
 
-  const piwFloor = new Date(startDate);
-  piwFloor.setDate(piwFloor.getDate() - 56);
+  const lookbackFloor = new Date(startDate);
+  lookbackFloor.setUTCFullYear(lookbackFloor.getUTCFullYear() - 3);
   const priorSsp = await prisma.leaveRequest.findMany({
     where: {
       userId,
       leaveType: { name: { contains: "SSP" } },
       status: { notIn: ["REJECTED", "CANCELLED"] },
-      endDate: { gte: piwFloor, lt: startDate },
+      endDate: { gte: lookbackFloor, lt: startDate },
     },
-    select: { sspDaysPaid: true },
+    select: { startDate: true, endDate: true, sspDaysPaid: true },
   });
-  const cumulativePrior = priorSsp.reduce((sum, r) => sum + (r.sspDaysPaid ?? 0), 0);
+  const chain = linkedPriorChain(priorSsp, startDate);
+  const cumulativePrior = chain.daysPaid;
 
   const averageWeeklyEarnings = await resolveAverageWeeklyEarnings(
     userId,
@@ -105,10 +108,10 @@ export async function computeSspForSpell(input: {
   }
 
   // Waiting days are served once per PIW. A spell linked to a prior SSP spell
-  // (one ending within the 56-day window above) has already served them, so
-  // it pays every weekday with no 3-day deduction; re-deducting would underpay.
+  // has already served them, so it pays every weekday with no 3-day
+  // deduction; re-deducting would underpay.
   const requestedPayable = calculateSspPayableDaysForSpell(startDate, endDate, {
-    linkedToPriorPiw: priorSsp.length > 0,
+    linkedToPriorPiw: chain.linked,
   });
   const capped = Math.min(requestedPayable, entitlement.remainingDays);
   const cumulativeAfter = cumulativePrior + capped;
@@ -129,4 +132,44 @@ export async function computeSspForSpell(input: {
     capReachedNow: sspLimitReached && cumulativePrior < entitlement.maxDays,
     employee: employeeRef,
   };
+}
+
+/**
+ * After an SSP spell changes, later spells may link differently (or stop
+ * linking), which changes their waiting days and their share of the 28-week
+ * cap. Recomputes each later live SSP spell in date order, so every one sees
+ * the corrected spells before it. Returns how many rows changed.
+ *
+ * Not transactional: each step reads the rows the previous step wrote. A
+ * failure part-way leaves later spells as they were before, never worse.
+ */
+export async function recomputeLaterSspSpells(userId: string, after: Date): Promise<number> {
+  const later = await prisma.leaveRequest.findMany({
+    where: {
+      userId,
+      leaveType: { name: { contains: "SSP" } },
+      status: { notIn: ["REJECTED", "CANCELLED"] },
+      startDate: { gt: after },
+    },
+    orderBy: { startDate: "asc" },
+    select: { id: true, startDate: true, endDate: true, sspDaysPaid: true, sspLimitReached: true },
+  });
+  let changed = 0;
+  for (const spell of later) {
+    const ssp = await computeSspForSpell({
+      userId,
+      startDate: spell.startDate,
+      endDate: spell.endDate,
+    });
+    if (!ssp) continue;
+    if (ssp.sspDaysPaid === spell.sspDaysPaid && ssp.sspLimitReached === spell.sspLimitReached) {
+      continue;
+    }
+    await prisma.leaveRequest.update({
+      where: { id: spell.id },
+      data: { sspDaysPaid: ssp.sspDaysPaid, sspLimitReached: ssp.sspLimitReached },
+    });
+    changed += 1;
+  }
+  return changed;
 }

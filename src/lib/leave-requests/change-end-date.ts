@@ -1,10 +1,11 @@
 import { prisma } from "@/lib/prisma";
+import { recomputeBradfordScore } from "./bradford";
 import { recordAudit, type AuditContext } from "@/lib/audit";
 import { emailSspCapReached } from "@/lib/email-notifications";
-import { UK_SSP_WEEKLY_RATE, calculateBradfordFactor } from "@/lib/uk-compliance";
+import { UK_SSP_WEEKLY_RATE } from "@/lib/uk-compliance";
 import { countWeekdays } from "@/lib/utils";
-import { checkEndDateChange, rescaleHours } from "./rules";
-import { computeSspForSpell } from "./ssp-spell";
+import { checkEndDateChange, isSicknessLeaveTypeName, rescaleHours } from "./rules";
+import { computeSspForSpell, recomputeLaterSspSpells } from "./ssp-spell";
 
 export type ChangeEndDateResult =
   | { ok: true; requestId: string; userId: string; startDate: Date; endDate: Date }
@@ -54,6 +55,28 @@ export async function changeSicknessEndDate(input: {
   });
   if (!check.ok) return check;
 
+  // Overlapping sickness records would double-count SSP days, so an
+  // extension can't run into another live sickness absence.
+  const others = await prisma.leaveRequest.findMany({
+    where: {
+      userId: request.userId,
+      id: { not: requestId },
+      status: { in: ["APPROVED", "PENDING"] },
+      startDate: { lte: newEndDate },
+      endDate: { gte: request.startDate },
+    },
+    select: { startDate: true, leaveType: { select: { name: true } } },
+  });
+  const clash = others.find((o) => isSicknessLeaveTypeName(o.leaveType.name));
+  if (clash) {
+    const day = clash.startDate.toISOString().slice(0, 10);
+    return {
+      ok: false,
+      status: 409,
+      error: `That would overlap another sickness absence starting ${day}. Change or cancel that one first.`,
+    };
+  }
+
   const isSsp = request.leaveType.name.includes("SSP");
   const ssp = isSsp
     ? await computeSspForSpell({
@@ -76,29 +99,13 @@ export async function changeSicknessEndDate(input: {
     select: { id: true, userId: true, startDate: true, endDate: true },
   });
 
-  // Same recount as create/review: approved sickness spells and their days.
   if (request.status === "APPROVED") {
-    prisma.leaveRequest
-      .findMany({
-        where: {
-          userId: request.userId,
-          OR: [
-            { leaveType: { name: { contains: "SSP" } } },
-            { leaveType: { name: { contains: "Sick" } } },
-          ],
-          status: "APPROVED",
-        },
-        select: { startDate: true, endDate: true },
-      })
-      .then((sick) => {
-        const days = sick.reduce((sum, r) => sum + countWeekdays(r.startDate, r.endDate), 0);
-        return prisma.user.update({
-          where: { id: request.userId },
-          data: { bradfordScore: calculateBradfordFactor(sick.length, days) },
-        });
-      })
-      .catch((err) => console.error("Bradford Factor update error:", err));
+    recomputeBradfordScore(request.userId);
   }
+
+  const laterSspRecalculated = isSsp
+    ? await recomputeLaterSspSpells(request.userId, request.startDate)
+    : 0;
 
   const actorMeta = { id: actor.id, email: actor.email, role: actor.role };
   recordAudit({
@@ -114,6 +121,7 @@ export async function changeSicknessEndDate(input: {
       oldEndDate: request.endDate,
       newEndDate,
       ...(ssp ? { sspDaysPaidBefore: request.sspDaysPaid, sspDaysPaidAfter: ssp.sspDaysPaid } : {}),
+      ...(laterSspRecalculated > 0 ? { laterSspRecalculated } : {}),
     },
     context,
   });
