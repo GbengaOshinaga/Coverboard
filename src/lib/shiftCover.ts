@@ -72,6 +72,12 @@ export type CoverCandidate = {
   id: string;
   name: string;
   employmentType: string | null;
+  /**
+   * Hours their working pattern schedules in the Mon–Sun week of the short
+   * shift, skipping days they're on leave. Scheduled, not worked: it's only as
+   * accurate as the pattern.
+   */
+  weekHours: number;
 };
 
 /**
@@ -93,6 +99,10 @@ export type EngineInput = {
   patterns: EnginePattern[];
   /** Active region members, minus anyone the caller wants excluded. */
   members: EngineMember[];
+  /**
+   * Patterns and leave must cover the Mon–Sun week(s) around `days`, plus a
+   * day either side, for rest checks and candidates' weekly hours.
+   */
   leavesByUser: ReadonlyMap<string, ReadonlyArray<EngineLeave>>;
   bankHolidayDates: ReadonlySet<string>;
   /** YYYY-MM-DD strings, in order. */
@@ -154,6 +164,11 @@ function patternActive(p: EnginePattern, isoDate: string): boolean {
 export const MIN_REST_MINUTES = 11 * 60;
 const MINUTES_PER_DAY = 24 * 60;
 
+/** Monday of the week containing isoDate. */
+export function weekStart(isoDate: string): string {
+  return addDays(isoDate, -weekdayIndex(isoDate));
+}
+
 function addDays(isoDate: string, n: number): string {
   const [y, m, d] = isoDate.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
@@ -202,15 +217,36 @@ export function computeShiftCover(input: EngineInput): EngineDay[] {
   const shiftsOn = (date: string) =>
     input.shifts.filter((s) => !s.activeFrom || s.activeFrom <= date);
 
-  /** Shifts a member is scheduled on for a date, per their pattern. */
+  /** Shifts a member is scheduled on for a date, per their pattern. Memoised:
+   * candidate rest checks and weekly hours ask for the same days repeatedly. */
+  const scheduledCache = new Map<string, EngineShift[]>();
   const scheduledShifts = (userId: string, date: string): EngineShift[] => {
+    const key = `${userId}|${date}`;
+    const cached = scheduledCache.get(key);
+    if (cached) return cached;
     const weekday = weekdayIndex(date);
     const ids = new Set(
       input.patterns
         .filter((p) => p.userId === userId && p.weekday === weekday && patternActive(p, date))
         .map((p) => p.shiftTypeId)
     );
-    return shiftsOn(date).filter((s) => ids.has(s.id));
+    const result = shiftsOn(date).filter((s) => ids.has(s.id));
+    scheduledCache.set(key, result);
+    return result;
+  };
+
+  const weekHours = (userId: string, date: string): number => {
+    const monday = weekStart(date);
+    let minutes = 0;
+    for (let i = 0; i < 7; i++) {
+      const day = addDays(monday, i);
+      if (leaveOn(input.leavesByUser.get(userId), day)) continue;
+      for (const s of scheduledShifts(userId, day)) {
+        const [start, end] = shiftInterval(s, 0);
+        minutes += end - start;
+      }
+    }
+    return Math.round((minutes / 60) * 10) / 10;
   };
 
   const candidatesFor = (
@@ -245,6 +281,7 @@ export function computeShiftCover(input: EngineInput): EngineDay[] {
           id: m.id,
           name: m.name,
           employmentType: m.employmentType ?? null,
+          weekHours: weekHours(m.id, date),
         });
       }
     }

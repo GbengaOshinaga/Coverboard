@@ -9,6 +9,12 @@ const CONTRACT_LABELS: Record<string, string> = {
 
 const MAX_RULED_OUT = 3;
 
+/** Scheduled (from their working pattern) in the week of the short shift. */
+function weekHoursLabel(hours: number): string {
+  if (hours === 0) return "No shifts this week";
+  return `${hours}h this week`;
+}
+
 /**
  * Who could cover a short shift, and who can't and why. Candidates follow the
  * engine's rules (not on the shift, not on leave, 11h rest); nothing here
@@ -34,9 +40,14 @@ export function CoverOptions({
           <li key={c.id} className="flex items-center justify-between gap-3 py-1.5">
             <div className="min-w-0">
               <p className="text-sm font-medium">{c.name}</p>
-              {c.employmentType && CONTRACT_LABELS[c.employmentType] && (
-                <p className="text-xs text-gray-500">{CONTRACT_LABELS[c.employmentType]}</p>
-              )}
+              <p className="text-xs text-gray-500">
+                {[
+                  c.employmentType ? CONTRACT_LABELS[c.employmentType] : null,
+                  weekHoursLabel(c.weekHours),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
             </div>
             <span className="shrink-0 rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">
               Free

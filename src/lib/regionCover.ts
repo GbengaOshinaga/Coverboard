@@ -11,6 +11,7 @@ import {
   type EngineShift,
   type RuledOutMember,
   type ShiftCover,
+  weekStart,
 } from "@/lib/shiftCover";
 
 export type ConflictDay = {
@@ -103,12 +104,26 @@ function dayList(start: Date, end: Date): string[] {
  * bounds must be UTC midnight too — using local midnight drops rows on the
  * last day whenever the server isn't on UTC (e.g. BST in local dev).
  */
+function isoPlusDays(isoDate: string, n: number): string {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+}
+
+/**
+ * `from`/`to` bound the days being judged. `loadFrom`/`loadTo` are wider —
+ * the Mon–Sun weeks around them plus a day either side — so patterns and
+ * leave are there for rest checks and candidates' weekly hours.
+ */
 function dayWindow(start: Date, end: Date) {
   const days = dayList(start, end);
+  const first = days[0];
+  const last = days[days.length - 1];
   return {
     days,
-    from: new Date(`${days[0]}T00:00:00Z`),
-    to: new Date(`${days[days.length - 1]}T00:00:00Z`),
+    from: new Date(`${first}T00:00:00Z`),
+    to: new Date(`${last}T00:00:00Z`),
+    loadFrom: new Date(`${isoPlusDays(weekStart(first), -1)}T00:00:00Z`),
+    loadTo: new Date(`${isoPlusDays(weekStart(last), 7)}T00:00:00Z`),
   };
 }
 
@@ -324,20 +339,23 @@ export type DailyCoverInput = {
 export async function computeDailyCover(
   input: DailyCoverInput
 ): Promise<DailyCover[]> {
-  const { days: dayStrings, from, to } = dayWindow(input.start, input.end);
+  const { days: dayStrings, from, to, loadFrom, loadTo } = dayWindow(
+    input.start,
+    input.end
+  );
   const region = await loadRegionWithShifts(
     input.organizationId,
     input.regionId,
-    from,
-    to
+    loadFrom,
+    loadTo
   );
   if (!region) return [];
 
   const members = await loadRegionMembers(region.id, input.excludeUserId);
   const leavesByUser = await loadApprovedLeavesOverlapping(
     members.map((m) => m.id),
-    from,
-    to,
+    loadFrom,
+    loadTo,
     input.excludeRequestId
   );
   const bankHolidayDates = await loadBankHolidaySet(input.organizationId, from, to);
@@ -410,13 +428,13 @@ export async function checkRegionalCover(params: {
 
   const start = parseISO(params.startDate);
   const end = parseISO(params.endDate);
-  const { from, to } = dayWindow(start, end);
+  const { from, to, loadFrom, loadTo } = dayWindow(start, end);
 
   const region = await loadRegionWithShifts(
     params.organizationId,
     employee.regionId,
-    from,
-    to
+    loadFrom,
+    loadTo
   );
   if (!region || !region.isActive) {
     return emptyResult(
@@ -429,8 +447,8 @@ export async function checkRegionalCover(params: {
   const members = await loadRegionMembers(region.id, params.userId);
   const leavesByUser = await loadApprovedLeavesOverlapping(
     members.map((m) => m.id),
-    from,
-    to,
+    loadFrom,
+    loadTo,
     params.excludeRequestId
   );
   const bankHolidayDates = await loadBankHolidaySet(params.organizationId, from, to);

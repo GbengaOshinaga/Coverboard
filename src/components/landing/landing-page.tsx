@@ -81,8 +81,8 @@ function HeroSection() {
 // (contract type for who's free; the clashing shift for who isn't). No
 // "notify" or "ask to cover" step: Coverboard doesn't message staff.
 const sickCallCandidates = [
-  { name: "Sarah T.", note: "Variable hours", free: true, reason: "Free" },
-  { name: "Priya K.", note: "Zero-hours", free: true, reason: "Free" },
+  { name: "Sarah T.", note: "Variable hours · 22h this week", free: true, reason: "Free" },
+  { name: "Priya K.", note: "Zero-hours · 8h this week", free: true, reason: "Free" },
   { name: "Tom R.", note: "Night shift until 08:00", free: false, reason: "Needs 11h rest" },
 ];
 
@@ -266,11 +266,12 @@ const pillars = [
 ];
 
 // Mirrors what CoverOptions shows (src/components/leave/cover-options.tsx),
-// built on the rules in src/lib/shiftCover.ts. Don't add "ask to cover",
-// qualifications or hours here until the product has them.
+// built on the rules in src/lib/shiftCover.ts. Hours are scheduled hours from
+// working patterns. Don't add "ask to cover" or qualifications until the
+// product has them.
 const coverRows = [
-  { name: "Leah W.", note: "Zero-hours", free: true, reason: "Free" },
-  { name: "Ben C.", note: "Part-time", free: true, reason: "Free" },
+  { name: "Leah W.", note: "Zero-hours · 12h this week", free: true, reason: "Free" },
+  { name: "Ben C.", note: "Part-time · 20h this week", free: true, reason: "Free" },
   { name: "Jas P.", note: "Lunch shift until 16:00", free: false, reason: "Needs 11h rest" },
   { name: "Dan M.", note: "", free: false, reason: "On leave" },
 ];
@@ -284,7 +285,7 @@ const findCoverPoints = [
   {
     title: "See who's free, and who isn't",
     description:
-      "Everyone who isn't working, isn't on leave and would still get 11 hours' rest, with their contract type. Anyone ruled out shows why.",
+      "Everyone who isn't working, isn't on leave and would still get 11 hours' rest, with their contract and hours already scheduled that week. Anyone ruled out shows why.",
   },
   {
     title: "Decide, and keep a record",

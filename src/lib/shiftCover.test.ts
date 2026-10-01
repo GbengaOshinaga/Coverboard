@@ -213,7 +213,7 @@ test("cover candidates: free, rested members are suggested for a short shift", (
   // Ben is on leave, Amara is already on it, Cleo works the night straight
   // after (no gap) — only Dev is free.
   assert.deepEqual(dayShift.coverCandidates, [
-    { id: "d", name: "Dev", employmentType: null },
+    { id: "d", name: "Dev", employmentType: null, weekHours: 0 },
   ]);
   // Ben is rostered on the shift, so he's in staffOff, not ruledOut.
   assert.deepEqual(dayShift.ruledOut, [
@@ -254,7 +254,7 @@ test("cover candidates: respect 11h rest across adjacent days", () => {
   const night = day.shifts.find((s) => s.shiftId === "night")!;
   assert.equal(night.available, 1);
   assert.deepEqual(night.coverCandidates, [
-    { id: "a", name: "Amara", employmentType: null },
+    { id: "a", name: "Amara", employmentType: null, weekHours: 12 },
   ]);
   assert.deepEqual(night.ruledOut, [
     { id: "b", name: "Ben", reason: "rest", note: "Day shift from 08:00 the next day" },
@@ -285,7 +285,7 @@ test("cover candidates: carry the member's contract type", () => {
     })
   );
   assert.deepEqual(day.shifts[0].coverCandidates, [
-    { id: "z", name: "Zoe", employmentType: "ZERO_HOURS" },
+    { id: "z", name: "Zoe", employmentType: "ZERO_HOURS", weekHours: 0 },
   ]);
 });
 
@@ -315,7 +315,7 @@ test("ruled out: names the clashing shift the day before", () => {
     { id: "c", name: "Cleo", reason: "rest", note: "Late shift until 23:00 the day before" },
   ]);
   assert.deepEqual(dayShift.coverCandidates, [
-    { id: "d", name: "Dev", employmentType: null },
+    { id: "d", name: "Dev", employmentType: null, weekHours: 0 },
   ]);
 });
 
@@ -341,4 +341,27 @@ test("ruled out: off-rota members on leave say so", () => {
   assert.deepEqual(day.shifts[0].ruledOut, [
     { id: "b", name: "Ben", reason: "on_leave", note: null },
   ]);
+});
+
+test("cover candidates: week hours count scheduled shifts Mon–Sun, minus leave", () => {
+  // Thu day is short. Zoe works Mon + Tue days and Sun night that week, and
+  // the following Mon day (next week, not counted). She's on leave Tue.
+  const [day] = computeShiftCover(
+    input({
+      shifts: [DAY, NIGHT],
+      patterns: [
+        pattern("a", "day", 3),
+        pattern("z", "day", 0),
+        pattern("z", "day", 1),
+        pattern("z", "night", 6),
+      ],
+      members: [
+        { id: "a", name: "Amara" },
+        { id: "z", name: "Zoe" },
+      ],
+      leavesByUser: new Map([["z", [{ start: "2026-05-05", end: "2026-05-05", leaveTypeName: "Annual" }]]]),
+    })
+  );
+  // Mon 12h + Sun night 12h; Tue skipped for leave.
+  assert.equal(day.shifts.find((s) => s.shiftId === "day")!.coverCandidates[0].weekHours, 24);
 });
