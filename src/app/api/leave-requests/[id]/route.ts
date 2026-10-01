@@ -15,6 +15,7 @@ import {
 import { calculateBradfordFactor } from "@/lib/uk-compliance";
 import { countWeekdays } from "@/lib/utils";
 import { reviewLeaveRequest } from "@/lib/leave-requests/review";
+import { changeSicknessEndDate } from "@/lib/leave-requests/change-end-date";
 import { z } from "zod";
 
 const updateSchema = z.object({
@@ -24,6 +25,11 @@ const updateSchema = z.object({
   evidenceProvided: z.boolean().optional(),
   splCurtailmentConfirmed: z.boolean().optional(),
   coverOverride: z.boolean().optional(),
+  /** Sickness only: move the end date (off longer, or back early). */
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "End date must be YYYY-MM-DD")
+    .optional(),
 });
 
 export async function PATCH(
@@ -73,7 +79,36 @@ export async function PATCH(
       );
     }
 
-    const { status, kitDaysUsed, splitDaysUsed, evidenceProvided, splCurtailmentConfirmed, coverOverride } = parsed.data;
+    const { status, kitDaysUsed, splitDaysUsed, evidenceProvided, splCurtailmentConfirmed, coverOverride, endDate } = parsed.data;
+
+    // Date changes stand alone so they can't be mixed with a status change.
+    if (endDate !== undefined) {
+      if (Object.keys(parsed.data).length > 1) {
+        return NextResponse.json(
+          { error: "Change the end date on its own" },
+          { status: 400 }
+        );
+      }
+      const result = await changeSicknessEndDate({
+        requestId: id,
+        newEndDate: new Date(`${endDate}T00:00:00.000Z`),
+        actor: { id: userId, email: actorEmail ?? null, role: userRole },
+        organizationId: orgId,
+        context: requestAuditContext(request),
+      });
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: result.status });
+      }
+      const updated = await prisma.leaveRequest.findUnique({
+        where: { id },
+        include: fullInclude,
+      });
+      const responsePayload =
+        updated && (updated.userId === userId || userRole === "ADMIN")
+          ? updated
+          : { ...updated, sicknessNote: null };
+      return NextResponse.json(responsePayload);
+    }
 
     if (coverOverride !== undefined && userRole !== "ADMIN" && userRole !== "MANAGER") {
       return NextResponse.json(

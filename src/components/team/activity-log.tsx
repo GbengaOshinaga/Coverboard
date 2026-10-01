@@ -48,6 +48,7 @@ const ACTION_LABEL: Record<string, string> = {
   "leave_request.rejected": "Leave request rejected",
   "leave_request.cancelled": "Leave request cancelled",
   "leave_request.kit_days_updated": "KIT days updated",
+  "leave_request.dates_changed": "Absence dates changed",
   "leave_request.ssp_cap_reached": "SSP cap reached",
   "leave_request.cover_overridden": "Cover override applied",
   "leave_request.sickness_viewed": "Sickness note viewed",

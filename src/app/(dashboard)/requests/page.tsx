@@ -76,8 +76,10 @@ export default function RequestsPage() {
   const isReviewer = userRole === "ADMIN" || userRole === "MANAGER";
   const { toast } = useToast();
 
-  const fetchRequests = useCallback(async () => {
-    setLoading(true);
+  // `silent` refreshes in place, so cards keep their local state (e.g. the
+  // cover check shown after changing an end date).
+  const fetchRequests = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     const params = new URLSearchParams();
     if (filter !== "ALL") {
       params.set("status", filter);
@@ -276,6 +278,7 @@ export default function RequestsPage() {
                 canCancel={request.user.id === userId}
                 regionsEnabled={regionsEnabled}
                 onAction={handleAction}
+                onUpdated={() => fetchRequests({ silent: true })}
                 balance={balanceForType}
               />
             );
