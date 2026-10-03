@@ -14,21 +14,34 @@ const isProduction = process.env.NODE_ENV === "production";
 //   frame-ancestors, and forbids `<object>` / plugins.
 // - PostHog is reverse-proxied through /ingest/* (see `rewrites` below) so
 //   from the browser's perspective it's same-origin — covered by 'self'.
-//   Sentry's ingest is direct from the browser, hence the explicit
-//   *.ingest.sentry.io allowance on connect-src.
+//   Sentry's ingest is direct from the browser, so connect-src allows the
+//   DSN's own host. Sentry regions use different hosts (e.g. EU DSNs are
+//   *.ingest.de.sentry.io, which *.ingest.sentry.io does NOT match — that
+//   silently blocked every browser error report), so the host is read from
+//   the DSN, with the known regional wildcards as a fallback.
 // - Stripe Elements loads js.stripe.com as a script and renders hooks /
 //   card iframes from js.stripe.com + hooks.stripe.com.
 // - The CSP is only emitted in production builds; `next dev` uses HMR with
 //   eval'd scripts and websockets that a tight CSP would break. Vercel
 //   preview deployments use NODE_ENV=production, so previews get the same
 //   CSP as production — which is where you want to catch a CSP regression.
+function sentryConnectSources(): string {
+  const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
+  try {
+    if (dsn) return `https://${new URL(dsn).host}`;
+  } catch {
+    // Malformed DSN: fall through to the wildcards.
+  }
+  return "https://*.ingest.sentry.io https://*.ingest.de.sentry.io https://*.ingest.us.sentry.io";
+}
+
 const contentSecurityPolicy = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' https://js.stripe.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  "connect-src 'self' https://api.stripe.com https://*.ingest.sentry.io",
+  `connect-src 'self' https://api.stripe.com ${sentryConnectSources()}`,
   "frame-src https://js.stripe.com https://hooks.stripe.com",
   "worker-src 'self' blob:",
   "frame-ancestors 'none'",

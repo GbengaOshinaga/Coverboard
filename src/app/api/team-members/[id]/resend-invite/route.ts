@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import bcrypt from "bcryptjs";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isEmailConfigured, resend } from "@/lib/email";
@@ -89,36 +88,25 @@ export async function POST(
   const orgName = org?.name ?? "your team";
   const inviterName = session.user.name ?? "Your admin";
 
-  const tempPassword = Math.random().toString(36).slice(-10);
-  const newPasswordHash = await bcrypt.hash(tempPassword, 10);
-  const previousHash = member.passwordHash;
-
-  await prisma.user.update({
-    where: { id: member.id },
-    data: { passwordHash: newPasswordHash },
-  });
-
+  // A fresh set-password link replaces any earlier one. Their current
+  // password is untouched, so resending never locks anyone out.
   try {
     await sendTeamInviteEmailStrict({
       inviteeName: member.name,
       inviterName,
       orgName,
       email: member.email,
-      tempPassword,
+      userId: member.id,
     });
   } catch (err) {
     console.error("Resend invite email error:", err);
-    await prisma.user.update({
-      where: { id: member.id },
-      data: { passwordHash: previousHash },
-    });
     const detail =
       err instanceof Error && err.message
         ? err.message
         : "Check your email provider configuration and try again.";
     return NextResponse.json(
       {
-        error: `Could not send the email. The member's password was not changed. ${detail}`,
+        error: `Could not send the email. ${detail}`,
       },
       { status: 502 }
     );

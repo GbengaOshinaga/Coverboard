@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
+import { unusablePasswordHash } from "@/lib/invite-links";
 import { alertSetupCompleted } from "@/lib/signup-alerts";
 import { getServerSession } from "next-auth";
-import bcrypt from "bcryptjs";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
@@ -175,14 +175,12 @@ export async function POST(request: Request) {
           });
           if (existing) return;
 
-          const tempPassword = Math.random().toString(36).slice(-10);
-          const tempPasswordHash = await bcrypt.hash(tempPassword, 10);
-
-          await prisma.user.create({
+          const invited = await prisma.user.create({
             data: {
               name: invite.name,
               email: invite.email,
-              passwordHash: tempPasswordHash,
+              // Nobody knows this; the invite email has a set-password link.
+              passwordHash: await unusablePasswordHash(),
               role: "MEMBER",
               memberType: "EMPLOYEE",
               countryCode: invite.countryCode,
@@ -197,7 +195,7 @@ export async function POST(request: Request) {
             inviterName,
             orgName,
             email: invite.email,
-            tempPassword,
+            userId: invited.id,
           }).catch((err) =>
             console.error("Onboarding invite email error:", err)
           );

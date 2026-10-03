@@ -55,11 +55,22 @@ async function readGuideFile(slug: string): Promise<Guide | null> {
   };
 }
 
-export async function getGuideSlugs(): Promise<string[]> {
+async function markdownSlugs(): Promise<string[]> {
   const entries = await fs.readdir(GUIDES_DIR);
   return entries
     .filter((f) => f.endsWith(".md") && f.toLowerCase() !== "readme.md")
     .map((f) => f.replace(/\.md$/, ""));
+}
+
+/**
+ * Slugs of real guides only: files with a title and description in their
+ * frontmatter. Internal notes kept in /marketing (plans, target lists) have
+ * none, so they're never built as pages or listed in the sitemap.
+ */
+export async function getGuideSlugs(): Promise<string[]> {
+  const slugs = await markdownSlugs();
+  const guides = await Promise.all(slugs.map(readGuideFile));
+  return guides.filter((g): g is Guide => g !== null).map((g) => g.slug);
 }
 
 export async function getGuide(slug: string): Promise<Guide | null> {
@@ -67,7 +78,7 @@ export async function getGuide(slug: string): Promise<Guide | null> {
 }
 
 export async function getAllGuides(): Promise<GuideMeta[]> {
-  const slugs = await getGuideSlugs();
+  const slugs = await markdownSlugs();
   const guides = (await Promise.all(slugs.map(readGuideFile))).filter(
     (g): g is Guide => g !== null,
   );

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
+import { unusablePasswordHash } from "@/lib/invite-links";
 import { getServerSession } from "next-auth";
-import bcrypt from "bcryptjs";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { teamMemberSchema } from "@/lib/validations";
@@ -143,9 +143,9 @@ export async function POST(request: Request) {
       }
     }
 
-    // Generate a temporary password for the new team member
-    const tempPassword = Math.random().toString(36).slice(-10);
-    const passwordHash = await bcrypt.hash(tempPassword, 10);
+    // Nobody knows this password; the invite email carries a one-time link
+    // for them to set their own.
+    const passwordHash = await unusablePasswordHash();
 
     const member = await prisma.user.create({
       data: {
@@ -194,7 +194,7 @@ export async function POST(request: Request) {
       inviterName,
       orgName,
       email,
-      tempPassword,
+      userId: member.id,
     }).catch((err) => console.error("Invite email error:", err));
 
     const activeMemberCount = await prisma.user.count({
@@ -240,7 +240,7 @@ export async function POST(request: Request) {
       workCountry === "GB" && !(await hasUkStatutoryLeaveTypes(orgId));
 
     return NextResponse.json(
-      { ...member, tempPassword, ukStatutorySetupSuggested: shouldSuggestUkSetup },
+      { ...member, ukStatutorySetupSuggested: shouldSuggestUkSetup },
       { status: 201 }
     );
   } catch (error) {

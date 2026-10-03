@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
+import { unusablePasswordHash } from "@/lib/invite-links";
 import { getServerSession } from "next-auth";
-import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -184,9 +184,10 @@ export async function POST(request: Request) {
   // transaction open.
   const toCreate = await Promise.all(
     importable.map(async (v) => {
-      const tempPassword = Math.random().toString(36).slice(-10);
-      const passwordHash = await bcrypt.hash(tempPassword, 10);
-      return { data: v.data, tempPassword, passwordHash };
+      // Nobody knows this password; each invite email carries a one-time
+      // link to set their own.
+      const passwordHash = await unusablePasswordHash();
+      return { data: v.data, passwordHash };
     })
   );
 
@@ -207,8 +208,8 @@ export async function POST(request: Request) {
           countryCode: data.countryCode,
           workCountry: data.workCountry,
           organizationId: orgId,
-          // Invited members receive their temp password at this address, so
-          // logging in proves control — no separate verification needed.
+          // Invited members get their set-password link at this address, so
+          // using it proves control — no separate verification needed.
           emailVerified: new Date(),
         },
         select: {
@@ -226,13 +227,13 @@ export async function POST(request: Request) {
   const orgName =
     (sessionUser.organizationName as string) ?? "your team";
 
-  created.forEach((member, i) => {
+  created.forEach((member) => {
     sendTeamInviteEmail({
       inviteeName: member.name,
       inviterName,
       orgName,
       email: member.email,
-      tempPassword: toCreate[i].tempPassword,
+      userId: member.id,
     }).catch((err) =>
       console.error("Bulk invite email error:", member.email, err)
     );

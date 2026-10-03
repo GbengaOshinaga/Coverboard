@@ -32,7 +32,7 @@ export async function POST(request: Request) {
 
     const resetToken = await prisma.passwordResetToken.findUnique({
       where: { token },
-      include: { user: { select: { id: true, email: true, name: true } } },
+      include: { user: { select: { id: true, email: true, name: true, emailVerified: true } } },
     });
 
     if (!resetToken) {
@@ -69,7 +69,9 @@ export async function POST(request: Request) {
     await prisma.$transaction([
       prisma.user.update({
         where: { id: resetToken.userId },
-        data: { passwordHash },
+        // The link came to their inbox, so using it verifies the address
+        // (invited members never see the separate verification email).
+        data: { passwordHash, emailVerified: resetToken.user.emailVerified ?? new Date() },
       }),
       prisma.passwordResetToken.update({
         where: { id: resetToken.id },

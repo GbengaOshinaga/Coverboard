@@ -44,6 +44,8 @@ export function CoverByPerson({
     return m;
   });
   const [busy, setBusy] = useState<string | null>(null);
+  // Taking someone off an accepted shift emails them, so it takes a second click.
+  const [confirmPull, setConfirmPull] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   async function ask(shiftId: string | null, date: string, userId: string): Promise<boolean> {
@@ -150,7 +152,21 @@ export function CoverByPerson({
       );
     }
     if (offer?.status === "ACCEPTED") {
-      return <span className="shrink-0 rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">Covering</span>;
+      return (
+        <span className="flex shrink-0 items-center gap-2 text-[11px]">
+          <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-medium text-emerald-700">Covering</span>
+          <button
+            type="button"
+            onClick={() =>
+              confirmPull === offer.id ? withdraw(shiftId, date, userId, offer.id) : setConfirmPull(offer.id)
+            }
+            disabled={busy === k}
+            className={confirmPull === offer.id ? "font-medium text-red-700" : "text-gray-500 hover:text-gray-800"}
+          >
+            {confirmPull === offer.id ? "Take them off? (emails them)" : "Withdraw"}
+          </button>
+        </span>
+      );
     }
     if (offer?.status === "DECLINED") {
       return <span className="shrink-0 rounded bg-gray-50 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">Declined</span>;
@@ -251,7 +267,12 @@ export function CoverByPerson({
                   <span className={partly ? "text-gray-700" : "text-gray-400 line-through"}>{p.name}</span>
                   {" — "}
                   {[
-                    p.restShifts > 0 ? `needs 11h rest on ${other}${plural(p.restShifts, "shift")}` : null,
+                    p.coverShifts > 0
+                      ? `already covering a nearby shift, so not ${other}${plural(p.coverShifts, "shift")}`
+                      : null,
+                    p.restShifts - p.coverShifts > 0
+                      ? `needs 11h rest on ${other}${plural(p.restShifts - p.coverShifts, "shift")}`
+                      : null,
                     p.leaveShifts > 0 ? `on leave for ${other}${plural(p.leaveShifts, "shift")}` : null,
                   ]
                     .filter(Boolean)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   readConsent,
@@ -17,10 +17,31 @@ import {
  */
 export function CookieBanner() {
   const [visible, setVisible] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!readConsent()) setVisible(true);
   }, []);
+
+  // The banner floats over the page, so reserve its height at the bottom of
+  // the page while it's showing — otherwise it hides the end of short pages
+  // (the signup form's button) and nothing can scroll out from under it.
+  useEffect(() => {
+    const el = ref.current;
+    if (!visible || !el) return;
+    const body = document.body;
+    const previous = body.style.paddingBottom;
+    const update = () => {
+      body.style.paddingBottom = `${el.offsetHeight + 24}px`;
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      body.style.paddingBottom = previous;
+    };
+  }, [visible]);
 
   function decide(value: ConsentValue) {
     writeConsent(value);
@@ -31,6 +52,7 @@ export function CookieBanner() {
 
   return (
     <div
+      ref={ref}
       role="dialog"
       aria-label="Cookie notice"
       className="fixed inset-x-3 bottom-3 z-50 mx-auto flex max-w-3xl flex-col gap-3 rounded-lg border border-gray-200 bg-white p-4 shadow-xl sm:flex-row sm:items-center sm:justify-between sm:p-5"
@@ -38,9 +60,9 @@ export function CookieBanner() {
       <div className="text-sm text-gray-700">
         <p className="font-medium text-gray-900">We use cookies</p>
         <p className="mt-1 leading-relaxed">
-          Strictly-necessary cookies (sign-in, CSRF) are always on. With your
-          permission we&rsquo;d also use product-analytics cookies (PostHog)
-          to understand which features get used. No advertising cookies.{" "}
+          Essential cookies keep you signed in. With your permission we&rsquo;d
+          also use analytics cookies to see which features get used. No
+          advertising cookies.{" "}
           <Link
             href="/privacy#cookies"
             className="font-medium text-brand-600 hover:underline"

@@ -101,6 +101,8 @@ export type RuledOutMember = {
   reason: "on_leave" | "rest";
   /** For "rest": the clashing shift, e.g. "Night shift until 08:00". */
   note: string | null;
+  /** For "rest": the clash is a shift they accepted as cover, not their pattern. */
+  coverClash?: boolean;
 };
 
 export type EngineInput = {
@@ -225,22 +227,29 @@ function tooClose(a: [number, number], b: [number, number]): boolean {
 function restClashNote(
   target: [number, number],
   other: EngineShift,
-  otherInterval: [number, number]
+  otherInterval: [number, number],
+  covering = false
 ): string {
+  const label = covering ? `Covering ${other.name} shift` : `${other.name} shift`;
   if (otherInterval[1] <= target[0]) {
     const dayBefore = Math.floor((otherInterval[1] - 1) / MINUTES_PER_DAY) < 0;
-    return `${other.name} shift until ${other.endTime}${dayBefore ? " the day before" : ""}`;
+    return `${label} until ${other.endTime}${dayBefore ? " the day before" : ""}`;
   }
   if (otherInterval[0] >= target[1]) {
     const nextDay = Math.floor(otherInterval[0] / MINUTES_PER_DAY) > 0;
-    return `${other.name} shift from ${other.startTime}${nextDay ? " the next day" : ""}`;
+    return `${label} from ${other.startTime}${nextDay ? " the next day" : ""}`;
   }
-  return `On the ${other.name} shift, ${other.startTime}–${other.endTime}`;
+  return covering
+    ? `Covering the ${other.name} shift, ${other.startTime}–${other.endTime}`
+    : `On the ${other.name} shift, ${other.startTime}–${other.endTime}`;
 }
 
 export function computeShiftCover(input: EngineInput): EngineDay[] {
   const memberById = new Map(input.members.map((m) => [m.id, m]));
   const assignments = input.assignments ?? [];
+  /** Is this shift on this date an accepted cover offer rather than their pattern? */
+  const isAssignment = (userId: string, shiftTypeId: string, date: string) =>
+    assignments.some((a) => a.userId === userId && a.shiftTypeId === shiftTypeId && a.date === date);
 
   const shiftsOn = (date: string) =>
     input.shifts.filter((s) => !s.activeFrom || s.activeFrom <= date);
@@ -295,18 +304,27 @@ export function computeShiftCover(input: EngineInput): EngineDay[] {
         continue;
       }
       let clash: string | null = null;
+      let coverClash = false;
       for (const offset of [-1, 0, 1]) {
-        for (const other of scheduledShifts(m.id, addDays(date, offset))) {
+        const day = addDays(date, offset);
+        for (const other of scheduledShifts(m.id, day)) {
           const interval = shiftInterval(other, offset);
           if (tooClose(target, interval)) {
-            clash = restClashNote(target, other, interval);
+            coverClash = isAssignment(m.id, other.id, day);
+            clash = restClashNote(target, other, interval, coverClash);
             break;
           }
         }
         if (clash) break;
       }
       if (clash) {
-        ruledOut.push({ id: m.id, name: m.name, reason: "rest", note: clash });
+        ruledOut.push({
+          id: m.id,
+          name: m.name,
+          reason: "rest",
+          note: clash,
+          ...(coverClash ? { coverClash: true } : {}),
+        });
       } else {
         candidates.push({
           id: m.id,

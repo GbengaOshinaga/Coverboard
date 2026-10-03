@@ -35,10 +35,12 @@ export default function SignupPage() {
 function SignupInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const preselected = (searchParams.get("plan") ?? "growth").toLowerCase();
+  // "Start free" buttons link to plain /signup, so no plan means Free. Paid
+  // plans arrive with ?plan= from the pricing cards.
+  const preselected = (searchParams.get("plan") ?? "free").toLowerCase();
   const initialPlan: PlanKey = ALL_PLAN_KEYS.includes(preselected as PlanKey)
     ? (preselected as PlanKey)
-    : "growth";
+    : "free";
 
   const [orgName, setOrgName] = useState("");
   const [name, setName] = useState("");
@@ -152,7 +154,7 @@ function SignupInner() {
               <div className="mb-4 space-y-4">
                 <GoogleButton
                   label="Sign up with Google"
-                  onClick={() => signIn("google", { callbackUrl: "/" })}
+                  onClick={() => signIn("google", { callbackUrl: `/welcome?plan=${plan}` })}
                   disabled={loading}
                 />
                 <div className="flex items-center gap-3">

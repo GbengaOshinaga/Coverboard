@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { CoverShiftsSection } from "@/components/reports/cover-shifts-section";
 import { useSession } from "next-auth/react";
 import {
   Card,
@@ -200,6 +201,13 @@ type RolloverPreviewRow = {
   daysCarried: number;
 };
 
+/** Monday (YYYY-MM-DD) of the week containing a YYYY-MM-DD date. */
+function mondayOf(isoDate: string): string {
+  const d = new Date(`${isoDate.slice(0, 10)}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
 export default function ReportsPage() {
   const { data: session } = useSession();
 
@@ -229,6 +237,10 @@ export default function ReportsPage() {
   const [threshold, setThreshold] = useState(200);
 
   const [variableUsers, setVariableUsers] = useState<VariableHoursUser[]>([]);
+  // Accepted cover hours per week (Monday YYYY-MM-DD) for the selected person.
+  // Shown beside logged hours, never added automatically: logged hours usually
+  // come from timesheets that already include the cover shift.
+  const [coverHoursByWeek, setCoverHoursByWeek] = useState<Map<string, number>>(new Map());
   const [selectedUser, setSelectedUser] = useState<string>("");
   const [weeklyHours, setWeeklyHours] = useState<WeeklyHoursEntry[]>([]);
   const [showAddHours, setShowAddHours] = useState(false);
@@ -532,11 +544,24 @@ export default function ReportsPage() {
     async function loadHours() {
       if (!selectedUser) {
         setWeeklyHours([]);
+        setCoverHoursByWeek(new Map());
         return;
       }
       try {
-        const res = await fetch(`/api/weekly-hours?userId=${selectedUser}`);
+        const from = new Date(Date.now() - 371 * 86400_000).toISOString().slice(0, 10);
+        const to = new Date(Date.now() + 7 * 86400_000).toISOString().slice(0, 10);
+        const [res, coverRes] = await Promise.all([
+          fetch(`/api/weekly-hours?userId=${selectedUser}`),
+          fetch(`/api/cover-shifts?userId=${selectedUser}&from=${from}&to=${to}`),
+        ]);
         if (res.ok) setWeeklyHours(await res.json());
+        const shifts: Array<{ date: string; hours: number }> = coverRes.ok ? await coverRes.json() : [];
+        const byWeek = new Map<string, number>();
+        for (const s of shifts) {
+          const key = mondayOf(s.date);
+          byWeek.set(key, (byWeek.get(key) ?? 0) + s.hours);
+        }
+        setCoverHoursByWeek(byWeek);
       } catch {
         // ignore
       }
@@ -1024,6 +1049,23 @@ export default function ReportsPage() {
                   </p>
                 )}
 
+                {selectedUser && (() => {
+                  const logged = new Set(weeklyHours.map((e) => e.weekStartDate.slice(0, 10)));
+                  const missing = [...coverHoursByWeek.entries()]
+                    .filter(([week]) => !logged.has(week))
+                    .sort(([a], [b]) => a.localeCompare(b));
+                  if (missing.length === 0) return null;
+                  return (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                      Accepted cover in weeks with no hours logged yet:{" "}
+                      {missing
+                        .map(([week, h]) => `w/c ${new Date(`${week}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })} (${h}h)`)
+                        .join(", ")}
+                      . Holiday accrues on logged hours, so record those weeks.
+                    </div>
+                  );
+                })()}
+
                 {selectedUser && weeklyHours.length === 0 && (
                   <p className="py-4 text-center text-sm text-gray-400">
                     No weekly hours recorded yet for this employee.
@@ -1036,6 +1078,7 @@ export default function ReportsPage() {
                       <thead>
                         <tr className="border-b border-gray-100 text-left text-xs font-medium uppercase text-gray-500">
                           <th className="pb-2 pr-4">Week starting</th>
+                          <th className="pb-2 pr-4 text-right">Accepted cover</th>
                           <th className="pb-2 text-right">Hours worked</th>
                         </tr>
                       </thead>
@@ -1054,6 +1097,11 @@ export default function ReportsPage() {
                                   year: "numeric",
                                 }
                               )}
+                            </td>
+                            <td className="py-2.5 pr-4 text-right font-mono text-emerald-700">
+                              {coverHoursByWeek.get(entry.weekStartDate.slice(0, 10))
+                                ? `${coverHoursByWeek.get(entry.weekStartDate.slice(0, 10))}h`
+                                : "—"}
                             </td>
                             <td className="py-2.5 text-right font-mono text-gray-600">
                               {entry.hoursWorked}h
@@ -1783,6 +1831,10 @@ export default function ReportsPage() {
             </Card>
           )}
 
+          {activeTab === "payroll" && (
+            <CoverShiftsSection from={payrollFrom} to={payrollTo} />
+          )}
+
           {/* Year-end rollover (admin) */}
           {activeTab === "year-end" && isAdmin && (
             <Card>
@@ -1902,6 +1954,12 @@ export default function ReportsPage() {
             onChange={(e) => setNewHours(e.target.value)}
             required
           />
+          {newWeekDate && (coverHoursByWeek.get(mondayOf(newWeekDate)) ?? 0) > 0 && (
+            <p className="text-xs text-emerald-800">
+              They accepted {coverHoursByWeek.get(mondayOf(newWeekDate))}h of cover that week.
+              Include it if your figure doesn&apos;t already.
+            </p>
+          )}
           <div className="flex items-center gap-3 pt-2">
             <Button type="submit" disabled={savingHours}>
               {savingHours ? "Saving..." : "Save"}

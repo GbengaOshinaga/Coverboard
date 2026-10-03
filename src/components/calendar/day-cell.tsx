@@ -17,6 +17,12 @@ export type HolidayEvent = {
   countryCode: string;
 };
 
+export type CoverShiftEvent = {
+  id: string;
+  userName: string;
+  shiftName: string;
+};
+
 export type CoverIndicator = {
   ok: boolean;
   available: number;
@@ -30,6 +36,7 @@ export function DayCell({
   events,
   holidays,
   cover,
+  coverShifts = [],
 }: {
   date: Date;
   isCurrentMonth: boolean;
@@ -37,6 +44,8 @@ export function DayCell({
   events: CalendarEvent[];
   holidays: HolidayEvent[];
   cover?: CoverIndicator;
+  /** Accepted cover shifts starting this day. */
+  coverShifts?: CoverShiftEvent[];
 }) {
   const dayNumber = date.getDate();
   const isWeekend = date.getDay() === 0 || date.getDay() === 6;
@@ -87,6 +96,15 @@ export function DayCell({
           >
             <span className="hidden sm:inline">{holiday.name}</span>
             <span className="sm:hidden">{holiday.countryCode}</span>
+          </div>
+        ))}
+        {coverShifts.map((c) => (
+          <div
+            key={c.id}
+            className="truncate rounded border border-emerald-400 bg-emerald-50 px-0.5 py-px text-[8px] font-medium text-emerald-800 sm:px-1 sm:py-0.5 sm:text-[10px]"
+            title={`${c.userName} — covering the ${c.shiftName} shift`}
+          >
+            {c.userName} · {c.shiftName}
           </div>
         ))}
         {events.slice(0, 2).map((event) => (
