@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, ShieldCheck } from "lucide-react";
 import type { CoverCandidate, CoverOfferSummary, RuledOutMember } from "@/lib/shiftCover";
 import { CoverOptions } from "./cover-options";
+import { CoverByPerson } from "./cover-by-person";
 
 type CoverCheckResult = {
   hasConflict: boolean;
@@ -132,6 +133,9 @@ export function RegionalCoverWarning({
             {result.conflicts.length === 1 ? "" : "s"} in{" "}
             <strong>{result.regionName}</strong>.
           </p>
+          {result.usesShifts && result.conflicts.length > 1 ? (
+            <CoverByPerson conflicts={result.conflicts} leaveRequestId={excludeRequestId} />
+          ) : (
           <ul className="space-y-0.5 text-amber-900">
             {result.conflicts.slice(0, 5).map((c) => (
               <li key={`${c.date}:${c.shiftId ?? ""}`}>
@@ -160,6 +164,7 @@ export function RegionalCoverWarning({
               </li>
             )}
           </ul>
+          )}
           {!logged && (
             <p className="text-amber-700">
               You can still submit — a manager will need to override cover when

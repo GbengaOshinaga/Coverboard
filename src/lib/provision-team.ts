@@ -3,6 +3,7 @@ import { stripe } from "@/lib/stripe";
 import { STRIPE_PRICE_IDS, type StripePlanKey } from "@/config/stripePrices";
 import { ensureStripeCustomer } from "@/lib/billing-customer";
 import { DEFAULT_BILLING_COUNTRY } from "@/config/billing-countries";
+import { alertNewSignup } from "@/lib/signup-alerts";
 
 export type SignupPlanKey = "free" | "starter" | "growth" | "scale" | "pro";
 
@@ -91,6 +92,17 @@ export async function provisionTeam(
     });
 
     return { org, user };
+  });
+
+  // Every signup path comes through here, so this is where the founder hears
+  // about it. Fire-and-forget: never blocks or fails the signup.
+  alertNewSignup({
+    orgName,
+    adminName: name,
+    adminEmail: email,
+    plan,
+    billingCountry,
+    method: provisioningPath,
   });
 
   const isFreePlan = plan === "free";

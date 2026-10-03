@@ -72,7 +72,62 @@ function cannotCover(cover: ShiftCover | null, userId: string): string | null {
   return null;
 }
 
-export async function createCoverOffer(input: {
+type OfferShiftDetails = { shiftName: string; date: Date; startTime: string; endTime: string; locationName: string };
+
+function emailOffer(person: { name: string; email: string }, managerName: string, shifts: OfferShiftDetails[]) {
+  if (shifts.length === 0) return;
+  const { subject, html } = coverOfferEmail({
+    recipientName: person.name,
+    managerName,
+    shifts,
+    url: `${getAppBaseUrl()}/cover-requests`,
+  });
+  sendEmail({ to: person.email, subject, html }).catch((err) =>
+    console.error("Cover offer email error:", err)
+  );
+}
+
+/** Ask one person to cover one shift, and email them. */
+export async function createCoverOffer(
+  input: Parameters<typeof createOfferRow>[0]
+): Promise<OfferResult<{ offerId: string }>> {
+  const result = await createOfferRow(input);
+  if (!result.ok) return result;
+  emailOffer(result.person, input.actor.name ?? "Your manager", [result.details]);
+  return { ok: true, offerId: result.offerId };
+}
+
+/**
+ * Ask one person to cover several shifts at once ("Ask for all"): each shift
+ * is checked and created on its own, then one email lists the ones that
+ * went out. Returns a result per shift, in order.
+ */
+export async function createCoverOffers(input: {
+  userId: string;
+  shifts: Array<{ shiftTypeId: string; date: string }>;
+  leaveRequestId?: string;
+  actor: Actor;
+  organizationId: string;
+  context?: AuditContext;
+}): Promise<Array<{ shiftTypeId: string; date: string } & OfferResult<{ offerId: string }>>> {
+  const results: Array<{ shiftTypeId: string; date: string } & OfferResult<{ offerId: string }>> = [];
+  const sent: OfferShiftDetails[] = [];
+  let person: { name: string; email: string } | null = null;
+  for (const s of input.shifts) {
+    const r = await createOfferRow({ ...input, ...s });
+    if (r.ok) {
+      person = r.person;
+      sent.push(r.details);
+      results.push({ ...s, ok: true, offerId: r.offerId });
+    } else {
+      results.push({ ...s, ...r });
+    }
+  }
+  if (person) emailOffer(person, input.actor.name ?? "Your manager", sent);
+  return results;
+}
+
+async function createOfferRow(input: {
   shiftTypeId: string;
   date: string;
   userId: string;
@@ -80,7 +135,10 @@ export async function createCoverOffer(input: {
   actor: Actor;
   organizationId: string;
   context?: AuditContext;
-}): Promise<OfferResult<{ offerId: string }>> {
+}): Promise<
+  | { ok: true; offerId: string; person: { name: string; email: string }; details: OfferShiftDetails }
+  | { ok: false; status: number; error: string }
+> {
   const { shiftTypeId, date, userId, leaveRequestId, actor, organizationId, context } = input;
   if (actor.role !== "ADMIN" && actor.role !== "MANAGER") {
     return { ok: false, status: 403, error: "Only admins and managers can ask someone to cover." };
@@ -125,20 +183,6 @@ export async function createCoverOffer(input: {
     select: { id: true },
   });
 
-  const { subject, html } = coverOfferEmail({
-    recipientName: person.name,
-    managerName: actor.name ?? "Your manager",
-    shiftName: shift.name,
-    date: toDbDate(date),
-    startTime: shift.startTime,
-    endTime: shift.endTime,
-    locationName: shift.region.name,
-    url: `${getAppBaseUrl()}/cover-requests`,
-  });
-  sendEmail({ to: person.email, subject, html }).catch((err) =>
-    console.error("Cover offer email error:", err)
-  );
-
   recordAudit({
     organizationId,
     action: "cover_offer.created",
@@ -148,7 +192,18 @@ export async function createCoverOffer(input: {
     metadata: { shift: shift.name, location: shift.region.name, date, offeredTo: { id: userId, name: person.name } },
     context,
   });
-  return { ok: true, offerId: offer.id };
+  return {
+    ok: true,
+    offerId: offer.id,
+    person,
+    details: {
+      shiftName: shift.name,
+      date: toDbDate(date),
+      startTime: shift.startTime,
+      endTime: shift.endTime,
+      locationName: shift.region.name,
+    },
+  };
 }
 
 export async function respondToCoverOffer(input: {
