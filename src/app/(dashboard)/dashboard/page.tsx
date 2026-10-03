@@ -12,6 +12,7 @@ import { RegionCoverWidget } from "@/components/dashboard/region-cover-widget";
 import { CardSkeleton } from "@/components/ui/skeleton";
 import { FitNotesDue } from "@/components/dashboard/fit-notes-due";
 import { MyCoverRequests } from "@/components/dashboard/my-cover-requests";
+import { CoverUpdates } from "@/components/dashboard/cover-updates";
 import { canSeeCoverCandidates } from "@/lib/regionCover";
 import { ActivationChecklist } from "@/components/dashboard/activation-checklist";
 import { ActivationCelebration } from "@/components/dashboard/activation-celebration";
@@ -213,6 +214,12 @@ export default async function DashboardPage() {
           showCoverCandidates={canSeeCoverCandidates(userRole)}
         />
       </Suspense>
+
+      {canSeeComplianceAlerts && (
+        <Suspense fallback={null}>
+          <CoverUpdates managerId={currentUserId} organizationId={orgId} />
+        </Suspense>
+      )}
 
       {canSeeComplianceAlerts && (
         <Suspense fallback={null}>

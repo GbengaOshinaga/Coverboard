@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { createSetPasswordLink, INVITE_LINK_DAYS } from "@/lib/invite-links";
 import { sendEmail, resend, getFromAddress } from "@/lib/email";
 import { getAppBaseUrl } from "@/lib/app-url";
 import {
@@ -47,11 +48,13 @@ export async function sendTeamInviteEmail(data: {
   inviterName: string;
   orgName: string;
   email: string;
-  tempPassword: string;
+  /** The invited user; a fresh one-time set-password link is created for them. */
+  userId: string;
 }) {
   const { subject, html } = teamInviteEmail({
     ...data,
-    loginUrl: `${getAppBaseUrl()}/login`,
+    setPasswordUrl: await createSetPasswordLink(data.userId),
+    linkDays: INVITE_LINK_DAYS,
   });
 
   await sendEmail({ to: data.email, subject, html });
@@ -63,14 +66,15 @@ export async function sendTeamInviteEmailStrict(data: {
   inviterName: string;
   orgName: string;
   email: string;
-  tempPassword: string;
+  userId: string;
 }): Promise<void> {
   if (!resend) {
     throw new Error("Email is not configured");
   }
   const { subject, html } = teamInviteEmail({
     ...data,
-    loginUrl: `${getAppBaseUrl()}/login`,
+    setPasswordUrl: await createSetPasswordLink(data.userId),
+    linkDays: INVITE_LINK_DAYS,
   });
   const { error } = await resend.emails.send({
     from: getFromAddress(),

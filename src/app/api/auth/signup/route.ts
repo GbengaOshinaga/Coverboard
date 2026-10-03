@@ -19,7 +19,7 @@ const signupSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   orgName: z.string().min(2, "Team name must be at least 2 characters"),
-  plan: z.enum(["free", "starter", "growth", "scale", "pro"]).default("growth"),
+  plan: z.enum(["free", "starter", "growth", "scale", "pro"]).default("free"),
   billingCountry: z
     .string()
     .trim()

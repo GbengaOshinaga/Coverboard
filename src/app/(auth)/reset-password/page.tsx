@@ -11,6 +11,8 @@ import { ArrowLeft, CheckCircle } from "lucide-react";
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
+  // Invite emails link here with invite=1: same mechanics, first-time wording.
+  const isInvite = searchParams.get("invite") === "1";
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -43,7 +45,11 @@ function ResetPasswordForm() {
 
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error ?? "Something went wrong");
+        setError(
+          isInvite
+            ? "This invite link has expired or has already been used. Ask your admin to resend your invite."
+            : data.error ?? "Something went wrong"
+        );
       } else {
         setSuccess(true);
       }
@@ -81,11 +87,12 @@ function ResetPasswordForm() {
               <CheckCircle size={24} />
             </div>
             <h3 className="text-base font-semibold text-gray-900 mb-2">
-              Password updated
+              {isInvite ? "You're all set" : "Password updated"}
             </h3>
             <p className="text-sm text-gray-600 mb-6">
-              Your password has been reset successfully. You can now sign in with
-              your new password.
+              {isInvite
+                ? "Your password is saved. Sign in to get started."
+                : "Your password has been reset successfully. You can now sign in with your new password."}
             </p>
             <Link
               href="/login"
@@ -98,9 +105,11 @@ function ResetPasswordForm() {
       ) : (
         <>
           <CardHeader>
-            <CardTitle>Set new password</CardTitle>
+            <CardTitle>{isInvite ? "Choose your password" : "Set new password"}</CardTitle>
             <CardDescription>
-              Choose a strong password for your account
+              {isInvite
+                ? "You'll use it with your email address to sign in to Coverboard."
+                : "Choose a strong password for your account"}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -133,7 +142,7 @@ function ResetPasswordForm() {
               className="w-full"
               disabled={loading}
             >
-              {loading ? "Resetting..." : "Reset password"}
+              {loading ? "Saving..." : isInvite ? "Save password" : "Reset password"}
             </Button>
             <div className="text-center">
               <Link
@@ -152,6 +161,11 @@ function ResetPasswordForm() {
   );
 }
 
+function PageHeading() {
+  const searchParams = useSearchParams();
+  return <>{searchParams.get("invite") === "1" ? "Welcome to Coverboard" : "Reset your password"}</>;
+}
+
 export default function ResetPasswordPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
@@ -161,7 +175,9 @@ export default function ResetPasswordPage() {
             CB
           </div>
           <h1 className="mt-4 text-2xl font-bold text-gray-900">
-            Reset your password
+            <Suspense fallback="Coverboard">
+              <PageHeading />
+            </Suspense>
           </h1>
         </div>
         <Suspense fallback={

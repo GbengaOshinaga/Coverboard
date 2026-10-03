@@ -19,7 +19,7 @@ import { checkAuthRateLimit, getClientIp } from "@/lib/rate-limit";
  */
 const completeSignupSchema = z.object({
   orgName: z.string().min(2, "Team name must be at least 2 characters"),
-  plan: z.enum(["free", "starter", "growth", "scale", "pro"]).default("growth"),
+  plan: z.enum(["free", "starter", "growth", "scale", "pro"]).default("free"),
 });
 
 export async function POST(request: Request) {

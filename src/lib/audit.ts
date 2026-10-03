@@ -26,6 +26,7 @@ export const AUDIT_ACTIONS = [
   "cover_offer.accepted",
   "cover_offer.declined",
   "cover_offer.cancelled",
+  "cover_offer.withdrawn",
   "team_member.created",
   "team_member.updated",
   "team_member.deleted",

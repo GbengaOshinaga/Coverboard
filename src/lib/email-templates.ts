@@ -415,28 +415,29 @@ export function signupWelcomeEmail(data: {
 
 // ─── Team Invite ─────────────────────────────────────────────────────
 
+/** No password in the email: a one-time link lets them choose their own. */
 export function teamInviteEmail(data: {
   inviteeName: string;
   inviterName: string;
   orgName: string;
   email: string;
-  tempPassword: string;
-  loginUrl: string;
+  setPasswordUrl: string;
+  linkDays: number;
 }): { subject: string; html: string } {
   return {
     subject: `${data.inviterName} invited you to ${data.orgName} on Coverboard`,
     html: layout(`
-      <h1 style="margin:0 0 8px;font-size:20px;color:#111827;">You've been invited to ${data.orgName}</h1>
+      <h1 style="margin:0 0 8px;font-size:20px;color:#111827;">You've been invited to ${esc(data.orgName)}</h1>
       <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
-        ${data.inviterName} has added you to their team on Coverboard — a simple way to manage team leave, see who's out, and plan coverage.
+        Hi ${esc(data.inviteeName)}, ${esc(data.inviterName)} has added you to their team on Coverboard, where you can book time off, report sickness and see cover requests.
       </p>
-      <div style="background-color:#f9fafb;border-radius:6px;padding:16px;margin-bottom:16px;">
-        <p style="margin:0 0 8px;font-size:13px;color:#6b7280;">Your login credentials:</p>
-        <p style="margin:0 0 4px;font-size:14px;color:#111827;"><strong>Email:</strong> ${data.email}</p>
-        <p style="margin:0;font-size:14px;color:#111827;"><strong>Temporary password:</strong> ${data.tempPassword}</p>
-      </div>
-      <p style="margin:0 0 4px;font-size:13px;color:#9ca3af;">Please change your password after your first login.</p>
-      ${button("Sign in to Coverboard", data.loginUrl)}
+      <p style="margin:0 0 4px;font-size:14px;color:#111827;">
+        Choose a password to get started. You'll sign in with <strong>${esc(data.email)}</strong>.
+      </p>
+      ${button("Set your password", data.setPasswordUrl)}
+      <p style="margin:0;font-size:13px;color:#9ca3af;line-height:1.6;">
+        This link works once and expires in ${data.linkDays} days. If it has expired, ask ${esc(data.inviterName)} to resend your invite.
+      </p>
     `),
   };
 }
@@ -732,6 +733,32 @@ export function setupCompletedAlertEmail(data: {
         ["Locations & cover", data.locationsEnabled ? "Turned on" : "Off"],
         ["People invited", String(data.invitesSent)],
       ])}
+    `),
+  };
+}
+
+/** A covered shift changed after it was agreed (either side pulled out). */
+export function coverChangedEmail(data: {
+  recipientName: string;
+  headline: string;
+  message: string;
+  shiftName: string;
+  date: Date;
+  startTime: string;
+  endTime: string;
+  locationName: string;
+  url: string;
+  buttonText: string;
+}): { subject: string; html: string } {
+  return {
+    subject: data.headline,
+    html: layout(`
+      <h1 style="margin:0 0 8px;font-size:20px;color:#111827;">${esc(data.headline)}</h1>
+      <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
+        Hi ${esc(data.recipientName)}, ${esc(data.message)}
+      </p>
+      ${shiftLine(data)}
+      ${button(data.buttonText, data.url)}
     `),
   };
 }

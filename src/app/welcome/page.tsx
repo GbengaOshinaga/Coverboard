@@ -31,7 +31,13 @@ export default function WelcomePage() {
   const { data: session, status, update } = useSession();
 
   const [orgName, setOrgName] = useState("");
-  const [plan, setPlan] = useState<PlanKey>("growth");
+  const [plan, setPlan] = useState<PlanKey>("free");
+
+  // Keep the plan chosen on /signup before "Continue with Google".
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get("plan")?.toLowerCase();
+    if (p && ALL_PLAN_KEYS.includes(p as PlanKey)) setPlan(p as PlanKey);
+  }, []);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -39,7 +45,11 @@ export default function WelcomePage() {
   // without a session, but guard against a direct visit).
   useEffect(() => {
     if (status === "unauthenticated") router.replace("/login");
-  }, [status, router]);
+    // Already has a team (e.g. an existing user who clicked "Continue with
+    // Google" on the signup page): nothing to set up here.
+    const orgId = (session?.user as Record<string, unknown> | undefined)?.organizationId;
+    if (status === "authenticated" && orgId) router.replace("/dashboard");
+  }, [status, session, router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

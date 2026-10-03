@@ -31,6 +31,8 @@ export type PersonRuledOut = {
   id: string;
   name: string;
   restShifts: number;
+  /** Of restShifts: clashes with cover they've already accepted. */
+  coverShifts: number;
   leaveShifts: number;
 };
 
@@ -71,9 +73,11 @@ export function groupCoverByPerson(conflicts: ReadonlyArray<ShortShift>): Groupe
       people.set(cand.id, p);
     }
     for (const r of c.ruledOut ?? []) {
-      const p = out.get(r.id) ?? { id: r.id, name: r.name, restShifts: 0, leaveShifts: 0 };
-      if (r.reason === "rest") p.restShifts += 1;
-      else p.leaveShifts += 1;
+      const p = out.get(r.id) ?? { id: r.id, name: r.name, restShifts: 0, coverShifts: 0, leaveShifts: 0 };
+      if (r.reason === "rest") {
+        p.restShifts += 1;
+        if (r.coverClash) p.coverShifts += 1;
+      } else p.leaveShifts += 1;
       out.set(r.id, p);
     }
   }

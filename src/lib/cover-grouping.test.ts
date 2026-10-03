@@ -24,8 +24,8 @@ test("ruled-out people are counted per reason", () => {
     { date: "2026-10-06", shiftId: "day", shiftName: "Day", available: 2, required: 3, ruledOut: [rest("a", "Nia")] },
   ]);
   assert.deepEqual(g.ruledOut, [
-    { id: "a", name: "Nia", restShifts: 2, leaveShifts: 0 },
-    { id: "d", name: "Dan", restShifts: 0, leaveShifts: 1 },
+    { id: "a", name: "Nia", restShifts: 2, coverShifts: 0, leaveShifts: 0 },
+    { id: "d", name: "Dan", restShifts: 0, coverShifts: 0, leaveShifts: 1 },
   ]);
 });
 

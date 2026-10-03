@@ -42,7 +42,7 @@ type LeaveRequest = {
     name: string;
     color: string;
   };
-  reviewedBy: { name: string } | null;
+  reviewedBy: { id?: string; name: string } | null;
   fitNotes?: FitNoteRow[];
 };
 
@@ -169,7 +169,10 @@ export function RequestCard({
 
         {request.reviewedBy && (
           <p className="mt-1 text-[10px] text-gray-400">
-            Reviewed by {request.reviewedBy.name}
+            {request.reviewedBy.id && request.reviewedBy.id === request.user.id
+              ? // Only possible when they're the team's sole approver (see create.ts).
+                "Auto-approved: only approver on the team"
+              : `Reviewed by ${request.reviewedBy.name}`}
           </p>
         )}
 

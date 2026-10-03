@@ -16,6 +16,7 @@ type ShiftCover = {
   coverCandidates: CoverCandidate[];
   ruledOut?: RuledOutMember[];
   offers?: CoverOfferSummary[];
+  staffAvailable?: Array<{ id: string; name: string }>;
 };
 
 type DailyCover = {
@@ -68,6 +69,7 @@ function CoverRow({
   shiftId,
   date,
   leaveRequestId,
+  coveredBy = [],
 }: {
   label: string;
   available: number;
@@ -79,6 +81,8 @@ function CoverRow({
   shiftId?: string;
   date?: string;
   leaveRequestId?: string;
+  /** People on this shift because they accepted a cover request. */
+  coveredBy?: string[];
 }) {
   const ok = available >= required;
   return (
@@ -88,6 +92,11 @@ function CoverRow({
         {staffOff.length > 0 && (
           <p className="mt-0.5 text-[11px] text-gray-500">
             Off: {staffOff.map((s) => s.name).join(", ")}
+          </p>
+        )}
+        {coveredBy.length > 0 && (
+          <p className="mt-0.5 text-[11px] text-emerald-700">
+            Covered by {coveredBy.join(", ")}
           </p>
         )}
         {!ok && (
@@ -280,6 +289,10 @@ export function RegionalCoverPanel({
                     shiftId={s.shiftId}
                     date={d.date}
                     leaveRequestId={leaveRequestId}
+                    coveredBy={(s.offers ?? [])
+                      .filter((o) => o.status === "ACCEPTED")
+                      .map((o) => s.staffAvailable?.find((p) => p.id === o.userId)?.name)
+                      .filter((n): n is string => !!n)}
                   />
                 ));
             }

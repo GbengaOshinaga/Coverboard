@@ -394,3 +394,19 @@ test("assignments: count towards rest for other shifts", () => {
   const night = day.shifts.find((s) => s.shiftId === "night")!;
   assert.ok(night.ruledOut.some((o) => o.id === "d" && o.reason === "rest"));
 });
+
+test("ruled out: a clash with accepted cover says so", () => {
+  // Dev covers Thu day; Thu night is short. Dev is out because of the cover
+  // shift he accepted, not his own pattern.
+  const [day] = computeShiftCover(
+    input({
+      shifts: [DAY, NIGHT],
+      patterns: [pattern("a", "night", 3)],
+      assignments: [{ userId: "d", shiftTypeId: "day", date: THU }],
+    })
+  );
+  const night = day.shifts.find((s) => s.shiftId === "night")!;
+  const dev = night.ruledOut.find((o) => o.id === "d")!;
+  assert.equal(dev.coverClash, true);
+  assert.equal(dev.note, "Covering Day shift until 20:00");
+});

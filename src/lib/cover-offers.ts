@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { recordAudit, type AuditContext } from "@/lib/audit";
 import { computeDailyCover } from "@/lib/regionCover";
 import { sendEmail } from "@/lib/email";
-import { coverOfferAnsweredEmail, coverOfferEmail } from "@/lib/email-templates";
+import { coverChangedEmail, coverOfferAnsweredEmail, coverOfferEmail } from "@/lib/email-templates";
 import { getAppBaseUrl } from "@/lib/app-url";
 import type { ShiftCover } from "@/lib/shiftCover";
 
@@ -306,7 +306,10 @@ export async function respondToCoverOffer(input: {
   return { ok: true, status: finalStatus };
 }
 
-/** A manager withdraws an ask that hasn't been answered yet. */
+/**
+ * A manager withdraws an ask. Unanswered asks just close; an accepted one
+ * takes the person off the shift (the gap reopens) and emails them.
+ */
 export async function cancelCoverOffer(input: {
   offerId: string;
   actor: Actor;
@@ -317,22 +320,164 @@ export async function cancelCoverOffer(input: {
   if (actor.role !== "ADMIN" && actor.role !== "MANAGER") {
     return { ok: false, status: 403, error: "Only admins and managers can withdraw a cover request." };
   }
+  const offer = await prisma.coverOffer.findFirst({
+    where: { id: offerId, organizationId },
+    select: {
+      status: true,
+      date: true,
+      shiftTypeId: true,
+      user: { select: { name: true, email: true } },
+    },
+  });
+  if (!offer || (offer.status !== "PENDING" && offer.status !== "ACCEPTED")) {
+    return { ok: false, status: 409, error: "This request has already closed." };
+  }
+  const wasAccepted = offer.status === "ACCEPTED";
   const updated = await prisma.coverOffer.updateMany({
-    where: { id: offerId, organizationId, status: "PENDING" },
+    where: { id: offerId, status: offer.status },
     data: { status: "CANCELLED" },
   });
   if (updated.count === 0) {
-    return { ok: false, status: 409, error: "Only unanswered requests can be withdrawn." };
+    return { ok: false, status: 409, error: "This request changed meanwhile. Refresh and try again." };
   }
+
+  if (wasAccepted) {
+    const shift = await loadShift(offer.shiftTypeId, organizationId);
+    if (shift) {
+      const { subject, html } = coverChangedEmail({
+        recipientName: offer.user.name,
+        headline: `You're no longer needed for the ${shift.name} shift`,
+        message: `${actor.name ?? "Your manager"} has taken you off this shift. You don't need to come in for it.`,
+        shiftName: shift.name,
+        date: offer.date,
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+        locationName: shift.region.name,
+        url: `${getAppBaseUrl()}/cover-requests`,
+        buttonText: "View your cover requests",
+      });
+      sendEmail({ to: offer.user.email, subject, html }).catch((err) =>
+        console.error("Cover withdrawn email error:", err)
+      );
+    }
+  }
+
   recordAudit({
     organizationId,
     action: "cover_offer.cancelled",
     resource: "cover_offer",
     resourceId: offerId,
     actor,
+    metadata: { wasAccepted, person: offer.user.name, date: offer.date.toISOString().slice(0, 10) },
     context,
   });
   return { ok: true };
+}
+
+/**
+ * The person drops out of a shift they'd accepted (before it starts). The
+ * gap reopens and whoever asked them is emailed.
+ */
+export async function dropOutOfCover(input: {
+  offerId: string;
+  actor: Actor;
+  organizationId: string;
+  context?: AuditContext;
+}): Promise<OfferResult> {
+  const { offerId, actor, organizationId, context } = input;
+  const offer = await prisma.coverOffer.findFirst({
+    where: { id: offerId, organizationId },
+    select: {
+      userId: true,
+      status: true,
+      date: true,
+      shiftTypeId: true,
+      offeredBy: { select: { name: true, email: true } },
+      user: { select: { name: true } },
+    },
+  });
+  if (!offer || offer.userId !== actor.id) {
+    return { ok: false, status: 404, error: "Cover request not found" };
+  }
+  if (offer.status !== "ACCEPTED") {
+    return { ok: false, status: 409, error: "You can only drop out of a shift you've accepted." };
+  }
+  const shift = await loadShift(offer.shiftTypeId, organizationId);
+  if (!shift) return { ok: false, status: 404, error: "Shift not found" };
+  const date = offer.date.toISOString().slice(0, 10);
+  if (date < todayIso()) {
+    return { ok: false, status: 409, error: "This shift has already happened." };
+  }
+
+  const updated = await prisma.coverOffer.updateMany({
+    where: { id: offerId, status: "ACCEPTED" },
+    data: { status: "WITHDRAWN", respondedAt: new Date() },
+  });
+  if (updated.count === 0) {
+    return { ok: false, status: 409, error: "This request changed meanwhile. Refresh and try again." };
+  }
+
+  if (offer.offeredBy?.email) {
+    const { subject, html } = coverChangedEmail({
+      recipientName: offer.offeredBy.name,
+      headline: `${offer.user.name} can no longer cover the ${shift.name} shift`,
+      message: `${offer.user.name} has dropped out, so this shift is short again. You can ask someone else from the cover view.`,
+      shiftName: shift.name,
+      date: offer.date,
+      startTime: shift.startTime,
+      endTime: shift.endTime,
+      locationName: shift.region.name,
+      url: `${getAppBaseUrl()}/dashboard`,
+      buttonText: "Find cover",
+    });
+    sendEmail({ to: offer.offeredBy.email, subject, html }).catch((err) =>
+      console.error("Cover dropped email error:", err)
+    );
+  }
+
+  recordAudit({
+    organizationId,
+    action: "cover_offer.withdrawn",
+    resource: "cover_offer",
+    resourceId: offerId,
+    actor,
+    metadata: { shift: shift.name, location: shift.region.name, date },
+    context,
+  });
+  return { ok: true };
+}
+
+/**
+ * Answers to asks this manager sent in the last 7 days: the in-app notice,
+ * so nobody has to rely on email or refresh a page to find out.
+ */
+export async function recentCoverAnswers(managerId: string, organizationId: string) {
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const rows = await prisma.coverOffer.findMany({
+    where: {
+      organizationId,
+      offeredById: managerId,
+      status: { in: ["ACCEPTED", "DECLINED", "WITHDRAWN"] },
+      respondedAt: { gte: since },
+    },
+    orderBy: { respondedAt: "desc" },
+    take: 8,
+    select: {
+      id: true,
+      status: true,
+      date: true,
+      respondedAt: true,
+      user: { select: { name: true } },
+      shiftType: { select: { name: true } },
+    },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    status: r.status as "ACCEPTED" | "DECLINED" | "WITHDRAWN",
+    date: r.date.toISOString().slice(0, 10),
+    personName: r.user.name,
+    shiftName: r.shiftType.name,
+  }));
 }
 
 /** What someone has been asked to cover: open asks first, then recent answers. */

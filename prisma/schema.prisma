@@ -547,6 +547,8 @@ enum CoverOfferStatus {
   CANCELLED
   /// Someone else accepted first, or the shift stopped being short.
   FILLED
+  /// They accepted, then dropped out before the shift.
+  WITHDRAWN
 }
 
 /// A manager asking one person to cover one shift on one date. An accepted

@@ -43,6 +43,8 @@ export function CoverOptions({
 }) {
   const [offers, setOffers] = useState(initialOffers);
   const [busy, setBusy] = useState<string | null>(null);
+  // Taking someone off an accepted shift emails them, so it takes a second click.
+  const [confirmPull, setConfirmPull] = useState<string | null>(null);
   const [error, setError] = useState("");
   const canAsk = !!shiftId && !!date;
 
@@ -106,8 +108,16 @@ export function CoverOptions({
     }
     if (offer?.status === "ACCEPTED") {
       return (
-        <span className="shrink-0 rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">
-          Covering
+        <span className="flex shrink-0 items-center gap-2 text-[11px]">
+          <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-medium text-emerald-700">Covering</span>
+          <button
+            type="button"
+            onClick={() => (confirmPull === offer.id ? withdraw(offer.id) : setConfirmPull(offer.id))}
+            disabled={busy === offer.id}
+            className={confirmPull === offer.id ? "font-medium text-red-700" : "text-gray-500 hover:text-gray-800"}
+          >
+            {confirmPull === offer.id ? "Take them off? (emails them)" : "Withdraw"}
+          </button>
         </span>
       );
     }
@@ -166,7 +176,7 @@ export function CoverOptions({
               {o.note && <p className="truncate text-xs text-gray-500">{o.note}</p>}
             </div>
             <span className="shrink-0 rounded bg-gray-50 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">
-              {o.reason === "rest" ? "Needs 11h rest" : "On leave"}
+              {o.reason === "rest" ? (o.coverClash ? "Already covering" : "Needs 11h rest") : "On leave"}
             </span>
           </li>
         ))}
