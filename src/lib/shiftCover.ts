@@ -53,6 +53,17 @@ export type EnginePattern = {
   effectiveTo: string | null;
 };
 
+/**
+ * A one-off shift on top of someone's pattern — an accepted cover offer.
+ * Counts towards the shift and towards rest checks, exactly like a pattern.
+ */
+export type EngineAssignment = {
+  userId: string;
+  shiftTypeId: string;
+  /** YYYY-MM-DD */
+  date: string;
+};
+
 export type EngineLeave = {
   /** YYYY-MM-DD, inclusive. */
   start: string;
@@ -97,6 +108,8 @@ export type EngineInput = {
   /** Active shift types; empty = legacy mode. */
   shifts: EngineShift[];
   patterns: EnginePattern[];
+  /** Accepted cover offers. Optional; must cover the same window as patterns. */
+  assignments?: EngineAssignment[];
   /** Active region members, minus anyone the caller wants excluded. */
   members: EngineMember[];
   /**
@@ -107,6 +120,12 @@ export type EngineInput = {
   bankHolidayDates: ReadonlySet<string>;
   /** YYYY-MM-DD strings, in order. */
   days: string[];
+  /**
+   * Work out cover candidates / ruled-out members for short shifts. Reports
+   * never show them, and on long ranges with no patterns yet every shift is
+   * short, so they pass false. Default true.
+   */
+  includeCoverOptions?: boolean;
 };
 
 export type ShiftCover = {
@@ -129,6 +148,14 @@ export type ShiftCover = {
   coverCandidates: CoverCandidate[];
   /** For a short shift: other members who can't cover it, with the reason. */
   ruledOut: RuledOutMember[];
+  /** Cover offers for this shift and date (attached by the loaders). */
+  offers?: CoverOfferSummary[];
+};
+
+export type CoverOfferSummary = {
+  id: string;
+  userId: string;
+  status: "PENDING" | "ACCEPTED" | "DECLINED";
 };
 
 export type EngineDay = {
@@ -213,6 +240,7 @@ function restClashNote(
 
 export function computeShiftCover(input: EngineInput): EngineDay[] {
   const memberById = new Map(input.members.map((m) => [m.id, m]));
+  const assignments = input.assignments ?? [];
 
   const shiftsOn = (date: string) =>
     input.shifts.filter((s) => !s.activeFrom || s.activeFrom <= date);
@@ -230,6 +258,9 @@ export function computeShiftCover(input: EngineInput): EngineDay[] {
         .filter((p) => p.userId === userId && p.weekday === weekday && patternActive(p, date))
         .map((p) => p.shiftTypeId)
     );
+    for (const a of assignments) {
+      if (a.userId === userId && a.date === date) ids.add(a.shiftTypeId);
+    }
     const result = shiftsOn(date).filter((s) => ids.has(s.id));
     scheduledCache.set(key, result);
     return result;
@@ -331,6 +362,11 @@ export function computeShiftCover(input: EngineInput): EngineDay[] {
             )
             .map((p) => p.userId)
         );
+        for (const a of assignments) {
+          if (a.shiftTypeId === shift.id && a.date === date && memberById.has(a.userId)) {
+            scheduledIds.add(a.userId);
+          }
+        }
         // A shift that has no minimum and nobody scheduled isn't running.
         if (required === 0 && scheduledIds.size === 0) continue;
         shiftDefs.push({
@@ -362,7 +398,7 @@ export function computeShiftCover(input: EngineInput): EngineDay[] {
       }
       const short = s.coverRequired && staffAvailable.length < s.required;
       const cover =
-        short && s.shift
+        short && s.shift && input.includeCoverOptions !== false
           ? candidatesFor(s.shift, date, new Set(s.scheduled.map((m) => m.id)))
           : { candidates: [], ruledOut: [] };
       return {

@@ -42,10 +42,13 @@ const countryOptions = Object.entries(COUNTRY_NAMES).map(([code, name]) => ({
 
 export function MemberForm({
   initialData,
+  defaultCountry = "GB",
   onSubmit,
   onCancel,
 }: {
   initialData?: MemberData;
+  /** Country for a new member: the org's usual one, never a hardcoded guess. */
+  defaultCountry?: string;
   onSubmit: (data: MemberData) => Promise<void>;
   onCancel: () => void;
 }) {
@@ -57,10 +60,10 @@ export function MemberForm({
     initialData?.memberType ?? "EMPLOYEE"
   );
   const [countryCode, setCountryCode] = useState(
-    initialData?.countryCode ?? "NG"
+    initialData?.countryCode ?? defaultCountry
   );
   const [workCountry, setWorkCountry] = useState(
-    initialData?.workCountry ?? initialData?.countryCode ?? "NG"
+    initialData?.workCountry ?? initialData?.countryCode ?? defaultCountry
   );
   const [employmentType, setEmploymentType] = useState(
     initialData?.employmentType ?? "FULL_TIME"

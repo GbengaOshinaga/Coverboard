@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { CoverageWarning } from "./coverage-warning";
 import { RegionalCoverPanel } from "./regional-cover-panel";
 import { RegionalCoverWarning } from "./regional-cover-warning";
+import { FitNoteSection, type FitNoteRow } from "./fit-note-section";
 import { formatDateRange, countWeekdays } from "@/lib/utils";
 import { Check, X, ChevronDown, ChevronRight, CalendarClock } from "lucide-react";
 import { isSicknessLeaveTypeName } from "@/lib/leave-requests/rules";
@@ -42,6 +43,7 @@ type LeaveRequest = {
     color: string;
   };
   reviewedBy: { name: string } | null;
+  fitNotes?: FitNoteRow[];
 };
 
 const statusVariant: Record<string, "success" | "warning" | "error" | "default"> = {
@@ -304,6 +306,16 @@ export function RequestCard({
           </p>
           {endError && <p className="mt-1.5 text-xs text-red-700">{endError}</p>}
         </div>
+      )}
+
+      {canChangeEnd && request.status === "APPROVED" && (
+        <FitNoteSection
+          requestId={request.id}
+          startDate={request.startDate}
+          endDate={request.endDate}
+          fitNotes={request.fitNotes ?? []}
+          onChanged={onUpdated}
+        />
       )}
 
       {changedRange && (

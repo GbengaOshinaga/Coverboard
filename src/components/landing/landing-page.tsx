@@ -22,7 +22,7 @@ function HeroSection() {
       <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[800px] h-[800px] rounded-full bg-brand-100/40 blur-3xl -z-10" />
 
       <div className="mx-auto max-w-4xl px-6 text-center">
-        <div className="inline-flex items-center gap-2 rounded-full bg-brand-50 border border-brand-200 px-3 py-1.5 text-sm text-brand-700 mb-8">
+        <div className="mb-6 text-sm font-semibold uppercase tracking-wider text-brand-700">
           STAFF COVER FOR SHIFT-BASED TEAMS
         </div>
 
@@ -38,7 +38,7 @@ function HeroSection() {
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
           <Link
             href="/signup"
-            className="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold px-8 py-3.5 rounded-xl text-base transition-colors shadow-lg shadow-brand-600/20"
+            className="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold px-8 py-3.5 rounded-md text-base transition-colors"
           >
             Start free <ArrowRight size={18} />
           </Link>
@@ -93,10 +93,10 @@ function SickCallSequence() {
         Tuesday, 7:10am. Your phone rings.
       </p>
       <div className="grid gap-4 md:grid-cols-3" aria-label="Example: logging a sick call and finding cover">
-        <div className="flex flex-col rounded-2xl border border-gray-200 bg-white p-5 shadow-xl shadow-gray-200/50 motion-safe:animate-rise">
+        <div className="flex flex-col rounded-lg border border-gray-300 bg-white p-5 motion-safe:animate-rise">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold tabular-nums text-gray-400">07:10</span>
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-600">
+            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-gray-100 text-gray-600">
               <Phone className="h-4 w-4" aria-hidden />
             </span>
           </div>
@@ -108,10 +108,10 @@ function SickCallSequence() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-red-200 bg-white p-5 shadow-xl shadow-gray-200/50 motion-safe:animate-rise motion-safe:[animation-delay:400ms]">
+        <div className="rounded-lg border border-red-300 bg-white p-5 motion-safe:animate-rise motion-safe:[animation-delay:400ms]">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold tabular-nums text-gray-400">07:11</span>
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-red-50 text-red-600">
+            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-red-50 text-red-600">
               <AlertTriangle className="h-4 w-4" aria-hidden />
             </span>
           </div>
@@ -121,19 +121,19 @@ function SickCallSequence() {
             <p className="text-4xl font-bold tabular-nums text-red-600">
               4<span className="text-xl font-semibold text-gray-400"> / 5</span>
             </p>
-            <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
+            <span className="rounded bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">
               1 person needed
             </span>
           </div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-100">
-            <div className="h-full w-4/5 rounded-full bg-red-500" />
+          <div className="mt-3 h-2 overflow-hidden rounded-sm bg-gray-100">
+            <div className="h-full w-4/5 rounded-sm bg-red-500" />
           </div>
         </div>
 
-        <div className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-xl shadow-gray-200/50 motion-safe:animate-rise motion-safe:[animation-delay:800ms]">
+        <div className="rounded-lg border border-emerald-300 bg-white p-5 motion-safe:animate-rise motion-safe:[animation-delay:800ms]">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold tabular-nums text-gray-400">07:11</span>
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-emerald-50 text-emerald-600">
               <Users className="h-4 w-4" aria-hidden />
             </span>
           </div>
@@ -168,7 +168,7 @@ function SickCallSequence() {
 
 function MiniCard({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm" aria-hidden>
+    <div className="rounded-lg border border-gray-200 bg-white p-4" aria-hidden>
       <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-3">{label}</p>
       {children}
     </div>
@@ -199,7 +199,7 @@ function AbsencePreview() {
     <MiniCard label="Absence">
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium text-gray-900">Priya S.</p>
-        <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">Sick</span>
+        <span className="rounded bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">Sick</span>
       </div>
       <p className="text-xs text-gray-500 mt-0.5">Thu 20 – Fri 21 · Care staff – nights</p>
       <div className="mt-3 rounded-lg bg-red-50 border border-red-100 px-3 py-2">
@@ -319,7 +319,7 @@ function FeaturesSection() {
 
         <div className="grid md:grid-cols-3 gap-6">
           {pillars.map((p) => (
-            <div key={p.title} className="rounded-2xl border border-gray-100 bg-gray-50 p-5 md:p-6">
+            <div key={p.title} className="rounded-lg border border-gray-200 bg-gray-50 p-5 md:p-6">
               <p.preview />
               <h3 className="mt-6 text-lg font-semibold text-gray-900">{p.title}</h3>
               <p className="mt-1 text-gray-600 text-sm leading-relaxed">{p.description}</p>
@@ -365,14 +365,14 @@ function FindCoverSection() {
           </ul>
         </div>
 
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm" aria-hidden>
+        <div className="rounded-lg border border-gray-200 bg-white p-5" aria-hidden>
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs font-medium text-gray-500">Holiday request · Marcus J.</p>
               <p className="mt-1 text-sm font-semibold text-gray-900">Saturday · Evening</p>
               <p className="text-xs text-gray-500">Kitchen · 17:00–23:00</p>
             </div>
-            <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
+            <span className="inline-flex items-center gap-1 rounded bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
               <AlertTriangle className="h-3 w-3" />
               1 person needed
             </span>
@@ -494,7 +494,7 @@ function CTASection() {
         <div className="mt-10 flex justify-center">
           <Link
             href="/signup"
-            className="inline-flex items-center gap-2 bg-white text-brand-700 font-semibold px-8 py-3.5 rounded-xl text-base transition-colors hover:bg-brand-50 shadow-lg"
+            className="inline-flex items-center gap-2 bg-white text-brand-700 font-semibold px-8 py-3.5 rounded-md text-base transition-colors hover:bg-brand-50"
           >
             Start free <ArrowRight size={18} />
           </Link>

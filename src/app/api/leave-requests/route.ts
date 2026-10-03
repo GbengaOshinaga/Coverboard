@@ -65,6 +65,11 @@ export async function GET(request: Request) {
       reviewedBy: {
         select: { id: true, name: true },
       },
+      // Dates only — see the FitNote model.
+      fitNotes: {
+        select: { id: true, coversFrom: true, coversTo: true, receivedOn: true },
+        orderBy: { coversFrom: "asc" },
+      },
     },
     orderBy: { startDate: "asc" },
   });

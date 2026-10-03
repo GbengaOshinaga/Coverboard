@@ -109,7 +109,7 @@ function KpiCard({
       ? "bg-emerald-50 text-emerald-700"
       : "bg-brand-50 text-brand-700";
   return (
-    <div className={`rounded-xl p-4 ${toneCls}`}>
+    <div className={`rounded-lg p-4 ${toneCls}`}>
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium opacity-80">{label}</p>
         <Icon className="h-4 w-4 opacity-60" />

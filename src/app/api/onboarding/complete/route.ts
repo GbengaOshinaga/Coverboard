@@ -53,6 +53,19 @@ export async function POST(request: Request) {
       );
     }
 
+    // Onboarding runs once. A stale tab resubmitting it would otherwise reset
+    // settings such as locations on an org that's already set up.
+    const existingOrg = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { onboardingCompleted: true },
+    });
+    if (existingOrg?.onboardingCompleted) {
+      return NextResponse.json(
+        { error: "Onboarding is already complete for this team." },
+        { status: 409 }
+      );
+    }
+
     const { countries, industry, regionsEnabled, invites } = parsed.data;
     const currentYear = new Date().getFullYear();
 

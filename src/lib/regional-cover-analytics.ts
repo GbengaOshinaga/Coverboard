@@ -17,6 +17,7 @@
 import type { CoverDaySettings } from "./coverDays";
 import {
   computeShiftCover,
+  type EngineAssignment,
   type EngineLeave,
   type EnginePattern,
   type EngineShift,
@@ -32,6 +33,8 @@ export type RegionForAnalytics = CoverDaySettings & {
   /** Shift types and working patterns; omit for per-day cover. */
   shifts?: EngineShift[];
   patterns?: EnginePattern[];
+  /** Accepted cover offers: shifts that were covered by someone off-pattern. */
+  assignments?: EngineAssignment[];
 };
 
 export type LeaveForAnalytics = {
@@ -168,10 +171,12 @@ export function computeRegionalCover(
         region,
         shifts: region.shifts ?? [],
         patterns: region.patterns ?? [],
+        assignments: region.assignments ?? [],
         members: region.memberIds.map((id) => ({ id, name: "" })),
         leavesByUser,
         bankHolidayDates,
         days,
+        includeCoverOptions: false,
       }).map((d) => [d.date, d])
     );
 

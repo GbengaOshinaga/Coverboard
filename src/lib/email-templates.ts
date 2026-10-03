@@ -599,3 +599,72 @@ export function founderOutreachEmail(data: {
     html: `<!DOCTYPE html><html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:15px;line-height:1.55;color:#111827;max-width:560px;margin:32px auto;padding:0 16px;">${body}<p style="margin-top:24px;font-size:12px;color:#9ca3af;">Replies go to ${data.replyAddress}.</p></body></html>`,
   };
 }
+
+// ─── Cover offers ───────────────────────────────────────────────────
+
+function esc(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+}
+
+function shiftLine(data: { shiftName: string; date: Date; startTime: string; endTime: string; locationName: string }) {
+  const day = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(data.date);
+  return `<div style="background-color:#f9fafb;border-radius:6px;padding:16px;margin-bottom:16px;font-size:14px;color:#111827;">
+        <strong>${esc(data.shiftName)} shift</strong>, ${day}<br>
+        <span style="color:#6b7280;">${data.startTime}–${data.endTime} · ${esc(data.locationName)}</span>
+      </div>`;
+}
+
+/** To the person being asked. They answer in the app; nothing is assumed. */
+export function coverOfferEmail(data: {
+  recipientName: string;
+  managerName: string;
+  shiftName: string;
+  date: Date;
+  startTime: string;
+  endTime: string;
+  locationName: string;
+  url: string;
+}): { subject: string; html: string } {
+  return {
+    subject: `Can you cover the ${data.shiftName} shift?`,
+    html: layout(`
+      <h1 style="margin:0 0 8px;font-size:20px;color:#111827;">Can you cover a shift?</h1>
+      <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
+        Hi ${esc(data.recipientName)}, ${esc(data.managerName)} has asked if you can cover:
+      </p>
+      ${shiftLine(data)}
+      <p style="margin:0;font-size:14px;color:#6b7280;line-height:1.6;">
+        Please accept or decline in Coverboard. If someone else covers it first, we'll let you know it's no longer needed.
+      </p>
+      ${button("Accept or decline", data.url)}
+    `),
+  };
+}
+
+/** To the manager who asked. */
+export function coverOfferAnsweredEmail(data: {
+  managerName: string;
+  responderName: string;
+  accepted: boolean;
+  shiftName: string;
+  date: Date;
+  startTime: string;
+  endTime: string;
+  locationName: string;
+  url: string;
+}): { subject: string; html: string } {
+  const verb = data.accepted ? "will cover" : "can't cover";
+  return {
+    subject: `${data.responderName} ${verb} the ${data.shiftName} shift`,
+    html: layout(`
+      <h1 style="margin:0 0 8px;font-size:20px;color:#111827;">${esc(data.responderName)} ${verb} the shift</h1>
+      <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
+        Hi ${esc(data.managerName)}, ${esc(data.responderName)} has
+        <strong style="color:${data.accepted ? "#059669" : "#dc2626"};">${data.accepted ? "accepted" : "declined"}</strong>
+        your request to cover:
+      </p>
+      ${shiftLine(data)}
+      ${button("View cover", data.url)}
+    `),
+  };
+}

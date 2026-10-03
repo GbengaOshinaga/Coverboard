@@ -365,3 +365,32 @@ test("cover candidates: week hours count scheduled shifts Mon–Sun, minus leave
   // Mon 12h + Sun night 12h; Tue skipped for leave.
   assert.equal(day.shifts.find((s) => s.shiftId === "day")!.coverCandidates[0].weekHours, 24);
 });
+
+test("assignments: an accepted cover offer puts someone on the shift", () => {
+  const [day] = computeShiftCover(
+    input({
+      shifts: [DAY, NIGHT],
+      patterns: [pattern("a", "day", 3)],
+      assignments: [{ userId: "d", shiftTypeId: "day", date: THU }],
+    })
+  );
+  const dayShift = day.shifts.find((s) => s.shiftId === "day")!;
+  assert.equal(dayShift.available, 2);
+  assert.deepEqual(dayShift.scheduledUserIds.sort(), ["a", "d"]);
+  // Now covered (2/2 on Thu), so no candidates are needed.
+  assert.deepEqual(dayShift.coverCandidates, []);
+});
+
+test("assignments: count towards rest for other shifts", () => {
+  // Dev covers Thu day (08:00–20:00); Thu night is short, but Dev can't
+  // go straight onto it.
+  const [day] = computeShiftCover(
+    input({
+      shifts: [DAY, NIGHT],
+      patterns: [pattern("a", "night", 3)],
+      assignments: [{ userId: "d", shiftTypeId: "day", date: THU }],
+    })
+  );
+  const night = day.shifts.find((s) => s.shiftId === "night")!;
+  assert.ok(night.ruledOut.some((o) => o.id === "d" && o.reason === "rest"));
+});

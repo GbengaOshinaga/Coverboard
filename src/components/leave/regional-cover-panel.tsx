@@ -1,7 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ShieldCheck, AlertTriangle, MapPin } from "lucide-react";
+import type { CoverCandidate, CoverOfferSummary, RuledOutMember } from "@/lib/shiftCover";
+import { CoverOptions } from "./cover-options";
 
 type ShiftCover = {
   shiftId: string;
@@ -10,7 +13,9 @@ type ShiftCover = {
   required: number;
   coverRequired: boolean;
   staffOff: Array<{ id: string; name: string; leaveType: string | null }>;
-  coverCandidates: Array<{ id: string; name: string }>;
+  coverCandidates: CoverCandidate[];
+  ruledOut?: RuledOutMember[];
+  offers?: CoverOfferSummary[];
 };
 
 type DailyCover = {
@@ -58,27 +63,42 @@ function CoverRow({
   required,
   staffOff,
   coverCandidates = [],
+  ruledOut = [],
+  offers = [],
+  shiftId,
+  date,
+  leaveRequestId,
 }: {
   label: string;
   available: number;
   required: number;
   staffOff: Array<{ id: string; name: string }>;
-  coverCandidates?: Array<{ id: string; name: string }>;
+  coverCandidates?: CoverCandidate[];
+  ruledOut?: RuledOutMember[];
+  offers?: CoverOfferSummary[];
+  shiftId?: string;
+  date?: string;
+  leaveRequestId?: string;
 }) {
   const ok = available >= required;
   return (
     <li className="flex items-start justify-between gap-3 py-1.5">
-      <div>
+      <div className="min-w-0 flex-1">
         <p className="text-gray-700">{label}</p>
         {staffOff.length > 0 && (
           <p className="mt-0.5 text-[11px] text-gray-500">
             Off: {staffOff.map((s) => s.name).join(", ")}
           </p>
         )}
-        {!ok && coverCandidates.length > 0 && (
-          <p className="mt-0.5 text-[11px] text-emerald-700">
-            Could cover: {coverCandidates.map((s) => s.name).join(", ")}
-          </p>
+        {!ok && (
+          <CoverOptions
+            candidates={coverCandidates}
+            ruledOut={ruledOut}
+            offers={offers}
+            shiftId={shiftId}
+            date={date}
+            leaveRequestId={leaveRequestId}
+          />
         )}
       </div>
       <span
@@ -159,7 +179,7 @@ export function RegionalCoverPanel({
       <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2.5 text-xs text-gray-600">
         <p className="font-medium text-gray-700">No location assigned</p>
         <p className="mt-0.5">
-          This requester isn&apos;t in a region, so cover is not tracked for
+          This person isn&apos;t assigned to a location, so cover is not tracked for
           their absences.
         </p>
       </div>
@@ -167,7 +187,23 @@ export function RegionalCoverPanel({
   }
 
   const workingDays = days.filter((d) => d.coverRequired);
-  const coverState = check.hasConflict ? "conflict" : "ok";
+  // "Cover OK" must mean the shifts really are covered — not just that this
+  // absence doesn't make them worse. Someone with no working pattern never
+  // "causes" a gap, so without this a 0/3 shift showed green.
+  const anyShort = workingDays.some((d) =>
+    d.shifts.length > 0
+      ? d.shifts.some((s) => s.coverRequired && s.available < s.required)
+      : d.available < d.required
+  );
+  const notScheduled = check.usesShifts && !check.requesterScheduled;
+  const coverState: "conflict" | "already_short" | "not_scheduled" | "ok" =
+    check.hasConflict
+      ? "conflict"
+      : anyShort
+        ? "already_short"
+        : notScheduled
+          ? "not_scheduled"
+          : "ok";
 
   return (
     <div className="space-y-2 rounded-md border border-gray-200 bg-white px-3 py-3 text-xs">
@@ -182,14 +218,18 @@ export function RegionalCoverPanel({
           )}
         </div>
         {coverState === "ok" ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+          <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
             <ShieldCheck className="h-3 w-3" />
             Cover OK
           </span>
+        ) : coverState === "not_scheduled" ? (
+          <span className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+            Not on any shift
+          </span>
         ) : (
-          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+          <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
             <AlertTriangle className="h-3 w-3" />
-            Below minimum
+            {coverState === "conflict" ? "Below minimum" : "Already short"}
           </span>
         )}
       </div>
@@ -200,9 +240,20 @@ export function RegionalCoverPanel({
         </div>
       )}
 
-      {check.usesShifts && !check.requesterScheduled && (
-        <p className="text-gray-500">
-          The requester has no shifts in their working pattern on these dates.
+      {notScheduled && (
+        <p className="text-gray-600">
+          This person has no shifts in their working pattern on these dates, so
+          their absence doesn&apos;t change cover.{" "}
+          <Link href="/team" className="font-medium text-brand-600 hover:underline">
+            Set working patterns on the Team page
+          </Link>{" "}
+          so cover counts are accurate.
+        </p>
+      )}
+      {coverState === "already_short" && (
+        <p className="text-amber-800">
+          These shifts are short whether or not this person is off. Often that
+          means people in this location don&apos;t have working patterns yet.
         </p>
       )}
 
@@ -224,6 +275,11 @@ export function RegionalCoverPanel({
                     required={s.required}
                     staffOff={s.staffOff}
                     coverCandidates={s.coverCandidates}
+                    ruledOut={s.ruledOut}
+                    offers={s.offers}
+                    shiftId={s.shiftId}
+                    date={d.date}
+                    leaveRequestId={leaveRequestId}
                   />
                 ));
             }

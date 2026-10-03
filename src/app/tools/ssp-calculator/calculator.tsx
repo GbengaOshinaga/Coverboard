@@ -36,7 +36,7 @@ export function SspCalculator() {
   const labelClass = "block text-sm font-medium text-gray-700";
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
+    <div className="rounded-lg border border-gray-200 bg-white p-5 sm:p-6">
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1">
           <label htmlFor="awe" className={labelClass}>

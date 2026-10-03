@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AlertTriangle, ShieldCheck } from "lucide-react";
-import type { CoverCandidate, RuledOutMember } from "@/lib/shiftCover";
+import type { CoverCandidate, CoverOfferSummary, RuledOutMember } from "@/lib/shiftCover";
 import { CoverOptions } from "./cover-options";
 
 type CoverCheckResult = {
@@ -17,6 +17,7 @@ type CoverCheckResult = {
     shiftName: string | null;
     coverCandidates?: CoverCandidate[];
     ruledOut?: RuledOutMember[];
+    offers?: CoverOfferSummary[];
   }>;
   regionId: string | null;
   regionName: string | null;
@@ -146,6 +147,10 @@ export function RegionalCoverWarning({
                 <CoverOptions
                   candidates={c.coverCandidates ?? []}
                   ruledOut={c.ruledOut ?? []}
+                  shiftId={c.shiftId}
+                  date={c.date}
+                  offers={c.offers ?? []}
+                  leaveRequestId={excludeRequestId}
                 />
               </li>
             ))}

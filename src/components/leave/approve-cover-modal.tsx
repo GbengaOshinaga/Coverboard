@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import type { CoverCandidate, RuledOutMember } from "@/lib/shiftCover";
+import type { CoverCandidate, CoverOfferSummary, RuledOutMember } from "@/lib/shiftCover";
 import { CoverOptions } from "./cover-options";
 import { AlertTriangle } from "lucide-react";
 
@@ -16,6 +16,7 @@ export type CoverConflict = {
   shiftName?: string | null;
   coverCandidates?: CoverCandidate[];
   ruledOut?: RuledOutMember[];
+  offers?: CoverOfferSummary[];
 };
 
 const FMT = new Intl.DateTimeFormat("en-GB", {
@@ -79,6 +80,9 @@ export function ApproveCoverModal({
                   <CoverOptions
                     candidates={c.coverCandidates ?? []}
                     ruledOut={c.ruledOut ?? []}
+                    shiftId={c.shiftId}
+                    date={c.date}
+                    offers={c.offers ?? []}
                   />
                 </li>
               ))}

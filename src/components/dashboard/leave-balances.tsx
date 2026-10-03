@@ -62,7 +62,7 @@ function BalanceCard({
     <div
       className={
         prominent
-          ? "rounded-xl border border-brand-100 bg-brand-50/40 p-4"
+          ? "rounded-lg border border-brand-100 bg-brand-50/40 p-4"
           : "rounded-lg border border-gray-100 p-3 transition-colors hover:border-gray-200 hover:bg-gray-100"
       }
     >

@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { MEMBER_HIDDEN_NAV_HREFS } from "@/lib/member-route-access";
-import { X, LayoutDashboard, Calendar, FileText, Users, BarChart3, Settings, LifeBuoy, ScrollText, CalendarHeart } from "lucide-react";
+import { X, LayoutDashboard, Calendar, FileText, Users, BarChart3, Settings, LifeBuoy, ScrollText, CalendarHeart, Hand } from "lucide-react";
 
 const navigation = [
   { name: "My time off", href: "/my-time-off", icon: CalendarHeart },
+  { name: "Cover requests", href: "/cover-requests", icon: Hand },
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Calendar", href: "/calendar", icon: Calendar },
   { name: "Requests", href: "/requests", icon: FileText },
@@ -41,6 +42,21 @@ export function Sidebar({
     }
     return navigation;
   }, [role]);
+
+  // Open cover requests waiting on this person, shown as a count.
+  const [pendingCover, setPendingCover] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/cover-offers")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: Array<{ status: string }>) => {
+        if (!cancelled) setPendingCover(rows.filter((o) => o.status === "PENDING").length);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
 
   // Close drawer on route change
   useEffect(() => {
@@ -94,6 +110,11 @@ export function Sidebar({
             >
               <item.icon className="h-5 w-5" />
               {item.name}
+              {item.href === "/cover-requests" && pendingCover > 0 && (
+                <span className="ml-auto rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800">
+                  {pendingCover}
+                </span>
+              )}
             </Link>
           );
         })}

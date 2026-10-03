@@ -66,7 +66,16 @@ export async function GET(request: Request) {
         minCover: true,
         coverWeekends: true,
         coverBankHolidays: true,
-        shiftTypes: shiftTypesSelect(thirteenWeeksAgo, now),
+        shiftTypes: {
+          ...shiftTypesSelect(thirteenWeeksAgo, now),
+          select: {
+            ...shiftTypesSelect(thirteenWeeksAgo, now).select,
+            coverOffers: {
+              where: { status: "ACCEPTED", date: { gte: thirteenWeeksAgo } },
+              select: { userId: true, date: true },
+            },
+          },
+        },
         members: {
           where: { isActive: true },
           select: { id: true },
@@ -99,6 +108,13 @@ export async function GET(request: Request) {
       coverBankHolidays: r.coverBankHolidays,
       memberIds: r.members.map((m) => m.id),
       ...toEngineShiftData(r.shiftTypes),
+      assignments: r.shiftTypes.flatMap((st) =>
+        st.coverOffers.map((o) => ({
+          userId: o.userId,
+          shiftTypeId: st.id,
+          date: o.date.toISOString().slice(0, 10),
+        }))
+      ),
     })),
     leaves,
     { now, bankHolidayDates }

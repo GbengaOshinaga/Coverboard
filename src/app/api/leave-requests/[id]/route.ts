@@ -15,6 +15,7 @@ import {
 } from "@/lib/smpCalculator";
 import { reviewLeaveRequest } from "@/lib/leave-requests/review";
 import { changeSicknessEndDate } from "@/lib/leave-requests/change-end-date";
+import { isoDateSchema, isoDateToUtc } from "@/lib/validations";
 import { z } from "zod";
 
 const updateSchema = z.object({
@@ -25,18 +26,7 @@ const updateSchema = z.object({
   splCurtailmentConfirmed: z.boolean().optional(),
   coverOverride: z.boolean().optional(),
   /** Sickness only: move the end date (off longer, or back early). */
-  endDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "End date must be YYYY-MM-DD")
-    // Reject impossible dates rather than letting 2026-02-31 become 3 March.
-    .refine(
-      (v) => {
-        const d = new Date(`${v}T00:00:00.000Z`);
-        return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
-      },
-      "End date isn't a real date"
-    )
-    .optional(),
+  endDate: isoDateSchema.optional(),
 });
 
 export async function PATCH(
@@ -98,7 +88,7 @@ export async function PATCH(
       }
       const result = await changeSicknessEndDate({
         requestId: id,
-        newEndDate: new Date(`${endDate}T00:00:00.000Z`),
+        newEndDate: isoDateToUtc(endDate),
         actor: { id: userId, email: actorEmail ?? null, role: userRole },
         organizationId: orgId,
         context: requestAuditContext(request),

@@ -7,7 +7,11 @@ import { prisma } from "@/lib/prisma";
 import { getUserLeaveBalances } from "@/lib/leave-balances";
 import { WhoIsOut } from "@/components/dashboard/who-is-out";
 import { UpcomingAbsences } from "@/components/dashboard/upcoming-absences";
+import { Suspense } from "react";
 import { RegionCoverWidget } from "@/components/dashboard/region-cover-widget";
+import { CardSkeleton } from "@/components/ui/skeleton";
+import { FitNotesDue } from "@/components/dashboard/fit-notes-due";
+import { MyCoverRequests } from "@/components/dashboard/my-cover-requests";
 import { canSeeCoverCandidates } from "@/lib/regionCover";
 import { ActivationChecklist } from "@/components/dashboard/activation-checklist";
 import { ActivationCelebration } from "@/components/dashboard/activation-celebration";
@@ -168,7 +172,7 @@ export default async function DashboardPage() {
           {canSeeCoverCandidates(userRole) && (
             <Link
               href="/requests/log-sickness"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-800 shadow-sm transition-colors hover:bg-gray-50"
+              className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50"
             >
               <Thermometer className="h-4 w-4" />
               Log sickness
@@ -176,7 +180,7 @@ export default async function DashboardPage() {
           )}
           <Link
             href="/requests/new"
-            className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-700"
+            className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-700"
           >
             <Plus className="h-4 w-4" />
             Request time off
@@ -195,12 +199,26 @@ export default async function DashboardPage() {
       {isAdmin && activationComplete && <ActivationCelebration />}
 
       {/* Cover leads the dashboard — are we covered today, and where are we short? */}
-      <RegionCoverWidget
-        organizationId={orgId}
-        today={today}
-        isAdmin={isAdmin}
-        showCoverCandidates={canSeeCoverCandidates(userRole)}
-      />
+      <Suspense fallback={null}>
+        <MyCoverRequests userId={currentUserId} organizationId={orgId} />
+      </Suspense>
+
+      {/* Streams in on its own, so a slow cover calculation never holds the
+          rest of the dashboard on placeholders. */}
+      <Suspense fallback={<CardSkeleton />}>
+        <RegionCoverWidget
+          organizationId={orgId}
+          today={today}
+          isAdmin={isAdmin}
+          showCoverCandidates={canSeeCoverCandidates(userRole)}
+        />
+      </Suspense>
+
+      {canSeeComplianceAlerts && (
+        <Suspense fallback={null}>
+          <FitNotesDue organizationId={orgId} />
+        </Suspense>
+      )}
 
       {showTeamAbsencesFirst && absenceCards}
 

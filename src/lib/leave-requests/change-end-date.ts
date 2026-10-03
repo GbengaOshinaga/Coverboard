@@ -6,6 +6,7 @@ import { UK_SSP_WEEKLY_RATE } from "@/lib/uk-compliance";
 import { countWeekdays } from "@/lib/utils";
 import { checkEndDateChange, isSicknessLeaveTypeName, rescaleHours } from "./rules";
 import { computeSspForSpell, recomputeLaterSspSpells } from "./ssp-spell";
+import { syncFitNoteEvidence } from "./fit-notes";
 
 export type ChangeEndDateResult =
   | { ok: true; requestId: string; userId: string; startDate: Date; endDate: Date }
@@ -102,6 +103,9 @@ export async function changeSicknessEndDate(input: {
   if (request.status === "APPROVED") {
     recomputeBradfordScore(request.userId);
   }
+
+  // A longer absence may now need fit notes beyond what's recorded.
+  await syncFitNoteEvidence(requestId);
 
   const laterSspRecalculated = isSsp
     ? await recomputeLaterSspSpells(request.userId, request.startDate)

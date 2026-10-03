@@ -749,7 +749,7 @@ export default function ReportsPage() {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
                   activeTab === tab.id
                     ? "bg-brand-600 text-white"
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"

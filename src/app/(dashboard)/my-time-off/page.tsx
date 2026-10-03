@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { getUserLeaveBalances } from "@/lib/leave-balances";
 import { LeaveBalances } from "@/components/dashboard/leave-balances";
 import { MyRequests } from "@/components/leave/my-requests";
+import { MyCoverRequests } from "@/components/dashboard/my-cover-requests";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateRange } from "@/lib/utils";
 
@@ -118,12 +119,15 @@ export default async function MyTimeOffPage() {
         </div>
         <Link
           href="/requests/new"
-          className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-700"
+          className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-700"
         >
           <Plus className="h-4 w-4" />
           Request time off
         </Link>
       </div>
+
+      {/* Staff land here, so cover requests waiting on them show here too. */}
+      <MyCoverRequests userId={userId} organizationId={orgId} />
 
       {nextOff && (
         <div className="flex items-center gap-2 rounded-lg border border-brand-100 bg-brand-50/60 p-3 text-sm text-gray-700">
