@@ -103,6 +103,22 @@ export default function OnboardingPage() {
     );
   }
 
+  // Invites without a country are dropped on submit, so keep every blank row
+  // pointed at the first selected country.
+  useEffect(() => {
+    const fallback = selectedCountries[0];
+    if (!fallback) return;
+    setInvites((prev) =>
+      prev.some((inv) => !inv.countryCode || !selectedCountries.includes(inv.countryCode))
+        ? prev.map((inv) =>
+            !inv.countryCode || !selectedCountries.includes(inv.countryCode)
+              ? { ...inv, countryCode: fallback }
+              : inv
+          )
+        : prev
+    );
+  }, [selectedCountries]);
+
   function addInviteRow() {
     setInvites((prev) => [...prev, { name: "", email: "", countryCode: selectedCountries[0] ?? "" }]);
   }

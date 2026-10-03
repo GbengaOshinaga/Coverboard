@@ -63,6 +63,20 @@ export default function TeamPage() {
   const user = session?.user as Record<string, unknown> | undefined;
   const userRole = user?.role as string | undefined;
   const sessionUserId = user?.id as string | undefined;
+
+  // New members default to the country most of the team works in (the admin's
+  // own country is set from onboarding), so nobody silently gets the wrong
+  // statutory rules.
+  const defaultCountry = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const m of members) {
+      const c = m.workCountry ?? m.countryCode;
+      if (c) counts.set(c, (counts.get(c) ?? 0) + 1);
+    }
+    let best: string | null = null;
+    for (const [c, n] of counts) if (!best || n > (counts.get(best) ?? 0)) best = c;
+    return best ?? (user?.countryCode as string | undefined) ?? "GB";
+  }, [members, user]);
   const canManage = userRole === "ADMIN" || userRole === "MANAGER";
   const { toast } = useToast();
 
@@ -467,6 +481,7 @@ export default function TeamPage() {
         title="Add team member"
       >
         <MemberForm
+          defaultCountry={defaultCountry}
           onSubmit={handleAddMember}
           onCancel={() => setShowForm(false)}
         />

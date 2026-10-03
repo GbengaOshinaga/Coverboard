@@ -1,15 +1,10 @@
 import { prisma } from "@/lib/prisma";
+import { recomputeBradfordScore } from "./bradford";
 import { getUserLeaveBalance } from "@/lib/leave-balances";
 import { countWeekdays } from "@/lib/utils";
 import { notifyNewRequest } from "@/lib/slack-notifications";
 import { emailNewRequest, emailSspCapReached } from "@/lib/email-notifications";
-import {
-  SSP_MAX_WEEKS,
-  calculateSspPayableDaysForSpell,
-  calculateSspEntitlement,
-  UK_SSP_WEEKLY_RATE,
-  calculateBradfordFactor,
-} from "@/lib/uk-compliance";
+import { UK_SSP_WEEKLY_RATE } from "@/lib/uk-compliance";
 import { recordAudit, type AuditContext } from "@/lib/audit";
 import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
@@ -19,9 +14,9 @@ import {
   calculateSmpEntitlement,
   getAweForUser,
   isMaternityLeaveType,
-  resolveAverageWeeklyEarnings,
 } from "@/lib/smpCalculator";
 import { checkOnBehalf, noticeError } from "./rules";
+import { computeSspForSpell, type SspInfo } from "./ssp-spell";
 
 /**
  * Shared core for creating a leave request. Used by both the web API
@@ -63,17 +58,6 @@ export type CreateLeaveInput = {
   context?: AuditContext;
 };
 
-type SspInfo = {
-  eligible: boolean;
-  reason?: string;
-  payableDays: number;
-  sspDaysPaidThisRequest: number;
-  cumulativeSspDaysPaid: number;
-  dailyRate: number;
-  estimatedCost: number;
-  remainingDaysAfter: number;
-  limitReached: boolean;
-};
 
 export type CreateLeaveResult =
   | {
@@ -312,103 +296,14 @@ export async function createLeaveRequest(
   // ── SSP eligibility & 28-week cap ──────────────────────────────────
   const isSspLeave = leaveTypeConfig.name.includes("SSP");
   const isSicknessLeave = isSspLeave || leaveTypeConfig.name.includes("Sick");
-  let sspInfo: SspInfo | null = null;
-  let sspDaysPaid = 0;
-  let sspLimitReached = false;
-  let notifyCapReached = false;
-  let sspEmployeeSnapshot: { name: string; organizationId: string } | null = null;
-
-  if (isSspLeave) {
-    const employee = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        name: true,
-        organizationId: true,
-        qualifyingDaysPerWeek: true,
-        averageWeeklyEarnings: true,
-      },
-    });
-    if (employee) {
-      sspEmployeeSnapshot = {
-        name: employee.name,
-        organizationId: employee.organizationId,
-      };
-      const piwFloor = new Date(startDate);
-      piwFloor.setDate(piwFloor.getDate() - 56);
-      const priorSsp = await prisma.leaveRequest.findMany({
-        where: {
-          userId,
-          leaveType: { name: { contains: "SSP" } },
-          endDate: { gte: piwFloor, lt: startDate },
-        },
-        select: { sspDaysPaid: true },
-      });
-      const cumulativePrior = priorSsp.reduce(
-        (sum, r) => sum + (r.sspDaysPaid ?? 0),
-        0
-      );
-
-      const averageWeeklyEarnings = await resolveAverageWeeklyEarnings(
-        userId,
-        startDate,
-        employee.averageWeeklyEarnings === null
-          ? null
-          : Number(employee.averageWeeklyEarnings)
-      );
-
-      const entitlement = calculateSspEntitlement({
-        averageWeeklyEarnings,
-        sspDaysPaidInPeriod: cumulativePrior,
-        qualifyingDaysPerWeek: employee.qualifyingDaysPerWeek,
-        // Pick pre- vs post-6-April-2026 SSP rules by the spell's start date.
-        onDate: startDate,
-      });
-
-      if (!entitlement.eligible) {
-        sspInfo = {
-          eligible: false,
-          reason: entitlement.reason,
-          payableDays: 0,
-          sspDaysPaidThisRequest: 0,
-          cumulativeSspDaysPaid: cumulativePrior,
-          dailyRate: 0,
-          estimatedCost: 0,
-          remainingDaysAfter: Math.max(
-            0,
-            SSP_MAX_WEEKS * Number(employee.qualifyingDaysPerWeek ?? 5) -
-              cumulativePrior
-          ),
-          limitReached: entitlement.reason === "SSP 28-week limit reached",
-        };
-      } else {
-        // Waiting days are served once per PIW. A spell linked to a prior SSP
-        // spell (one ending within the 56-day window queried above) has already
-        // served them, so it pays every weekday with no 3-day deduction;
-        // re-deducting would underpay the employee. See the helper for detail.
-        const requestedPayable = calculateSspPayableDaysForSpell(
-          startDate,
-          endDate,
-          { linkedToPriorPiw: priorSsp.length > 0 }
-        );
-        const capped = Math.min(requestedPayable, entitlement.remainingDays);
-        sspDaysPaid = capped;
-        const cumulativeAfter = cumulativePrior + capped;
-        sspLimitReached = cumulativeAfter >= entitlement.maxDays;
-        notifyCapReached =
-          sspLimitReached && cumulativePrior < entitlement.maxDays;
-        sspInfo = {
-          eligible: true,
-          payableDays: capped,
-          sspDaysPaidThisRequest: capped,
-          cumulativeSspDaysPaid: cumulativeAfter,
-          dailyRate: entitlement.dailyRate,
-          estimatedCost: Number((entitlement.dailyRate * capped).toFixed(2)),
-          remainingDaysAfter: Math.max(0, entitlement.maxDays - cumulativeAfter),
-          limitReached: sspLimitReached,
-        };
-      }
-    }
-  }
+  const ssp = isSspLeave
+    ? await computeSspForSpell({ userId, startDate, endDate })
+    : null;
+  const sspInfo: SspInfo | null = ssp?.info ?? null;
+  const sspDaysPaid = ssp?.sspDaysPaid ?? 0;
+  const sspLimitReached = ssp?.sspLimitReached ?? false;
+  const notifyCapReached = ssp?.capReachedNow ?? false;
+  const sspEmployeeSnapshot = ssp?.employee ?? null;
 
   // When the requester is the sole approver (no other admin/manager exists),
   // there's no one else to review their request — auto-approve it rather than
@@ -458,31 +353,7 @@ export async function createLeaveRequest(
 
   // ── Bradford Factor recalculation ─────────────────────────────────
   if (isSicknessLeave) {
-    prisma.leaveRequest
-      .findMany({
-        where: {
-          userId,
-          OR: [
-            { leaveType: { name: { contains: "SSP" } } },
-            { leaveType: { name: { contains: "Sick" } } },
-          ],
-          status: "APPROVED",
-        },
-        select: { startDate: true, endDate: true },
-      })
-      .then((sickRequests) => {
-        const spells = sickRequests.length;
-        const days = sickRequests.reduce(
-          (sum, r) => sum + countWeekdays(r.startDate, r.endDate),
-          0
-        );
-        const score = calculateBradfordFactor(spells, days);
-        return prisma.user.update({
-          where: { id: userId },
-          data: { bradfordScore: score },
-        });
-      })
-      .catch((err) => console.error("Bradford Factor update error:", err));
+    recomputeBradfordScore(userId);
   }
 
   const daysRequested = countWeekdays(startDate, endDate);

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { recomputeBradfordScore } from "./bradford";
 import { notifyRequestStatusChange } from "@/lib/slack-notifications";
 import { emailRequestStatusChange } from "@/lib/email-notifications";
 import { recordAudit, type AuditContext, type AuditAction } from "@/lib/audit";
@@ -10,7 +11,6 @@ import {
   getAweForUser,
   isMaternityLeaveType,
 } from "@/lib/smpCalculator";
-import { calculateBradfordFactor } from "@/lib/uk-compliance";
 import { countWeekdays } from "@/lib/utils";
 
 /**
@@ -179,31 +179,7 @@ export async function reviewLeaveRequest(
 
   // Bradford Factor recompute on any sickness status change.
   if (/SSP|Sick/i.test(leaveRequest.leaveType.name)) {
-    prisma.leaveRequest
-      .findMany({
-        where: {
-          userId: leaveRequest.userId,
-          OR: [
-            { leaveType: { name: { contains: "SSP" } } },
-            { leaveType: { name: { contains: "Sick" } } },
-          ],
-          status: "APPROVED",
-        },
-        select: { startDate: true, endDate: true },
-      })
-      .then((sickRequests) => {
-        const spells = sickRequests.length;
-        const days = sickRequests.reduce(
-          (sum, r) => sum + countWeekdays(r.startDate, r.endDate),
-          0
-        );
-        const score = calculateBradfordFactor(spells, days);
-        return prisma.user.update({
-          where: { id: leaveRequest.userId },
-          data: { bradfordScore: score },
-        });
-      })
-      .catch((err) => console.error("Bradford Factor update error:", err));
+    recomputeBradfordScore(leaveRequest.userId);
   }
 
   // Notifications (fire and forget).

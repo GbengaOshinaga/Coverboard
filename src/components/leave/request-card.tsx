@@ -6,8 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CoverageWarning } from "./coverage-warning";
 import { RegionalCoverPanel } from "./regional-cover-panel";
+import { RegionalCoverWarning } from "./regional-cover-warning";
+import { FitNoteSection, type FitNoteRow } from "./fit-note-section";
 import { formatDateRange, countWeekdays } from "@/lib/utils";
-import { Check, X, ChevronDown, ChevronRight } from "lucide-react";
+import { Check, X, ChevronDown, ChevronRight, CalendarClock } from "lucide-react";
+import { isSicknessLeaveTypeName } from "@/lib/leave-requests/rules";
 
 type LeaveBalance = {
   leaveTypeId: string;
@@ -40,6 +43,7 @@ type LeaveRequest = {
     color: string;
   };
   reviewedBy: { name: string } | null;
+  fitNotes?: FitNoteRow[];
 };
 
 const statusVariant: Record<string, "success" | "warning" | "error" | "default"> = {
@@ -55,6 +59,7 @@ export function RequestCard({
   canCancel,
   regionsEnabled = false,
   onAction,
+  onUpdated,
   balance,
 }: {
   request: LeaveRequest;
@@ -62,6 +67,8 @@ export function RequestCard({
   canCancel: boolean;
   regionsEnabled?: boolean;
   onAction?: (id: string, status: string) => void;
+  /** Called after the request's dates change, so the list can refetch. */
+  onUpdated?: () => void;
   balance?: LeaveBalance | null;
 }) {
   const days = countWeekdays(
@@ -70,6 +77,40 @@ export function RequestCard({
   );
 
   const [showCover, setShowCover] = useState(false);
+  const [editingEnd, setEditingEnd] = useState(false);
+  const [endDraft, setEndDraft] = useState(request.endDate.slice(0, 10));
+  const [endError, setEndError] = useState("");
+  const [savingEnd, setSavingEnd] = useState(false);
+  const [changedRange, setChangedRange] = useState<{ start: string; end: string } | null>(null);
+
+  const canChangeEnd =
+    canReview &&
+    isSicknessLeaveTypeName(request.leaveType.name) &&
+    (request.status === "APPROVED" || request.status === "PENDING");
+
+  async function saveEndDate() {
+    setEndError("");
+    setSavingEnd(true);
+    try {
+      const res = await fetch(`/api/leave-requests/${request.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endDate: endDraft }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setEndError(data.error || "Couldn't change the end date");
+        return;
+      }
+      setEditingEnd(false);
+      setChangedRange({ start: request.startDate.slice(0, 10), end: endDraft });
+      onUpdated?.();
+    } catch {
+      setEndError("Something went wrong");
+    } finally {
+      setSavingEnd(false);
+    }
+  }
 
   const isUpcoming = new Date(request.startDate) > new Date();
   const showReview = canReview && request.status === "PENDING";
@@ -219,6 +260,75 @@ export function RequestCard({
             >
               Cancel
             </Button>
+          )}
+        </div>
+      )}
+
+      {canChangeEnd && !editingEnd && (
+        <button
+          type="button"
+          onClick={() => {
+            setEndDraft(request.endDate.slice(0, 10));
+            setEndError("");
+            setEditingEnd(true);
+          }}
+          className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-gray-900"
+        >
+          <CalendarClock className="h-3.5 w-3.5" />
+          Change end date
+        </button>
+      )}
+
+      {editingEnd && (
+        <div className="mt-2 rounded-md border border-gray-200 bg-gray-50 p-3">
+          <label htmlFor={`end-${request.id}`} className="block text-xs font-medium text-gray-700">
+            Last day off
+          </label>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <input
+              id={`end-${request.id}`}
+              type="date"
+              value={endDraft}
+              min={request.startDate.slice(0, 10)}
+              onChange={(e) => setEndDraft(e.target.value)}
+              className="rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+            <Button size="sm" onClick={saveEndDate} disabled={savingEnd || !endDraft}>
+              {savingEnd ? "Saving..." : "Save"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setEditingEnd(false)}>
+              Cancel
+            </Button>
+          </div>
+          <p className="mt-1.5 text-xs text-gray-500">
+            Off longer, or back early? This keeps it as one absence
+            {request.leaveType.name.includes("SSP") ? ", and SSP is recalculated" : ""}.
+          </p>
+          {endError && <p className="mt-1.5 text-xs text-red-700">{endError}</p>}
+        </div>
+      )}
+
+      {canChangeEnd && request.status === "APPROVED" && (
+        <FitNoteSection
+          requestId={request.id}
+          startDate={request.startDate}
+          endDate={request.endDate}
+          fitNotes={request.fitNotes ?? []}
+          onChanged={onUpdated}
+        />
+      )}
+
+      {changedRange && (
+        <div className="mt-2 space-y-2">
+          <p className="text-xs text-emerald-700">End date updated.</p>
+          {regionsEnabled && request.user.regionId && (
+            <RegionalCoverWarning
+              startDate={changedRange.start}
+              endDate={changedRange.end}
+              userId={request.user.id}
+              excludeRequestId={request.id}
+              variant="logged"
+            />
           )}
         </div>
       )}

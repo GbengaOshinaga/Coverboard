@@ -21,6 +21,8 @@ type RegionCoverRow = {
     required: number;
     coverCandidates: Array<{ id: string; name: string }>;
   }>;
+  /** Shift locations only: active members with no current working pattern. */
+  withoutPattern: number;
 };
 
 /**
@@ -103,10 +105,26 @@ export async function RegionCoverWidget({
           required: s.required,
           coverCandidates: showCoverCandidates ? s.coverCandidates : [],
         }));
+      // Shift counts come from working patterns, so anyone without one is
+      // invisible to cover. New teams start that way; say so rather than
+      // just showing 0/3.
+      const withoutPattern =
+        shifts.length > 0
+          ? await prisma.user.count({
+              where: {
+                regionId: r.id,
+                isActive: true,
+                workPatterns: {
+                  none: { OR: [{ effectiveTo: null }, { effectiveTo: { gte: today } }] },
+                },
+              },
+            })
+          : 0;
       return {
         id: r.id,
         name: r.name,
         color: r.color,
+        withoutPattern,
         minCover: day?.required ?? r.minCover,
         available: day?.available ?? 0,
         ok: skip ? true : day.available >= day.required,
@@ -176,6 +194,16 @@ export async function RegionCoverWidget({
                       ))}
                     </div>
                   )}
+                  {showCoverCandidates && r.withoutPattern > 0 && (
+                    <p className="mt-0.5 text-xs text-amber-800">
+                      {r.withoutPattern} {r.withoutPattern === 1 ? "person has" : "people have"} no
+                      working pattern, so they don&apos;t count
+                      towards shifts.{" "}
+                      <Link href="/team" className="font-medium underline hover:no-underline">
+                        Set patterns
+                      </Link>
+                    </p>
+                  )}
                   {r.shifts
                     .filter((s) => s.coverCandidates.length > 0)
                     .map((s) => (
@@ -199,12 +227,12 @@ export async function RegionCoverWidget({
                 {r.coverNotRequired ? (
                   <span className="text-xs text-gray-400">—</span>
                 ) : r.ok ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                  <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
                     <ShieldCheck className="h-3 w-3" />
                     {r.available}/{r.minCover}
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                  <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
                     <AlertTriangle className="h-3 w-3" />
                     {r.available}/{r.minCover}
                   </span>

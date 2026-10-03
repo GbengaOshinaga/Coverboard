@@ -16,9 +16,16 @@ export const AUDIT_ACTIONS = [
   "leave_request.rejected",
   "leave_request.cancelled",
   "leave_request.kit_days_updated",
+  "leave_request.dates_changed",
+  "leave_request.fit_note_recorded",
+  "leave_request.fit_note_removed",
   "leave_request.ssp_cap_reached",
   "leave_request.cover_overridden",
   "leave_request.sickness_viewed",
+  "cover_offer.created",
+  "cover_offer.accepted",
+  "cover_offer.declined",
+  "cover_offer.cancelled",
   "team_member.created",
   "team_member.updated",
   "team_member.deleted",
@@ -48,6 +55,7 @@ export type AuditAction = (typeof AUDIT_ACTIONS)[number];
  */
 export type AuditResource =
   | "leave_request"
+  | "cover_offer"
   | "team_member"
   | "leave_type"
   | "leave_policy"

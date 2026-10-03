@@ -14,10 +14,10 @@ export function PricingCard({ tier }: { tier: PricingTier }) {
 
   return (
     <div
-      className={`flex h-full flex-col rounded-2xl border bg-white p-5 sm:p-6 ${
+      className={`flex h-full flex-col rounded-lg border bg-white p-5 sm:p-6 ${
         tier.highlighted
-          ? "border-brand-300 shadow-lg shadow-brand-100/40 ring-2 ring-brand-500/15"
-          : "border-gray-200 shadow-sm"
+          ? "border-brand-500 ring-1 ring-brand-500"
+          : "border-gray-200"
       }`}
     >
       <div>
@@ -48,9 +48,9 @@ export function PricingCard({ tier }: { tier: PricingTier }) {
 
       <Link
         href={signupHref}
-        className={`mt-6 block rounded-xl py-2.5 text-center text-sm font-semibold transition-colors ${
+        className={`mt-6 block rounded-md py-2.5 text-center text-sm font-semibold transition-colors ${
           tier.highlighted
-            ? "bg-brand-600 text-white shadow-lg shadow-brand-600/20 hover:bg-brand-700"
+            ? "bg-brand-600 text-white hover:bg-brand-700"
             : "border-2 border-brand-600 text-brand-600 hover:bg-brand-50"
         }`}
       >

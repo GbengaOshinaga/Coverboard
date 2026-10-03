@@ -113,7 +113,8 @@ export function LogSicknessForm({
             {sameDay
               ? `on ${formatDay(logged.startDate)}`
               : `${formatDay(logged.startDate)} – ${formatDay(logged.endDate)}`}
-            . No fit note is needed for the first 7 days.
+            . No fit note is needed for the first 7 days. If they&apos;re off longer,
+            record it on the request under Requests.
           </span>
         </div>
 

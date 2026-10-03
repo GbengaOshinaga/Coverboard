@@ -92,3 +92,19 @@ export type LeaveTypeInput = z.infer<typeof leaveTypeSchema>;
  */
 export const leaveTypeUpdateSchema = leaveTypeSchema.partial();
 export type LeaveTypeUpdateInput = z.infer<typeof leaveTypeUpdateSchema>;
+
+/**
+ * A real calendar date as YYYY-MM-DD. Rejects impossible dates rather than
+ * letting JavaScript roll 2026-02-31 over to 3 March.
+ */
+export const isoDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD")
+  .refine((v) => {
+    const d = new Date(`${v}T00:00:00.000Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+  }, "That isn't a real date");
+
+export function isoDateToUtc(v: string): Date {
+  return new Date(`${v}T00:00:00.000Z`);
+}

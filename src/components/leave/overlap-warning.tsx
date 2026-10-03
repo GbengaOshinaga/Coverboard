@@ -91,7 +91,7 @@ export function OverlapWarning({
               {overlap.user.name}
             </span>
             <div
-              className="rounded-full px-2 py-0.5 text-[10px] font-medium text-white"
+              className="rounded px-2 py-0.5 text-[10px] font-medium text-white"
               style={{ backgroundColor: overlap.leaveType.color }}
             >
               {overlap.leaveType.name.replace(" Leave", "")}

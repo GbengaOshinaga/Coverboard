@@ -2,8 +2,9 @@
 
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import type { CoverCandidate, RuledOutMember } from "@/lib/shiftCover";
+import type { CoverCandidate, CoverOfferSummary, RuledOutMember } from "@/lib/shiftCover";
 import { CoverOptions } from "./cover-options";
+import { CoverByPerson } from "./cover-by-person";
 import { AlertTriangle } from "lucide-react";
 
 export type CoverConflict = {
@@ -16,6 +17,7 @@ export type CoverConflict = {
   shiftName?: string | null;
   coverCandidates?: CoverCandidate[];
   ruledOut?: RuledOutMember[];
+  offers?: CoverOfferSummary[];
 };
 
 const FMT = new Intl.DateTimeFormat("en-GB", {
@@ -63,6 +65,11 @@ export function ApproveCoverModal({
               cover on {conflicts.length} {unit}
               {conflicts.length === 1 ? "" : "s"}.
             </p>
+            {conflicts.length > 1 && conflicts.every((c) => c.shiftId) ? (
+              <div className="text-xs">
+                <CoverByPerson conflicts={conflicts} />
+              </div>
+            ) : (
             <ul className="space-y-0.5 text-xs">
               {conflicts.slice(0, 8).map((c) => (
                 <li key={`${c.date}:${c.shiftId ?? ""}`}>
@@ -79,6 +86,9 @@ export function ApproveCoverModal({
                   <CoverOptions
                     candidates={c.coverCandidates ?? []}
                     ruledOut={c.ruledOut ?? []}
+                    shiftId={c.shiftId}
+                    date={c.date}
+                    offers={c.offers ?? []}
                   />
                 </li>
               ))}
@@ -88,6 +98,7 @@ export function ApproveCoverModal({
                 </li>
               )}
             </ul>
+            )}
           </div>
         </div>
         <p className="text-xs text-gray-600">

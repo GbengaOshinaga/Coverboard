@@ -76,8 +76,10 @@ export default function RequestsPage() {
   const isReviewer = userRole === "ADMIN" || userRole === "MANAGER";
   const { toast } = useToast();
 
-  const fetchRequests = useCallback(async () => {
-    setLoading(true);
+  // `silent` refreshes in place, so cards keep their local state (e.g. the
+  // cover check shown after changing an end date).
+  const fetchRequests = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     const params = new URLSearchParams();
     if (filter !== "ALL") {
       params.set("status", filter);
@@ -234,7 +236,7 @@ export default function RequestsPage() {
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+            className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
               filter === f
                 ? "bg-brand-600 text-white"
                 : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -276,6 +278,7 @@ export default function RequestsPage() {
                 canCancel={request.user.id === userId}
                 regionsEnabled={regionsEnabled}
                 onAction={handleAction}
+                onUpdated={() => fetchRequests({ silent: true })}
                 balance={balanceForType}
               />
             );

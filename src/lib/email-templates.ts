@@ -599,3 +599,139 @@ export function founderOutreachEmail(data: {
     html: `<!DOCTYPE html><html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:15px;line-height:1.55;color:#111827;max-width:560px;margin:32px auto;padding:0 16px;">${body}<p style="margin-top:24px;font-size:12px;color:#9ca3af;">Replies go to ${data.replyAddress}.</p></body></html>`,
   };
 }
+
+// ─── Cover offers ───────────────────────────────────────────────────
+
+function esc(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+}
+
+function shiftLine(data: { shiftName: string; date: Date; startTime: string; endTime: string; locationName: string }) {
+  const day = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(data.date);
+  return `<div style="background-color:#f9fafb;border-radius:6px;padding:16px;margin-bottom:16px;font-size:14px;color:#111827;">
+        <strong>${esc(data.shiftName)} shift</strong>, ${day}<br>
+        <span style="color:#6b7280;">${data.startTime}–${data.endTime} · ${esc(data.locationName)}</span>
+      </div>`;
+}
+
+/**
+ * To the person being asked — one email however many shifts they were asked
+ * about at once. They answer each in the app; nothing is assumed.
+ */
+export function coverOfferEmail(data: {
+  recipientName: string;
+  managerName: string;
+  shifts: Array<{ shiftName: string; date: Date; startTime: string; endTime: string; locationName: string }>;
+  url: string;
+}): { subject: string; html: string } {
+  const many = data.shifts.length > 1;
+  return {
+    subject: many
+      ? `Can you cover ${data.shifts.length} shifts?`
+      : `Can you cover the ${data.shifts[0].shiftName} shift?`,
+    html: layout(`
+      <h1 style="margin:0 0 8px;font-size:20px;color:#111827;">Can you cover ${many ? "some shifts" : "a shift"}?</h1>
+      <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
+        Hi ${esc(data.recipientName)}, ${esc(data.managerName)} has asked if you can cover:
+      </p>
+      ${data.shifts.map(shiftLine).join("")}
+      <p style="margin:0;font-size:14px;color:#6b7280;line-height:1.6;">
+        Please accept or decline ${many ? "each one" : ""} in Coverboard. If someone else covers a shift first, it'll show as covered there.
+      </p>
+      ${button("Accept or decline", data.url)}
+    `),
+  };
+}
+
+/** To the manager who asked. */
+export function coverOfferAnsweredEmail(data: {
+  managerName: string;
+  responderName: string;
+  accepted: boolean;
+  shiftName: string;
+  date: Date;
+  startTime: string;
+  endTime: string;
+  locationName: string;
+  url: string;
+}): { subject: string; html: string } {
+  const verb = data.accepted ? "will cover" : "can't cover";
+  return {
+    subject: `${data.responderName} ${verb} the ${data.shiftName} shift`,
+    html: layout(`
+      <h1 style="margin:0 0 8px;font-size:20px;color:#111827;">${esc(data.responderName)} ${verb} the shift</h1>
+      <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
+        Hi ${esc(data.managerName)}, ${esc(data.responderName)} has
+        <strong style="color:${data.accepted ? "#059669" : "#dc2626"};">${data.accepted ? "accepted" : "declined"}</strong>
+        your request to cover:
+      </p>
+      ${shiftLine(data)}
+      ${button("View cover", data.url)}
+    `),
+  };
+}
+
+// ─── Founder alerts (internal) ──────────────────────────────────────
+
+function factRows(rows: Array<[string, string]>): string {
+  return `<table cellpadding="0" cellspacing="0" style="width:100%;font-size:14px;">${rows
+    .map(
+      ([k, v]) => `<tr>
+        <td style="padding:4px 0;color:#6b7280;width:140px;vertical-align:top;">${esc(k)}</td>
+        <td style="padding:4px 0;color:#111827;">${esc(v)}</td>
+      </tr>`
+    )
+    .join("")}</table>`;
+}
+
+/** To the founder: a team just signed up. */
+export function signupAlertEmail(data: {
+  orgName: string;
+  adminName: string;
+  adminEmail: string;
+  plan: string;
+  billingCountry: string;
+  method: string;
+  at: Date;
+}): { subject: string; html: string } {
+  return {
+    subject: `New signup: ${data.orgName}`,
+    html: layout(`
+      <h1 style="margin:0 0 16px;font-size:20px;color:#111827;">New signup: ${esc(data.orgName)}</h1>
+      ${factRows([
+        ["Admin", `${data.adminName} <${data.adminEmail}>`],
+        ["Plan", data.plan],
+        ["Billing country", data.billingCountry],
+        ["Signed up with", data.method === "google" ? "Google" : "Email and password"],
+        ["When", data.at.toUTCString()],
+      ])}
+      <p style="margin:16px 0 0;font-size:14px;color:#6b7280;line-height:1.6;">
+        You'll get another email if they finish setting up. Reply to them from your own inbox if you want to say hello.
+      </p>
+    `),
+  };
+}
+
+/** To the founder: a team finished onboarding. */
+export function setupCompletedAlertEmail(data: {
+  orgName: string;
+  adminEmail: string | null;
+  countries: string[];
+  industry: string | null;
+  locationsEnabled: boolean;
+  invitesSent: number;
+}): { subject: string; html: string } {
+  return {
+    subject: `${data.orgName} finished setting up`,
+    html: layout(`
+      <h1 style="margin:0 0 16px;font-size:20px;color:#111827;">${esc(data.orgName)} finished setting up</h1>
+      ${factRows([
+        ["Admin", data.adminEmail ?? "—"],
+        ["Countries", data.countries.join(", ")],
+        ["Industry", data.industry ?? "Not given"],
+        ["Locations & cover", data.locationsEnabled ? "Turned on" : "Off"],
+        ["People invited", String(data.invitesSent)],
+      ])}
+    `),
+  };
+}

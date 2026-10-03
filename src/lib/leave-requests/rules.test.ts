@@ -2,9 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   calendarDaysUntil,
+  checkEndDateChange,
   checkOnBehalf,
   isSicknessLeaveTypeName,
   noticeError,
+  rescaleHours,
 } from "./rules";
 
 const AT_0710 = new Date("2026-09-30T07:10:00Z");
@@ -86,4 +88,51 @@ test("checkOnBehalf: planned leave cannot be booked on someone's behalf", () => 
     leaveTypeName: "Annual Leave",
   });
   assert.equal(!r.ok && r.status, 400);
+});
+
+const SICK_CHANGE = {
+  actorRole: "MANAGER",
+  leaveTypeName: "Statutory Sick Pay (SSP)",
+  status: "APPROVED",
+  startDate: new Date("2026-09-30"),
+  oldEndDate: new Date("2026-09-30"),
+  newEndDate: new Date("2026-10-02"),
+};
+
+test("checkEndDateChange: a manager can extend or shorten sickness", () => {
+  assert.deepEqual(checkEndDateChange(SICK_CHANGE), { ok: true });
+  assert.deepEqual(
+    checkEndDateChange({
+      ...SICK_CHANGE,
+      oldEndDate: new Date("2026-10-05"),
+      newEndDate: new Date("2026-10-01"),
+    }),
+    { ok: true }
+  );
+  assert.deepEqual(checkEndDateChange({ ...SICK_CHANGE, status: "PENDING" }), { ok: true });
+});
+
+test("checkEndDateChange: members can't change dates", () => {
+  const r = checkEndDateChange({ ...SICK_CHANGE, actorRole: "MEMBER" });
+  assert.equal(!r.ok && r.status, 403);
+});
+
+test("checkEndDateChange: only sickness, only live absences", () => {
+  const holiday = checkEndDateChange({ ...SICK_CHANGE, leaveTypeName: "Annual Leave" });
+  assert.equal(!holiday.ok && holiday.status, 400);
+  const cancelled = checkEndDateChange({ ...SICK_CHANGE, status: "CANCELLED" });
+  assert.match(!cancelled.ok ? cancelled.error : "", /cancelled/);
+});
+
+test("checkEndDateChange: end can't precede start or be unchanged", () => {
+  const before = checkEndDateChange({ ...SICK_CHANGE, newEndDate: new Date("2026-09-29") });
+  assert.equal(before.ok, false);
+  const same = checkEndDateChange({ ...SICK_CHANGE, newEndDate: SICK_CHANGE.oldEndDate });
+  assert.equal(same.ok, false);
+});
+
+test("rescaleHours keeps hours per day; null stays null", () => {
+  assert.equal(rescaleHours(15, 2, 5), 37.5);
+  assert.equal(rescaleHours(null, 2, 5), null);
+  assert.equal(rescaleHours(8, 0, 3), 8);
 });

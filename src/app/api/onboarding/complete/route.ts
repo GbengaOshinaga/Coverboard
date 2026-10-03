@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { alertSetupCompleted } from "@/lib/signup-alerts";
 import { getServerSession } from "next-auth";
 import bcrypt from "bcryptjs";
 import { authOptions } from "@/lib/auth";
@@ -50,6 +51,19 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: parsed.error.issues[0].message },
         { status: 400 }
+      );
+    }
+
+    // Onboarding runs once. A stale tab resubmitting it would otherwise reset
+    // settings such as locations on an org that's already set up.
+    const existingOrg = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { onboardingCompleted: true },
+    });
+    if (existingOrg?.onboardingCompleted) {
+      return NextResponse.json(
+        { error: "Onboarding is already complete for this team." },
+        { status: 409 }
       );
     }
 
@@ -145,6 +159,7 @@ export async function POST(request: Request) {
     }
 
     // Create invited team members and send invite emails
+    let invitesCreated = 0;
     if (invites && invites.length > 0) {
       const inviterUser = await prisma.user.findUnique({
         where: { id: userId },
@@ -175,6 +190,7 @@ export async function POST(request: Request) {
               organizationId: orgId,
             },
           });
+          invitesCreated += 1;
 
           sendTeamInviteEmail({
             inviteeName: invite.name,
@@ -227,6 +243,19 @@ export async function POST(request: Request) {
         regionsEnabled: regionsEnabled ?? false,
       },
       context: requestAuditContext(request),
+    });
+
+    const orgForAlert = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { name: true, regionsEnabled: true },
+    });
+    alertSetupCompleted({
+      orgName: orgForAlert?.name ?? "A team",
+      adminEmail: session.user.email ?? null,
+      countries,
+      industry: industry || null,
+      locationsEnabled: orgForAlert?.regionsEnabled ?? false,
+      invitesSent: invitesCreated,
     });
 
     return NextResponse.json({ success: true });

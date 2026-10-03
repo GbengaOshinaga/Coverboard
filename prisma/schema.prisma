@@ -106,6 +106,7 @@ model Organization {
   jiraUserMappings  JiraUserMapping[]
   slackIntegration  SlackIntegration?
   regions           Region[]
+  coverOffers       CoverOffer[]
 
   @@index([deletionScheduledFor])
   @@index([trialExpiredGraceEndsAt])
@@ -154,6 +155,9 @@ model User {
   regionChangesMade   UserRegionHistory[]     @relation("UserRegionHistoryActor")
   coverOverrides      LeaveRequest[]          @relation("CoverOverrideBy")
   workPatterns        WorkPattern[]
+  fitNotesRecorded    FitNote[]               @relation("FitNoteRecordedBy")
+  coverOffersReceived CoverOffer[]            @relation("CoverOfferTo")
+  coverOffersSent     CoverOffer[]            @relation("CoverOfferBy")
 
   @@index([organizationId, countryCode])
   @@index([organizationId, workCountry, isActive])
@@ -241,9 +245,30 @@ model LeaveRequest {
   reviewedBy      User?     @relation("ReviewerLeaveRequests", fields: [reviewedById], references: [id])
   coverOverrideBy User?     @relation("CoverOverrideBy", fields: [coverOverrideById], references: [id])
 
+  fitNotes        FitNote[]
+  coverOffers     CoverOffer[]
+
   @@index([userId, status])
   @@index([userId, leaveTypeId])
   @@index([status, startDate, endDate])
+}
+
+/// A fit note (Statement of Fitness for Work) received for a sickness
+/// absence. Dates only: no document and no medical details are stored.
+model FitNote {
+  id             String   @id @default(cuid())
+  leaveRequestId String
+  coversFrom     DateTime @db.Date
+  coversTo       DateTime @db.Date
+  receivedOn     DateTime @db.Date
+  /// Null once the recording manager is deleted.
+  recordedById   String?
+  createdAt      DateTime @default(now())
+
+  leaveRequest LeaveRequest @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
+  recordedBy   User?        @relation("FitNoteRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+
+  @@index([leaveRequestId])
 }
 
 model JiraIntegration {
@@ -456,7 +481,8 @@ model ShiftType {
   updatedAt DateTime @updatedAt
 
   region   Region        @relation(fields: [regionId], references: [id], onDelete: Cascade)
-  patterns WorkPattern[]
+  patterns    WorkPattern[]
+  coverOffers CoverOffer[]
 
   @@unique([regionId, name])
   @@index([regionId])
@@ -511,4 +537,40 @@ model DataDeletionAudit {
 
   @@index([organizationId, createdAt])
   @@index([event, createdAt])
+}
+
+enum CoverOfferStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  /// The manager withdrew it.
+  CANCELLED
+  /// Someone else accepted first, or the shift stopped being short.
+  FILLED
+}
+
+/// A manager asking one person to cover one shift on one date. An accepted
+/// offer puts that person on the shift for that date (see shiftCover.ts).
+model CoverOffer {
+  id             String           @id @default(cuid())
+  organizationId String
+  shiftTypeId    String
+  date           DateTime         @db.Date
+  userId         String
+  offeredById    String?
+  /// The absence that caused the gap, when the offer came from one.
+  leaveRequestId String?
+  status         CoverOfferStatus @default(PENDING)
+  respondedAt    DateTime?
+  createdAt      DateTime         @default(now())
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  shiftType    ShiftType     @relation(fields: [shiftTypeId], references: [id], onDelete: Cascade)
+  user         User          @relation("CoverOfferTo", fields: [userId], references: [id], onDelete: Cascade)
+  offeredBy    User?         @relation("CoverOfferBy", fields: [offeredById], references: [id], onDelete: SetNull)
+  leaveRequest LeaveRequest? @relation(fields: [leaveRequestId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
+  @@index([shiftTypeId, date])
+  @@index([userId, status])
 }

@@ -7,6 +7,8 @@ import {
   type EngineLeave,
   type EnginePattern,
   type CoverCandidate,
+  type CoverOfferSummary,
+  type EngineAssignment,
   type EngineMember,
   type EngineShift,
   type RuledOutMember,
@@ -27,6 +29,8 @@ export type ConflictDay = {
   coverCandidates: CoverCandidate[];
   /** Who can't, and why (shift mode only). See ShiftCover. */
   ruledOut: RuledOutMember[];
+  /** Who has been asked to cover this shift, and their answer. */
+  offers: CoverOfferSummary[];
 };
 
 export type CoverCheckResult = {
@@ -322,6 +326,44 @@ async function loadRegionWithShifts(
   };
 }
 
+type LoadedOffer = CoverOfferSummary & { shiftTypeId: string; date: string };
+
+/**
+ * Live cover offers for a region's shifts in the window. Accepted ones become
+ * engine assignments; pending/declined ones are shown next to candidates.
+ */
+async function loadCoverOffers(regionId: string, from: Date, to: Date): Promise<LoadedOffer[]> {
+  const rows = await prisma.coverOffer.findMany({
+    where: {
+      shiftType: { regionId },
+      status: { in: ["PENDING", "ACCEPTED", "DECLINED"] },
+      date: { gte: from, lte: to },
+    },
+    select: { id: true, userId: true, shiftTypeId: true, date: true, status: true },
+    orderBy: { createdAt: "asc" },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    userId: r.userId,
+    shiftTypeId: r.shiftTypeId,
+    date: r.date.toISOString().slice(0, 10),
+    status: r.status as CoverOfferSummary["status"],
+  }));
+}
+
+function assignmentsFrom(offers: LoadedOffer[]): EngineAssignment[] {
+  return offers
+    .filter((o) => o.status === "ACCEPTED")
+    .map((o) => ({ userId: o.userId, shiftTypeId: o.shiftTypeId, date: o.date }));
+}
+
+function offersFor(offers: LoadedOffer[], shiftId: string | null, date: string): CoverOfferSummary[] {
+  if (!shiftId) return [];
+  return offers
+    .filter((o) => o.shiftTypeId === shiftId && o.date === date)
+    .map(({ id, userId, status }) => ({ id, userId, status }));
+}
+
 function uniqueById<T extends { id: string }>(items: T[]): T[] {
   const seen = new Set<string>();
   return items.filter((i) => (seen.has(i.id) ? false : (seen.add(i.id), true)));
@@ -351,19 +393,26 @@ export async function computeDailyCover(
   );
   if (!region) return [];
 
-  const members = await loadRegionMembers(region.id, input.excludeUserId);
-  const leavesByUser = await loadApprovedLeavesOverlapping(
-    members.map((m) => m.id),
-    loadFrom,
-    loadTo,
-    input.excludeRequestId
-  );
-  const bankHolidayDates = await loadBankHolidaySet(input.organizationId, from, to);
+  // Bank holidays and offers don't depend on members, so fetch them alongside.
+  const [{ members, leavesByUser }, bankHolidayDates, offers] = await Promise.all([
+    loadRegionMembers(region.id, input.excludeUserId).then(async (members) => ({
+      members,
+      leavesByUser: await loadApprovedLeavesOverlapping(
+        members.map((m) => m.id),
+        loadFrom,
+        loadTo,
+        input.excludeRequestId
+      ),
+    })),
+    loadBankHolidaySet(input.organizationId, from, to),
+    loadCoverOffers(region.id, loadFrom, loadTo),
+  ]);
 
   const days = computeShiftCover({
     region,
     shifts: region.shifts,
     patterns: region.patterns,
+    assignments: assignmentsFrom(offers),
     members,
     leavesByUser,
     bankHolidayDates,
@@ -381,7 +430,9 @@ export async function computeDailyCover(
       coverRequired: day.shifts.some((s) => s.coverRequired),
       staffOff: uniqueById(day.shifts.flatMap((s) => s.staffOff)),
       staffAvailable: uniqueById(day.shifts.flatMap((s) => s.staffAvailable)),
-      shifts: day.shifts.filter((s) => s.shiftId !== LEGACY_SHIFT_ID),
+      shifts: day.shifts
+        .filter((s) => s.shiftId !== LEGACY_SHIFT_ID)
+        .map((s) => ({ ...s, offers: offersFor(offers, s.shiftId, day.date) })),
     };
   });
 }
@@ -451,9 +502,12 @@ export async function checkRegionalCover(params: {
     loadTo,
     params.excludeRequestId
   );
-  const bankHolidayDates = await loadBankHolidaySet(params.organizationId, from, to);
+  const [bankHolidayDates, offers] = await Promise.all([
+    loadBankHolidaySet(params.organizationId, from, to),
+    loadCoverOffers(region.id, loadFrom, loadTo),
+  ]);
 
-  return checkRegionalCoverPure({
+  const result = checkRegionalCoverPure({
     region,
     employeeRegionId: region.id,
     employeeId: params.userId,
@@ -464,7 +518,12 @@ export async function checkRegionalCover(params: {
     bankHolidayDates,
     shifts: region.shifts,
     patterns: region.patterns,
+    assignments: assignmentsFrom(offers),
   });
+  return {
+    ...result,
+    conflicts: result.conflicts.map((c) => ({ ...c, offers: offersFor(offers, c.shiftId, c.date) })),
+  };
 }
 
 /**
@@ -492,6 +551,8 @@ export type PureCheckInput = {
   /** Active shift types; omit or [] for per-day cover. */
   shifts?: EngineShift[];
   patterns?: EnginePattern[];
+  /** Accepted cover offers. */
+  assignments?: EngineAssignment[];
 };
 
 const REQUESTED_LEAVE = "Requested leave";
@@ -518,6 +579,7 @@ export function checkRegionalCoverPure(input: PureCheckInput): CoverCheckResult 
     region: input.region,
     shifts,
     patterns: input.patterns ?? [],
+    assignments: input.assignments ?? [],
     members: [
       ...input.members.filter((m) => m.id !== input.employeeId),
       { id: input.employeeId, name: "" },
@@ -546,6 +608,7 @@ export function checkRegionalCoverPure(input: PureCheckInput): CoverCheckResult 
         shiftName: s.shiftId === LEGACY_SHIFT_ID ? null : s.name,
         coverCandidates: s.coverCandidates,
         ruledOut: s.ruledOut.filter((o) => o.id !== input.employeeId),
+        offers: [],
       });
     }
   }
@@ -572,13 +635,13 @@ export function canSeeCoverCandidates(role: string | undefined): boolean {
 export function withoutCoverCandidates(result: CoverCheckResult): CoverCheckResult {
   return {
     ...result,
-    conflicts: result.conflicts.map((c) => ({ ...c, coverCandidates: [], ruledOut: [] })),
+    conflicts: result.conflicts.map((c) => ({ ...c, coverCandidates: [], ruledOut: [], offers: [] })),
   };
 }
 
 export function dailyWithoutCoverCandidates(days: DailyCover[]): DailyCover[] {
   return days.map((d) => ({
     ...d,
-    shifts: d.shifts.map((s) => ({ ...s, coverCandidates: [], ruledOut: [] })),
+    shifts: d.shifts.map((s) => ({ ...s, coverCandidates: [], ruledOut: [], offers: [] })),
   }));
 }

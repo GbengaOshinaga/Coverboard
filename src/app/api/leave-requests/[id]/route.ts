@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recomputeBradfordScore } from "@/lib/leave-requests/bradford";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -12,9 +13,9 @@ import {
   getAweForUser,
   isMaternityLeaveType,
 } from "@/lib/smpCalculator";
-import { calculateBradfordFactor } from "@/lib/uk-compliance";
-import { countWeekdays } from "@/lib/utils";
 import { reviewLeaveRequest } from "@/lib/leave-requests/review";
+import { changeSicknessEndDate } from "@/lib/leave-requests/change-end-date";
+import { isoDateSchema, isoDateToUtc } from "@/lib/validations";
 import { z } from "zod";
 
 const updateSchema = z.object({
@@ -24,6 +25,8 @@ const updateSchema = z.object({
   evidenceProvided: z.boolean().optional(),
   splCurtailmentConfirmed: z.boolean().optional(),
   coverOverride: z.boolean().optional(),
+  /** Sickness only: move the end date (off longer, or back early). */
+  endDate: isoDateSchema.optional(),
 });
 
 export async function PATCH(
@@ -73,7 +76,36 @@ export async function PATCH(
       );
     }
 
-    const { status, kitDaysUsed, splitDaysUsed, evidenceProvided, splCurtailmentConfirmed, coverOverride } = parsed.data;
+    const { status, kitDaysUsed, splitDaysUsed, evidenceProvided, splCurtailmentConfirmed, coverOverride, endDate } = parsed.data;
+
+    // Date changes stand alone so they can't be mixed with a status change.
+    if (endDate !== undefined) {
+      if (Object.keys(parsed.data).length > 1) {
+        return NextResponse.json(
+          { error: "Change the end date on its own" },
+          { status: 400 }
+        );
+      }
+      const result = await changeSicknessEndDate({
+        requestId: id,
+        newEndDate: isoDateToUtc(endDate),
+        actor: { id: userId, email: actorEmail ?? null, role: userRole },
+        organizationId: orgId,
+        context: requestAuditContext(request),
+      });
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: result.status });
+      }
+      const updated = await prisma.leaveRequest.findUnique({
+        where: { id },
+        include: fullInclude,
+      });
+      const responsePayload =
+        updated && (updated.userId === userId || userRole === "ADMIN")
+          ? updated
+          : { ...updated, sicknessNote: null };
+      return NextResponse.json(responsePayload);
+    }
 
     if (coverOverride !== undefined && userRole !== "ADMIN" && userRole !== "MANAGER") {
       return NextResponse.json(
@@ -230,31 +262,7 @@ export async function PATCH(
       status === "CANCELLED" &&
       /SSP|Sick/i.test(leaveRequest.leaveType.name)
     ) {
-      prisma.leaveRequest
-        .findMany({
-          where: {
-            userId: leaveRequest.userId,
-            OR: [
-              { leaveType: { name: { contains: "SSP" } } },
-              { leaveType: { name: { contains: "Sick" } } },
-            ],
-            status: "APPROVED",
-          },
-          select: { startDate: true, endDate: true },
-        })
-        .then((sickRequests) => {
-          const spells = sickRequests.length;
-          const days = sickRequests.reduce(
-            (sum, r) => sum + countWeekdays(r.startDate, r.endDate),
-            0
-          );
-          const score = calculateBradfordFactor(spells, days);
-          return prisma.user.update({
-            where: { id: leaveRequest.userId },
-            data: { bradfordScore: score },
-          });
-        })
-        .catch((err) => console.error("Bradford Factor update error:", err));
+      recomputeBradfordScore(leaveRequest.userId);
     }
 
     // When someone cancels leave that was already approved, let the other

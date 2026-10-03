@@ -36,7 +36,7 @@ export function IrregularHoursCalculator() {
   const labelClass = "block text-sm font-medium text-gray-700";
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
+    <div className="rounded-lg border border-gray-200 bg-white p-5 sm:p-6">
       {/* Mode toggle */}
       <div className="mb-5 inline-flex rounded-lg bg-gray-100 p-1 text-sm">
         <button
