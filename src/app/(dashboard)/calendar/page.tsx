@@ -42,9 +42,19 @@ type DailyCover = {
   coverRequired: boolean;
 };
 
+type CoverShiftData = {
+  offerId: string;
+  userName: string;
+  date: string;
+  shiftName: string;
+  locationId: string;
+};
+
 export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [leaves, setLeaves] = useState<LeaveData[]>([]);
+  // Accepted cover shifts (managers see everyone's; staff see their own).
+  const [coverShifts, setCoverShifts] = useState<CoverShiftData[]>([]);
   const [holidays, setHolidays] = useState([]);
   const [regions, setRegions] = useState<Region[]>([]);
   const [regionsEnabled, setRegionsEnabled] = useState(false);
@@ -99,13 +109,20 @@ export default function CalendarPage() {
       year: format(currentDate, "yyyy"),
     });
 
-    const [leavesRes, holidaysRes] = await Promise.all([
+    const coverParams = new URLSearchParams({
+      from: format(monthStart, "yyyy-MM-dd"),
+      to: format(monthEnd, "yyyy-MM-dd"),
+    });
+
+    const [leavesRes, holidaysRes, coverRes] = await Promise.all([
       fetch(`/api/leave-requests?${params}`),
       fetch(`/api/holidays?${yearParam}`),
+      fetch(`/api/cover-shifts?${coverParams}`),
     ]);
 
     if (leavesRes.ok) setLeaves(await leavesRes.json());
     if (holidaysRes.ok) setHolidays(await holidaysRes.json());
+    setCoverShifts(coverRes.ok ? await coverRes.json() : []);
 
     setLoading(false);
   }, [currentDate]);
@@ -141,6 +158,12 @@ export default function CalendarPage() {
     return leaves.filter((l) => l.user.regionId === regionFilter);
   }, [leaves, regionFilter]);
 
+  const filteredCoverShifts = useMemo(() => {
+    if (regionFilter === "ALL") return coverShifts;
+    if (regionFilter === "UNASSIGNED") return [];
+    return coverShifts.filter((c) => c.locationId === regionFilter);
+  }, [coverShifts, regionFilter]);
+
   const coverByDate = useMemo(() => {
     const map = new Map<string, DailyCover>();
     coverDays.forEach((d) => map.set(d.date, d));
@@ -152,7 +175,7 @@ export default function CalendarPage() {
       <div>
         <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Team Calendar</h1>
         <p className="text-sm text-gray-500">
-          View all team absences and public holidays at a glance
+          Team absences, cover shifts and public holidays at a glance
         </p>
       </div>
 
@@ -188,6 +211,7 @@ export default function CalendarPage() {
             <MonthView
               currentDate={currentDate}
               leaves={filteredLeaves}
+              coverShifts={filteredCoverShifts}
               holidays={holidays}
               coverByDate={coverByDate}
               onPrevMonth={() => setCurrentDate((d) => subMonths(d, 1))}
@@ -200,6 +224,10 @@ export default function CalendarPage() {
       {/* Legend */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-500">
         <span className="font-medium">Legend:</span>
+        <div className="flex items-center gap-1.5">
+          <div className="h-2.5 w-2.5 rounded-sm border border-emerald-400 bg-emerald-50" />
+          Cover shift
+        </div>
         <div className="flex items-center gap-1.5">
           <div className="h-2.5 w-2.5 rounded-full bg-[#3b82f6]" />
           Annual

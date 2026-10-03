@@ -12,7 +12,7 @@ import {
   format,
   isSameDay,
 } from "date-fns";
-import { DayCell, type CalendarEvent, type HolidayEvent, type CoverIndicator } from "./day-cell";
+import { DayCell, type CalendarEvent, type HolidayEvent, type CoverIndicator, type CoverShiftEvent } from "./day-cell";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 type LeaveData = {
@@ -45,6 +45,7 @@ const WEEKDAYS_SHORT = ["S", "M", "T", "W", "T", "F", "S"];
 export function MonthView({
   currentDate,
   leaves,
+  coverShifts = [],
   holidays,
   coverByDate,
   onPrevMonth,
@@ -52,6 +53,8 @@ export function MonthView({
 }: {
   currentDate: Date;
   leaves: LeaveData[];
+  /** Accepted cover shifts; `date` is YYYY-MM-DD. */
+  coverShifts?: Array<{ offerId: string; userName: string; date: string; shiftName: string }>;
   holidays: HolidayData[];
   coverByDate?: Map<string, DailyCoverInput>;
   onPrevMonth: () => void;
@@ -82,6 +85,13 @@ export function MonthView({
         isStart: isSameDay(day, new Date(leave.startDate)),
         isEnd: isSameDay(day, new Date(leave.endDate)),
       }));
+  }
+
+  function getCoverShiftsForDay(day: Date): CoverShiftEvent[] {
+    const key = format(day, "yyyy-MM-dd");
+    return coverShifts
+      .filter((c) => c.date === key)
+      .map((c) => ({ id: c.offerId, userName: c.userName, shiftName: c.shiftName }));
   }
 
   function getHolidaysForDay(day: Date): HolidayEvent[] {
@@ -159,6 +169,7 @@ export function MonthView({
                 isCurrentMonth={isSameMonth(day, currentDate)}
                 isToday={isToday(day)}
                 events={getEventsForDay(day)}
+                coverShifts={getCoverShiftsForDay(day)}
                 holidays={getHolidaysForDay(day)}
                 cover={getCoverForDay(day)}
               />
