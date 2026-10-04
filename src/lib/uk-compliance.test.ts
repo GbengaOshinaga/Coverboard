@@ -423,3 +423,18 @@ test("linked spell pays 3 more days than the unlinked equivalent", () => {
   });
   assert.equal(linked - unlinked, 3);
 });
+
+test("SSP payable days count only qualifying (working) days", () => {
+  const d = (iso: string) => new Date(`${iso}T00:00:00Z`);
+  // Brian works Mon/Wed/Fri; off sick 19–30 Oct 2026 (post-reform: no waiting days).
+  assert.equal(calculateSspPayableDays(d("2026-10-19"), d("2026-10-30"), [0, 2, 4]), 6);
+  // Without known weekdays: Mon–Fri, as before.
+  assert.equal(calculateSspPayableDays(d("2026-10-19"), d("2026-10-30")), 10);
+  // Pre-reform: the 3 waiting days are the first 3 *qualifying* days.
+  assert.equal(calculateSspPayableDays(d("2026-01-05"), d("2026-01-16"), [0, 2, 4]), 3);
+  // Linked spells pay every qualifying day.
+  assert.equal(
+    calculateSspPayableDaysForSpell(d("2026-01-05"), d("2026-01-16"), { linkedToPriorPiw: true, qualifyingWeekdays: [0, 2, 4] }),
+    6
+  );
+});

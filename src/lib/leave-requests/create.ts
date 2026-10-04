@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { getWorkingWeek } from "@/lib/working-week-server";
+import { countWorkingDays } from "@/lib/working-week";
 import { recomputeBradfordScore } from "./bradford";
 import { getUserLeaveBalance } from "@/lib/leave-balances";
 import { countWeekdays } from "@/lib/utils";
@@ -15,7 +17,7 @@ import {
   getAweForUser,
   isMaternityLeaveType,
 } from "@/lib/smpCalculator";
-import { checkOnBehalf, noticeError } from "./rules";
+import { checkOnBehalf, isSicknessLeaveTypeName, noticeError } from "./rules";
 import { computeSspForSpell, type SspInfo } from "./ssp-spell";
 
 /**
@@ -150,16 +152,14 @@ export async function createLeaveRequest(
   if (noticeProblem) {
     return { ok: false, status: 400, error: noticeProblem };
   }
-  const evidenceConfirmed =
-    evidenceProvided === true ||
-    (leaveTypeConfig.requiresEvidence &&
-      typeof sicknessNote === "string" &&
-      sicknessNote.trim().length > 0);
+  // Sickness is self-certified for the first 7 days, so booking it never
+  // needs evidence — a fit note is recorded later (FitNote), which is what
+  // sets evidenceProvided. A typed note is not a fit note: counting it as one
+  // hid absences from the overdue fit-note list.
+  const isSicknessType = isSicknessLeaveTypeName(leaveTypeConfig.name);
+  const evidenceConfirmed = !isSicknessType && evidenceProvided === true;
 
-  // A manager logging a sick call won't have a fit note yet: the first seven
-  // days are self-certified, and the fit-note alert cron flags day 7+ spells
-  // still missing evidence.
-  if (leaveTypeConfig.requiresEvidence && !evidenceConfirmed && !onBehalf) {
+  if (leaveTypeConfig.requiresEvidence && !evidenceConfirmed && !isSicknessType) {
     return {
       ok: false,
       status: 400,
@@ -216,9 +216,13 @@ export async function createLeaveRequest(
     }
   }
 
-  // ── Unpaid Parental Leave: 4 weeks/year cap ────────────────────────
+  // ── Unpaid Parental Leave: 4 weeks a year (per child) ───────────────
+  // A "week" is their normal working week, so the cap is 4 × the days they
+  // work, counted on the days they'd have worked.
   const isUpl = /unpaid parental/i.test(leaveTypeConfig.name);
   if (isUpl) {
+    const workingWeek = await getWorkingWeek(userId, startDate);
+    const capDays = 4 * workingWeek.daysPerWeek;
     const yearStart = new Date(Date.UTC(startDate.getUTCFullYear(), 0, 1));
     const yearEnd = new Date(
       Date.UTC(startDate.getUTCFullYear(), 11, 31, 23, 59, 59, 999)
@@ -234,15 +238,15 @@ export async function createLeaveRequest(
       select: { startDate: true, endDate: true },
     });
     const usedUplDays = existingUpl.reduce(
-      (sum, r) => sum + countWeekdays(r.startDate, r.endDate),
+      (sum, r) => sum + countWorkingDays(r.startDate, r.endDate, workingWeek.weekdays),
       0
     );
-    const requestedDays = countWeekdays(startDate, endDate);
-    if (usedUplDays + requestedDays > 20) {
+    const requestedDays = countWorkingDays(startDate, endDate, workingWeek.weekdays);
+    if (usedUplDays + requestedDays > capDays) {
       return {
         ok: false,
         status: 400,
-        error: `Unpaid Parental Leave is capped at 4 weeks (20 working days) per year. You have ${20 - usedUplDays} days remaining.`,
+        error: `Unpaid Parental Leave is capped at 4 weeks (${capDays} working days) a year. ${Math.max(0, capDays - usedUplDays)} days remaining.`,
       };
     }
   }
@@ -325,9 +329,12 @@ export async function createLeaveRequest(
     note,
     sicknessNote: sicknessNote ?? undefined,
     userId,
-    evidenceProvided: leaveTypeConfig.requiresEvidence
-      ? evidenceConfirmed
-      : evidenceProvided ?? false,
+    // Sickness evidence comes only from recorded fit notes (see fit-notes.ts).
+    evidenceProvided: isSicknessType
+      ? false
+      : leaveTypeConfig.requiresEvidence
+        ? evidenceConfirmed
+        : evidenceProvided ?? false,
     kitDaysUsed: kitDaysUsed ?? 0,
     splitDaysUsed: splitDaysUsed ?? 0,
     hoursBooked: resolvedHoursBooked ?? undefined,

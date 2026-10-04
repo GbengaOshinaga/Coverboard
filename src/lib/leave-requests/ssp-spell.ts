@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { getWorkingWeek } from "@/lib/working-week-server";
 import {
   SSP_MAX_WEEKS,
   calculateSspPayableDaysForSpell,
@@ -75,10 +76,14 @@ export async function computeSspForSpell(input: {
     employee.averageWeeklyEarnings === null ? null : Number(employee.averageWeeklyEarnings)
   );
 
+  // SSP is payable on qualifying days — the days they normally work. Their
+  // working pattern says which; without one, the stored count (Mon–Fri days).
+  const workingWeek = await getWorkingWeek(userId, startDate, "ssp");
+
   const entitlement = calculateSspEntitlement({
     averageWeeklyEarnings,
     sspDaysPaidInPeriod: cumulativePrior,
-    qualifyingDaysPerWeek: employee.qualifyingDaysPerWeek,
+    qualifyingDaysPerWeek: workingWeek.daysPerWeek,
     // Pick pre- vs post-6-April-2026 SSP rules by the spell's start date.
     onDate: startDate,
   });
@@ -96,7 +101,7 @@ export async function computeSspForSpell(input: {
         estimatedCost: 0,
         remainingDaysAfter: Math.max(
           0,
-          SSP_MAX_WEEKS * Number(employee.qualifyingDaysPerWeek ?? 5) - cumulativePrior
+          SSP_MAX_WEEKS * workingWeek.daysPerWeek - cumulativePrior
         ),
         limitReached: entitlement.reason === "SSP 28-week limit reached",
       },
@@ -112,6 +117,7 @@ export async function computeSspForSpell(input: {
   // deduction; re-deducting would underpay.
   const requestedPayable = calculateSspPayableDaysForSpell(startDate, endDate, {
     linkedToPriorPiw: chain.linked,
+    qualifyingWeekdays: workingWeek.weekdays,
   });
   const capped = Math.min(requestedPayable, entitlement.remainingDays);
   const cumulativeAfter = cumulativePrior + capped;

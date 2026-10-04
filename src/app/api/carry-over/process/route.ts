@@ -89,6 +89,8 @@ export async function POST(request: Request) {
     leaveTypeName: string;
     unusedDays: number;
     daysCarried: number;
+    /** "hours" for irregular/zero-hours staff, whose holiday is in hours. */
+    unit: "days" | "hours";
   }> = [];
 
   for (const user of ukUsers) {
@@ -102,9 +104,17 @@ export async function POST(request: Request) {
     const annualLeave = balances.find((b) => b.leaveTypeName === "Annual Leave");
     if (!annualLeave) continue;
 
+    // Irregular/zero-hours holiday is in hours: carry hours, with the cap
+    // (set in days) converted at their average day. Carry-over stored for
+    // them is in hours, and their next year's hours balance adds it back.
+    const isHours = annualLeave.unit === "hours";
     const baseAllowance = annualLeave.allowance - annualLeave.carryOver.remaining;
-    const unusedDays = Math.max(0, baseAllowance - annualLeave.used);
-    const daysCarried = Math.min(unusedDays, org.ukCarryOverMax);
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+    const unusedDays = round2(Math.max(0, baseAllowance - annualLeave.used));
+    const cap = isHours
+      ? org.ukCarryOverMax * (annualLeave.avgHoursPerDay ?? 7.5)
+      : org.ukCarryOverMax;
+    const daysCarried = round2(Math.min(unusedDays, cap));
 
     if (daysCarried <= 0) continue;
 
@@ -116,6 +126,7 @@ export async function POST(request: Request) {
       leaveTypeName: annualLeave.leaveTypeName,
       unusedDays,
       daysCarried,
+      unit: isHours ? "hours" : "days",
     });
 
     if (!dryRun) {

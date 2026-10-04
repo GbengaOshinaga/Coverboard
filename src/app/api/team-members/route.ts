@@ -34,6 +34,7 @@ export async function GET() {
       department: true,
       countryCode: true,
       workCountry: true,
+      serviceStartDate: true,
       isActive: true,
       regionId: true,
       region: {

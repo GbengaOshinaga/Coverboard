@@ -56,7 +56,7 @@ test("flags an active SSP leave at day 8 with no evidence", () => {
   assert.equal(out[0]!.daysElapsed, 8);
 });
 
-test("includes leaves that ended in the last 7 days (recently-ended grace window)", () => {
+test("includes leaves that ended in the last 90 days (still worth chasing)", () => {
   const out = selectOverdueFitNotes(
     [
       leave({
@@ -120,12 +120,27 @@ test("ignores leaves under the 7-day fit-note threshold", () => {
   assert.equal(day3.length, 0);
 });
 
-test("ignores leaves that ended more than 7 days ago (no longer actionable)", () => {
+test("includes a September absence that ended weeks ago", () => {
+  // Frank: off 14–28 Sept, fit note due from 21 Sept, none recorded; checked
+  // on 4 Oct. It used to drop off after 7 days.
+  const out = selectOverdueFitNotes(
+    [
+      leave({
+        startDate: daysAgo(20),
+        endDate: daysAgo(10),
+      }),
+    ],
+    NOW
+  );
+  assert.equal(out.length, 1);
+});
+
+test("ignores leaves that ended more than 90 days ago", () => {
   const longGone = selectOverdueFitNotes(
     [
       leave({
-        startDate: daysAgo(30),
-        endDate: daysAgo(20),
+        startDate: daysAgo(120),
+        endDate: daysAgo(100),
       }),
     ],
     NOW

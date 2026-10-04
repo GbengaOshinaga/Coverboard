@@ -253,20 +253,11 @@ export function isMaternityLeaveType(
 }
 
 /**
- * Pull the 8-week relevant period of earnings ending at `beforeDate`
- * (exclusive) and compute AWE for statutory payments (SMP/SAP/ShPP/SPP/SNCP and
- * SSP). Returns `null` when no earnings history exists — the caller should
- * surface a warning so payroll knows to request the figure manually.
- *
- * IMPORTANT: statutory AWE is NOT the holiday-pay average. Per HMRC, all weeks
- * in the relevant period are included and **blank weeks count as zero pay** —
- * the divisor stays at 8 (the number of weeks in the period). We therefore do
- * NOT drop `isZeroPayWeek` rows here (that exclusion is the Working Time
- * Regulations holiday-pay rule, handled separately in `holidayPay.ts`).
- *
- * Known limitation: for employees with fewer than 8 weeks of history (new
- * starters) HMRC uses a smaller divisor; `calculateAWE` still divides by 8, so
- * AWE is understated in that edge case until an employment-start date is tracked.
+ * Average weekly earnings for SSP / SMP: the earnings recorded in the 8 weeks
+ * before `beforeDate` (the relevant period), averaged over the weeks recorded.
+ * Zero-pay weeks recorded as rows count (they pull the average down, as HMRC
+ * expects); unrecorded weeks are treated as missing data, not £0. Returns null
+ * when nothing is recorded in the period.
  */
 export async function getAweForUser(
   userId: string,
@@ -275,33 +266,22 @@ export async function getAweForUser(
   // Deferred require to keep smpCalculator testable without pulling the
   // Prisma client into node:test suites that stub the DB.
   const { prisma } = await import("@/lib/prisma");
-  const [rows, user] = await Promise.all([
-    prisma.weeklyEarning.findMany({
-      where: { userId, weekStartDate: { lt: beforeDate } },
-      orderBy: { weekStartDate: "desc" },
-      take: 8,
-    }),
-    prisma.user.findUnique({
-      where: { id: userId },
-      select: { serviceStartDate: true },
-    }),
-  ]);
+  // The relevant period is the 8 weeks before the date — not "the last 8
+  // records", which could be months old.
+  const windowStart = new Date(beforeDate.getTime() - 8 * 7 * 24 * 60 * 60 * 1000);
+  const rows = await prisma.weeklyEarning.findMany({
+    where: { userId, weekStartDate: { gte: windowStart, lt: beforeDate } },
+    orderBy: { weekStartDate: "asc" },
+  });
   if (rows.length === 0) return null;
 
-  // New starters with <8 weeks of employment use a smaller divisor (the number
-  // of weeks employed) rather than the standard 8 — otherwise the average is
-  // understated (HMRC SPM170600). Established employees keep ÷8.
-  let periodWeeks = 8;
-  if (user?.serviceStartDate) {
-    const weeksEmployed = Math.floor(
-      (beforeDate.getTime() - user.serviceStartDate.getTime()) /
-        (7 * 24 * 60 * 60 * 1000)
-    );
-    if (weeksEmployed < 8) periodWeeks = Math.max(1, weeksEmployed);
-  }
-
-  const earnings = rows.map((r) => Number(r.grossEarnings)).reverse();
-  return calculateAWE(earnings, periodWeeks);
+  // Average over the weeks actually recorded in that period. Weeks with no
+  // pay are recorded as zero rows (isZeroPayWeek) and still count; weeks with
+  // no record are missing data, not £0 — dividing them in understated AWE
+  // (e.g. two weeks of £360 and £420 came out as £97.50 instead of £390).
+  // This also covers new starters with fewer than 8 weeks of employment.
+  const earnings = rows.map((r) => Number(r.grossEarnings));
+  return calculateAWE(earnings, rows.length);
 }
 
 /**

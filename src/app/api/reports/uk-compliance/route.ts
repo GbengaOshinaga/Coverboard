@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { countWorkingDays, resolveWorkingWeek, weekdaysFromPatterns } from "@/lib/working-week";
 import { bradfordForSickness } from "@/lib/sickness-spells";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -6,7 +7,6 @@ import { prisma } from "@/lib/prisma";
 import {
   SSP_MAX_WEEKS,
   UK_LEL_WEEKLY,
-  calculateEstimatedSspCost,
   calculateSspPayableDays,
   calculateSspDailyRate,
   calculateSspWeeklyRate,
@@ -73,6 +73,7 @@ export async function GET(request: Request) {
       employmentType: true,
       qualifyingDaysPerWeek: true,
       averageWeeklyEarnings: true,
+      workPatterns: { select: { weekday: true, effectiveFrom: true, effectiveTo: true } },
       leaveRequests: {
         where: {
           status: "APPROVED",
@@ -128,7 +129,13 @@ export async function GET(request: Request) {
   });
 
   const sspCurrent = users.flatMap((user) => {
-    const qDays = user.qualifyingDaysPerWeek ?? 5;
+    // SSP is payable on the days they normally work: their working pattern's
+    // days when they have one, else their stored qualifying-day count.
+    const workingWeek = resolveWorkingWeek(
+      weekdaysFromPatterns(user.workPatterns, new Date()),
+      user.qualifyingDaysPerWeek
+    );
+    const qDays = workingWeek.daysPerWeek;
     // Post-reform SSP rate is capped at 80% of AWE; fall back to the flat rate
     // when earnings are unknown.
     const weeklyRate = calculateSspWeeklyRate(
@@ -141,8 +148,16 @@ export async function GET(request: Request) {
     return user.leaveRequests
       .filter((r) => r.leaveType.name.includes("SSP") && r.endDate >= new Date())
       .map((r) => {
-        const daysElapsed = countWeekdays(r.startDate, new Date());
-        const payableToDate = calculateSspPayableDays(r.startDate, new Date());
+        const now = new Date();
+        const toDate = r.endDate < now ? r.endDate : now;
+        const started = r.startDate <= now;
+        const daysElapsed = started ? countWorkingDays(r.startDate, toDate, workingWeek.weekdays) : 0;
+        const payableToDate = started
+          ? calculateSspPayableDays(r.startDate, toDate, workingWeek.weekdays)
+          : 0;
+        // The stored SSP days already reflect linked spells and the 28-week
+        // cap, so the whole-absence figure uses them.
+        const sspDays = r.sspDaysPaid ?? 0;
         return {
           userId: user.id,
           name: user.name,
@@ -152,12 +167,8 @@ export async function GET(request: Request) {
           dailyRate,
           daysElapsed,
           payableDaysToDate: payableToDate,
-          estimatedCostToDate: calculateEstimatedSspCost(
-            r.startDate,
-            new Date(),
-            weeklyRate,
-            qDays
-          ),
+          estimatedCostToDate: Number((dailyRate * Math.min(payableToDate, sspDays || payableToDate)).toFixed(2)),
+          estimatedTotalCost: Number((dailyRate * sspDays).toFixed(2)),
           sspDaysPaid: r.sspDaysPaid ?? 0,
           sspLimitReached: r.sspLimitReached ?? false,
           maxDays,
@@ -363,6 +374,7 @@ export async function GET(request: Request) {
         { key: "remainingDays", header: "Days remaining" },
         { key: "sspLimitReached", header: "Limit reached" },
         { key: "estimatedCostToDate", header: "Estimated cost to date (£)" },
+        { key: "estimatedTotalCost", header: "Estimated cost, whole absence (£)" },
       ],
       rows: sspCurrent,
     },

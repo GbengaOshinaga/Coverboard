@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { syncDaysFromPattern } from "@/lib/working-week-server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -139,6 +140,10 @@ export async function PUT(
       })),
     }),
   ]);
+
+  // Holiday pay, entitlement and SSP read the stored day counts in places;
+  // keep them matching the days this pattern actually works.
+  await syncDaysFromPattern(id);
 
   await recordAudit({
     organizationId: orgId,

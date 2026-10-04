@@ -8,6 +8,8 @@ type LeaveBalance = {
   leaveTypeName: string;
   leaveTypeColor: string;
   allowance: number;
+  /** Week-based statutory leave: allowance in weeks (allowance is in days). */
+  allowanceWeeks?: number;
   proRatedEntitlement?: number;
   entitlementHours?: number;
   unit?: "days" | "hours";
@@ -110,6 +112,8 @@ function BalanceCard({
               </span>
               <span className="text-xs text-gray-400">
                 / {balance.allowance} {prominent ? "days left" : "remaining"}
+                {balance.allowanceWeeks !== undefined &&
+                  ` (${balance.allowanceWeeks} week${balance.allowanceWeeks === 1 ? "" : "s"})`}
               </span>
             </>
           ) : (

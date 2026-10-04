@@ -35,6 +35,7 @@ type Member = {
   department?: string | null;
   countryCode: string;
   workCountry: string | null;
+  serviceStartDate?: string | null;
   regionId?: string | null;
   region?: { id: string; name: string; color: string | null; isActive: boolean } | null;
   _count?: { leaveRequests: number };
@@ -267,6 +268,7 @@ export default function TeamPage() {
     department?: string;
     countryCode: string;
     workCountry: string;
+    serviceStartDate?: string | null;
   }) {
     if (!data.id) return;
 
@@ -284,6 +286,8 @@ export default function TeamPage() {
         department: data.department ?? null,
         countryCode: data.countryCode,
         workCountry: data.workCountry,
+        // Drives holiday proration for mid-year starters and SMP service.
+        serviceStartDate: data.serviceStartDate ?? null,
       }),
     });
 

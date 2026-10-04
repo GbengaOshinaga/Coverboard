@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getWorkingWeek } from "@/lib/working-week-server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -97,7 +98,7 @@ export async function POST(
     hours_worked: Number(e.hoursWorked),
     is_zero_pay_week: e.isZeroPayWeek,
   }));
-  const averageDailyRate = entries.length > 0 ? calculateHolidayPayRate(weeks) : null;
+  const averageDailyRate = entries.length > 0 ? calculateHolidayPayRate(weeks, (await getWorkingWeek(memberId)).daysPerWeek) : null;
   const paidWeeksCount = weeks.filter((w) => !w.is_zero_pay_week).length;
 
   return NextResponse.json(

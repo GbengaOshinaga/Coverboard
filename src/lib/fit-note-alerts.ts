@@ -22,12 +22,18 @@
  *     evidence is a historical compliance gap (worth a separate report) but
  *     not an actionable alert — the employer can't retroactively obtain a
  *     fit note for a finished absence. We include leaves that ended in the
- *     last 7 days so admins have a chance to chase recently-returned
+ *     last 90 days so admins have a chance to chase recently-returned
  *     employees who still owe a fit note.
  */
 
 const FIT_NOTE_THRESHOLD_DAYS = 7;
-const RECENTLY_ENDED_GRACE_DAYS = 7;
+/**
+ * How long after an absence ends its missing fit note stays on the list.
+ * Employers can still get a backdated fit note (and need one to support SSP
+ * paid past day 7), so a finished absence is still worth chasing — dropping
+ * it after a week hid real gaps (an absence that ended 10 days ago showed 0).
+ */
+const RECENTLY_ENDED_GRACE_DAYS = 90;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export type SicknessLeaveRow = {

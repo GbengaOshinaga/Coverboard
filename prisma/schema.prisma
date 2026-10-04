@@ -172,6 +172,9 @@ model LeaveType {
   isPaid           Boolean       @default(true)
   category         LeaveCategory @default(PAID)
   defaultDays      Int
+  /// What defaultDays / policy allowances count. WEEKS means "weeks of their
+  /// normal working week" (statutory family leave), converted per person.
+  allowanceUnit    LeaveAllowanceUnit @default(DAYS)
   requiresEvidence Boolean       @default(false)
   minNoticeDays    Int           @default(0)
   durationLogic    String?
@@ -575,4 +578,9 @@ model CoverOffer {
   @@index([organizationId, status])
   @@index([shiftTypeId, date])
   @@index([userId, status])
+}
+
+enum LeaveAllowanceUnit {
+  DAYS
+  WEEKS
 }

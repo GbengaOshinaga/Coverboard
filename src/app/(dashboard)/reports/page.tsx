@@ -88,6 +88,10 @@ type UKReport = {
     name: string;
     daysElapsed: number;
     estimatedCostToDate: number;
+    estimatedTotalCost: number;
+    sspDaysPaid: number;
+    dailyRate: number;
+    qualifyingDaysPerWeek: number;
     startDate: string;
     endDate: string;
   }>;
@@ -199,6 +203,7 @@ type RolloverPreviewRow = {
   leaveTypeName: string;
   unusedDays: number;
   daysCarried: number;
+  unit?: "days" | "hours";
 };
 
 /** Monday (YYYY-MM-DD) of the week containing a YYYY-MM-DD date. */
@@ -490,8 +495,11 @@ export default function ReportsPage() {
         toCsv(report.sspLiability, [
           { key: "name", label: "Employee" },
           { key: "startDate", label: "Start date" },
-          { key: "daysElapsed", label: "Days elapsed" },
-          { key: "estimatedCostToDate", label: "Estimated cost (GBP)" },
+          { key: "endDate", label: "End date" },
+          { key: "sspDaysPaid", label: "SSP days" },
+          { key: "dailyRate", label: "Daily rate (GBP)" },
+          { key: "estimatedCostToDate", label: "Cost to date (GBP)" },
+          { key: "estimatedTotalCost", label: "Whole absence (GBP)" },
         ])
       );
     } else if (tab === "parental" && report) {
@@ -1243,11 +1251,11 @@ export default function ReportsPage() {
                       <thead>
                         <tr className="border-b border-gray-100 text-left text-xs font-medium uppercase text-gray-500">
                           <th className="pb-2 pr-4">Employee</th>
-                          <th className="pb-2 pr-4">Start date</th>
-                          <th className="pb-2 pr-4 text-right">
-                            Days elapsed
-                          </th>
-                          <th className="pb-2 text-right">Estimated cost</th>
+                          <th className="pb-2 pr-4">Dates</th>
+                          <th className="pb-2 pr-4 text-right">SSP days</th>
+                          <th className="pb-2 pr-4 text-right">Daily rate</th>
+                          <th className="pb-2 pr-4 text-right">Cost to date</th>
+                          <th className="pb-2 text-right">Whole absence</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1260,15 +1268,24 @@ export default function ReportsPage() {
                               {row.name}
                             </td>
                             <td className="py-2.5 pr-4 text-gray-600">
-                              {new Date(row.startDate).toLocaleDateString(
-                                "en-GB"
-                              )}
+                              {new Date(row.startDate).toLocaleDateString("en-GB")}
+                              {" – "}
+                              {new Date(row.endDate).toLocaleDateString("en-GB")}
                             </td>
-                            <td className="py-2.5 pr-4 text-right text-gray-600">
-                              {row.daysElapsed}
+                            <td
+                              className="py-2.5 pr-4 text-right text-gray-600"
+                              title={`Counted on the ${row.qualifyingDaysPerWeek} days a week they work`}
+                            >
+                              {row.sspDaysPaid}
+                            </td>
+                            <td className="py-2.5 pr-4 text-right font-mono text-gray-600">
+                              &pound;{row.dailyRate.toFixed(2)}
+                            </td>
+                            <td className="py-2.5 pr-4 text-right font-mono text-gray-600">
+                              &pound;{row.estimatedCostToDate.toFixed(2)}
                             </td>
                             <td className="py-2.5 text-right font-mono font-medium">
-                              &pound;{row.estimatedCostToDate.toFixed(2)}
+                              &pound;{row.estimatedTotalCost.toFixed(2)}
                             </td>
                           </tr>
                         ))}
@@ -1912,9 +1929,11 @@ export default function ReportsPage() {
                             </td>
                             <td className="py-2.5 pr-4 text-right font-mono text-gray-600">
                               {row.unusedDays}
+                              {row.unit === "hours" ? "h" : " days"}
                             </td>
                             <td className="py-2.5 text-right font-mono font-medium">
                               {row.daysCarried}
+                              {row.unit === "hours" ? "h" : " days"}
                             </td>
                           </tr>
                         ))}

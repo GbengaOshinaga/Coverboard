@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { countWorkingDays, prorateForStartDate, resolveWorkingWeek, weekdaysFromPatterns, weeksToWorkingDays } from "@/lib/working-week";
 import { countWeekdays } from "@/lib/utils";
 import {
   calculateUkProRatedAnnualLeave,
@@ -11,6 +12,8 @@ export type LeaveBalance = {
   leaveTypeName: string;
   leaveTypeColor: string;
   allowance: number;
+  /** For week-based statutory leave: the allowance in weeks (allowance is days). */
+  allowanceWeeks?: number;
   proRatedEntitlement?: number;
   /**
    * Statutory holiday accrued to date in HOURS, for irregular/zero-hours
@@ -102,6 +105,8 @@ export async function getUserLeaveBalances(
       organizationId: true,
       employmentType: true,
       daysWorkedPerWeek: true,
+      serviceStartDate: true,
+      workPatterns: { select: { weekday: true, effectiveFrom: true, effectiveTo: true } },
       weeklyHours: {
         orderBy: { weekStartDate: "asc" },
         select: { hoursWorked: true, weekStartDate: true },
@@ -127,6 +132,17 @@ export async function getUserLeaveBalances(
 
   const yearStart = new Date(year, 0, 1);
   const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
+
+  // Which days they work: their working pattern's days, else their stored
+  // days-per-week (Mon–Fri assumed). Drives part-time entitlement, how many
+  // days a booking uses, and how big a statutory "week" of leave is.
+  const workingWeek = resolveWorkingWeek(
+    weekdaysFromPatterns(user.workPatterns, new Date()),
+    user.daysWorkedPerWeek
+  );
+  // A starter only gets the bank holidays left after they join.
+  const bankHolidaysFrom =
+    user.serviceStartDate && user.serviceStartDate > yearStart ? user.serviceStartDate : yearStart;
 
   // Irregular-hours / zero-hours workers accrue statutory holiday at 12.07% of
   // the hours they actually work (post-2024 method), measured in HOURS. We sum
@@ -173,7 +189,7 @@ export async function getUserLeaveBalances(
         organizationId: user.organizationId,
         region: ukBankHolidayRegion,
         date: {
-          gte: yearStart,
+          gte: bankHolidaysFrom,
           lte: yearEnd,
         },
       },
@@ -211,7 +227,13 @@ export async function getUserLeaveBalances(
   return leaveTypes.map((lt) => {
     const policy = lt.leavePolicies[0];
     const baseAllowance = policy?.annualAllowance ?? lt.defaultDays;
-    let allowance = baseAllowance;
+    // Statutory family leave is set in weeks of their normal working week:
+    // 2 weeks' paternity is 10 days for a 5-day worker, 6 for a 3-day worker.
+    const allowanceWeeks = lt.allowanceUnit === "WEEKS" ? baseAllowance : undefined;
+    let allowance =
+      allowanceWeeks !== undefined
+        ? weeksToWorkingDays(allowanceWeeks, workingWeek.daysPerWeek)
+        : baseAllowance;
     let proRatedEntitlement: number | undefined;
     let entitlementHours: number | undefined;
     let unit: "days" | "hours" = "days";
@@ -230,13 +252,20 @@ export async function getUserLeaveBalances(
       if (lt.applyProRata && isUk) {
         const calculatedEntitlement = calculateUkProRatedAnnualLeave({
           employmentType: user.employmentType,
-          daysWorkedPerWeek: user.daysWorkedPerWeek,
+          daysWorkedPerWeek: workingWeek.daysPerWeek,
           weeklyHours: user.weeklyHours.map((h) => h.hoursWorked),
           fullTimeHoursPerWeek,
         });
         if (calculatedEntitlement !== null) {
           proRatedEntitlement = calculatedEntitlement;
           allowance = proRatedEntitlement;
+        }
+        // Started part-way through the year: only the share of the year
+        // they're employed for, rounded up.
+        const starterAllowance = prorateForStartDate(allowance, user.serviceStartDate, yearStart, yearEnd);
+        if (starterAllowance !== allowance) {
+          proRatedEntitlement = starterAllowance;
+          allowance = starterAllowance;
         }
       }
       allowance = adjustAllowanceForBankHolidays({
@@ -258,11 +287,9 @@ export async function getUserLeaveBalances(
     const carryOverRemaining = carryOverExpired
       ? 0
       : carryOver?.daysRemaining ?? 0;
-    // Carry-over is tracked in days; don't fold it into an hours allowance
-    // (hours-based carry-over is a future concern, Phase 3+).
-    if (unit !== "hours") {
-      allowance += carryOverRemaining;
-    }
+    // Carry-over is stored in the balance's own unit (hours for irregular /
+    // zero-hours staff — see carry-over/process), so it adds straight on.
+    allowance += carryOverRemaining;
 
     let used = 0;
     let pending = 0;
@@ -272,7 +299,8 @@ export async function getUserLeaveBalances(
 
       const start = req.startDate < yearStart ? yearStart : req.startDate;
       const end = req.endDate > yearEnd ? yearEnd : req.endDate;
-      const days = countWeekdays(start, end);
+      // Only the days they'd have worked come off their balance.
+      const days = countWorkingDays(start, end, workingWeek.weekdays);
       // Hours-unit balances deduct in hours: the hours stored at booking, or a
       // fallback of working-days × the worker's average day for legacy rows
       // (booked before Phase 2) that have no hoursBooked.
@@ -293,6 +321,7 @@ export async function getUserLeaveBalances(
       leaveTypeName: lt.name,
       leaveTypeColor: lt.color,
       allowance,
+      allowanceWeeks,
       proRatedEntitlement,
       entitlementHours,
       unit,

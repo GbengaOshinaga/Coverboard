@@ -1,4 +1,4 @@
-import { countWeekdays } from "@/lib/utils";
+import { countWorkingDays } from "@/lib/working-week";
 import {
   isHoursAveragedEmploymentType,
   type EmploymentType as EmploymentTypeValue,
@@ -130,14 +130,16 @@ export function calculateIrregularHoursAccrual(loggedHours: number): number {
  */
 export function calculateUkProRatedAnnualLeave(input: UKContractInput): number | null {
   const fteHours = input.fullTimeHoursPerWeek ?? FTE_STANDARD_HOURS_PER_WEEK;
-  if (input.employmentType === EmploymentType.PART_TIME) {
-    return Math.ceil((input.daysWorkedPerWeek / 5) * 28);
-  }
   if (isHoursAveragedEmploymentType(input.employmentType)) {
     if (input.weeklyHours.length === 0) return null;
     return Math.ceil(calculateVariableHoursFte(input.weeklyHours, fteHours) * 28);
   }
-  return 28;
+  // 5.6 weeks of their working week, capped at 28 days. Applies whatever the
+  // contract label: a "full-time" record that only works 3 days is part-time
+  // for holiday purposes. A 5-day week gives exactly 28.
+  const days = input.daysWorkedPerWeek;
+  if (!(days > 0)) return 28;
+  return Math.min(28, Math.ceil((days / 5) * 28));
 }
 
 export function calculateBradfordFactor(absenceSpells: number, absenceDays: number): number {
@@ -151,8 +153,16 @@ export function calculateBradfordFactor(absenceSpells: number, absenceDays: numb
  * payable from day 1, so every qualifying weekday counts. Spells that started
  * before the reform still serve the 3 unpaid waiting days (transition handling).
  */
-export function calculateSspPayableDays(startDate: Date, endDate: Date): number {
-  const consecutiveDays = countWeekdays(startDate, endDate);
+export function calculateSspPayableDays(
+  startDate: Date,
+  endDate: Date,
+  /**
+   * Qualifying weekdays (Monday-first) — the days they normally work. SSP is
+   * only payable on these. Omitted: Mon–Fri.
+   */
+  qualifyingWeekdays: number[] | null = null
+): number {
+  const consecutiveDays = countWorkingDays(startDate, endDate, qualifyingWeekdays);
   if (startDate >= SSP_REFORM_DATE) {
     return consecutiveDays;
   }
@@ -178,11 +188,12 @@ export function calculateSspPayableDays(startDate: Date, endDate: Date): number 
 export function calculateSspPayableDaysForSpell(
   startDate: Date,
   endDate: Date,
-  opts: { linkedToPriorPiw: boolean }
+  opts: { linkedToPriorPiw: boolean; qualifyingWeekdays?: number[] | null }
 ): number {
+  const weekdays = opts.qualifyingWeekdays ?? null;
   return opts.linkedToPriorPiw
-    ? countWeekdays(startDate, endDate)
-    : calculateSspPayableDays(startDate, endDate);
+    ? countWorkingDays(startDate, endDate, weekdays)
+    : calculateSspPayableDays(startDate, endDate, weekdays);
 }
 
 /**
