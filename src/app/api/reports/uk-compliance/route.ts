@@ -20,9 +20,18 @@ import {
   hasUKEmployees,
   ukComplianceUnavailablePayload,
 } from "@/lib/uk-workforce";
-import { countWeekdays } from "@/lib/utils";
 import { isHoursAveragedEmploymentType } from "@/lib/employment-types";
 import { recordReadAudit, requestAuditContext } from "@/lib/audit";
+import { keepingInTouchRule } from "@/lib/keeping-in-touch";
+import {
+  UK_COMPLIANCE_TABLES,
+  isUkComplianceTableId,
+  type BradfordRow,
+  type HolidayUsageRow,
+  type ParentalRow,
+  type SspLiabilityRow,
+  type UkComplianceReport,
+} from "@/lib/uk-compliance-columns";
 import type { AnyPlan } from "@/lib/plans";
 import {
   parseExportFormat,
@@ -30,7 +39,6 @@ import {
   toExcel,
   EXPORT_CONTENT_TYPE,
   exportFilename,
-  type ExportColumn,
 } from "@/lib/export-formats";
 
 export async function GET(request: Request) {
@@ -85,7 +93,7 @@ export async function GET(request: Request) {
   });
 
   const holidayUsage = await Promise.all(
-    users.map(async (user) => {
+    users.map(async (user): Promise<HolidayUsageRow> => {
       const balances = await prisma.leaveRequest.findMany({
         where: {
           userId: user.id,
@@ -99,11 +107,12 @@ export async function GET(request: Request) {
       // Irregular/zero-hours workers take holiday in hours (every user here is
       // already workCountry=GB), so report their usage in hours.
       const isHours = isHoursAveragedEmploymentType(user.employmentType);
+      const weekdays = weekdaysFromPatterns(user.workPatterns, new Date());
       const taken = isHours
         ? Number(
             balances.reduce((sum, r) => sum + (r.hoursBooked ?? 0), 0).toFixed(1)
           )
-        : balances.reduce((sum, r) => sum + countWeekdays(r.startDate, r.endDate), 0);
+        : balances.reduce((sum, r) => sum + countWorkingDays(r.startDate, r.endDate, weekdays), 0);
       return {
         userId: user.id,
         name: user.name,
@@ -115,7 +124,7 @@ export async function GET(request: Request) {
     })
   );
 
-  const bradfordReport = users.map((user) => {
+  const bradfordReport = users.map((user): BradfordRow => {
     const sickness = user.leaveRequests.filter((r) => r.leaveType.name.includes("Sick") || r.leaveType.name.includes("SSP"));
     const { spells, days, score } = bradfordForSickness(sickness);
     return {
@@ -147,7 +156,7 @@ export async function GET(request: Request) {
     const maxDays = SSP_MAX_WEEKS * qDays;
     return user.leaveRequests
       .filter((r) => r.leaveType.name.includes("SSP") && r.endDate >= new Date())
-      .map((r) => {
+      .map((r): SspLiabilityRow => {
         const now = new Date();
         const toDate = r.endDate < now ? r.endDate : now;
         const started = r.startDate <= now;
@@ -161,8 +170,8 @@ export async function GET(request: Request) {
         return {
           userId: user.id,
           name: user.name,
-          startDate: r.startDate,
-          endDate: r.endDate,
+          startDate: r.startDate.toISOString(),
+          endDate: r.endDate.toISOString(),
           qualifyingDaysPerWeek: qDays,
           dailyRate,
           daysElapsed,
@@ -194,8 +203,9 @@ export async function GET(request: Request) {
             "Adoption Leave",
           ].includes(r.leaveType.name) && r.endDate >= today
       )
-      .map((r) => {
-        const cap = r.leaveType.name === "Shared Parental Leave (SPL)" ? 20 : 10;
+      .map((r): ParentalRow => {
+        const kit = keepingInTouchRule(r.leaveType.name);
+        const used = kit ? r[kit.field] : 0;
         const isMaternity = isMaternityLeaveType(r.leaveType.name);
         const smp = isMaternity
           ? getCurrentSMPPhase({
@@ -218,18 +228,18 @@ export async function GET(request: Request) {
           userId: user.id,
           name: user.name,
           leaveType: r.leaveType.name,
-          startDate: r.startDate,
-          expectedReturnDate: r.endDate,
-          kitDaysUsed: r.kitDaysUsed,
-          kitDaysCap: cap,
-          kitDaysRemaining: Math.max(0, cap - r.kitDaysUsed),
+          startDate: r.startDate.toISOString(),
+          expectedReturnDate: r.endDate.toISOString(),
+          keepingInTouch: kit
+            ? { kind: kit.kind, used, allowed: kit.allowed, remaining: Math.max(0, kit.allowed - used) }
+            : null,
           smp: smp
             ? {
                 phase: smp.phase,
                 label: smp.label,
                 weeklyRate: smp.weeklyRate,
-                phase1EndDate: smp.phase1EndDate,
-                phase2EndDate: smp.phase2EndDate,
+                phase1EndDate: smp.phase1EndDate.toISOString(),
+                phase2EndDate: smp.phase2EndDate.toISOString(),
                 averageWeeklyEarnings:
                   r.smpAverageWeeklyEarnings === null
                     ? null
@@ -286,142 +296,48 @@ export async function GET(request: Request) {
     context: requestAuditContext(request),
   });
 
+  const report: UkComplianceReport = {
+    workforce,
+    holidayUsage,
+    absenceTrigger: { threshold, rows: bradfordReport },
+    sspLiability: sspCurrent,
+    parentalTracker: parental,
+    rightToWork: rightToWorkData,
+  };
+
   const format = parseExportFormat(searchParams.get("format"));
   if (format === "json") {
-    return NextResponse.json({
-      workforce,
-      holidayUsage,
-      absenceTrigger: {
-        threshold,
-        rows: bradfordReport,
-      },
-      sspLiability: sspCurrent,
-      parentalTracker: parental,
-      rightToWork: rightToWorkData,
-    });
+    return NextResponse.json(report);
   }
 
-  // Tabular exports: the compliance report has 5 distinct tables. CSV
-  // serialises the Bradford table only (the most-requested by HR for
-  // tribunal evidence); Excel writes every table to its own sheet.
-  const bradfordColumns: ExportColumn<(typeof bradfordReport)[number]>[] = [
-    { key: "userId", header: "Employee ID" },
-    { key: "name", header: "Name" },
-    { key: "spells", header: "Absence spells" },
-    { key: "days", header: "Absence days" },
-    { key: "score", header: "Bradford score" },
-    { key: "flagged", header: "Flagged" },
-  ];
-
-  const filename = exportFilename(
-    "coverboard-uk-compliance",
-    format,
-    new Date()
-  );
-
+  // Tables and their columns live in uk-compliance-columns so the API, the
+  // Reports page and the compliance pack can't drift apart.
   if (format === "csv") {
-    const body = toCsv(bradfordReport, bradfordColumns);
+    // One table per CSV (?table=ssp etc.); Bradford when none is named.
+    const tableParam = searchParams.get("table");
+    const id = isUkComplianceTableId(tableParam) ? tableParam : "bradford";
+    const t = UK_COMPLIANCE_TABLES[id];
+    const sheet = t.sheet(report);
+    const body = toCsv(sheet.rows, sheet.columns);
     return new NextResponse(body, {
       status: 200,
       headers: {
         "Content-Type": EXPORT_CONTENT_TYPE.csv,
-        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Disposition": `attachment; filename="${exportFilename(t.file, "csv", new Date())}"`,
         "Cache-Control": "no-store",
       },
     });
   }
 
-  // Excel — multi-sheet
-  const buffer = await toExcel([
-    {
-      name: "Bradford Factor",
-      columns: bradfordColumns,
-      rows: bradfordReport,
-    },
-    {
-      name: "Holiday usage",
-      columns: [
-        { key: "userId", header: "Employee ID" },
-        { key: "name", header: "Name" },
-        { key: "department", header: "Department" },
-        { key: "contractType", header: "Contract type" },
-        { key: "taken", header: "Days taken (YTD)" },
-      ],
-      rows: holidayUsage,
-    },
-    {
-      name: "SSP liability",
-      columns: [
-        { key: "userId", header: "Employee ID" },
-        { key: "name", header: "Name" },
-        {
-          key: (r) => {
-            const sd = (r as { startDate: Date }).startDate;
-            return sd instanceof Date ? sd.toISOString() : sd;
-          },
-          header: "Spell start",
-        },
-        {
-          key: (r) => {
-            const ed = (r as { endDate: Date }).endDate;
-            return ed instanceof Date ? ed.toISOString() : ed;
-          },
-          header: "Spell end",
-        },
-        { key: "qualifyingDaysPerWeek", header: "Qualifying days/wk" },
-        { key: "dailyRate", header: "Daily SSP rate (£)" },
-        { key: "sspDaysPaid", header: "Days paid" },
-        { key: "remainingDays", header: "Days remaining" },
-        { key: "sspLimitReached", header: "Limit reached" },
-        { key: "estimatedCostToDate", header: "Estimated cost to date (£)" },
-        { key: "estimatedTotalCost", header: "Estimated cost, whole absence (£)" },
-      ],
-      rows: sspCurrent,
-    },
-    {
-      name: "Parental leave",
-      columns: [
-        { key: "userId", header: "Employee ID" },
-        { key: "name", header: "Name" },
-        { key: "leaveType", header: "Leave type" },
-        {
-          key: (r) => {
-            const sd = (r as { startDate: Date }).startDate;
-            return sd instanceof Date ? sd.toISOString() : sd;
-          },
-          header: "Start date",
-        },
-        {
-          key: (r) => {
-            const ed = (r as { expectedReturnDate: Date }).expectedReturnDate;
-            return ed instanceof Date ? ed.toISOString() : ed;
-          },
-          header: "Expected return",
-        },
-        { key: "kitDaysUsed", header: "KIT days used" },
-        { key: "kitDaysCap", header: "KIT cap" },
-        { key: "kitDaysRemaining", header: "KIT remaining" },
-      ],
-      rows: parental,
-    },
-    {
-      name: "Right to work",
-      columns: [
-        { key: "id", header: "Employee ID" },
-        { key: "name", header: "Name" },
-        { key: "email", header: "Email" },
-        { key: "department", header: "Department" },
-        { key: "employmentType", header: "Employment type" },
-        { key: "rightToWorkVerified", header: "Verified" },
-      ],
-      rows: rightToWorkData,
-    },
-  ]);
+  // Excel: the compliance pack, one sheet per table.
+  const buffer = await toExcel(
+    Object.values(UK_COMPLIANCE_TABLES).map((t) => t.sheet(report))
+  );
   return new NextResponse(new Uint8Array(buffer), {
     status: 200,
     headers: {
       "Content-Type": EXPORT_CONTENT_TYPE.excel,
-      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Disposition": `attachment; filename="${exportFilename("coverboard-uk-compliance-pack", "excel", new Date())}"`,
       "Cache-Control": "no-store",
     },
   });

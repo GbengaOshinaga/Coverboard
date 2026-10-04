@@ -18,6 +18,7 @@ import {
   isMaternityLeaveType,
 } from "@/lib/smpCalculator";
 import { checkOnBehalf, isSicknessLeaveTypeName, noticeError } from "./rules";
+import { keepingInTouchError } from "@/lib/keeping-in-touch";
 import { computeSspForSpell, type SspInfo } from "./ssp-spell";
 
 /**
@@ -147,6 +148,9 @@ export async function createLeaveRequest(
     if (!check.ok) return check;
     subjectName = subject!.name;
   }
+
+  const kitProblem = keepingInTouchError(leaveTypeConfig.name, { kitDaysUsed, splitDaysUsed });
+  if (kitProblem) return { ok: false, status: 400, error: kitProblem };
 
   const noticeProblem = noticeError(leaveTypeConfig, startDate, new Date());
   if (noticeProblem) {

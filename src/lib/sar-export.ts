@@ -110,6 +110,49 @@ export type SarExport = {
   auditLogActivity: AuditRow[];
 };
 
+/**
+ * A SAR file goes to the employee, so other people's personal data is removed
+ * first (UK GDPR Art. 15(4); ICO right-of-access guidance on third parties).
+ *
+ * Audit entries: when someone else acted on this person, keep what happened
+ * and the actor's role, but drop who they were and their IP address and
+ * browser. When this person acted, keep their own IP and browser, but drop
+ * the details, which can name the colleague they acted on.
+ */
+export function redactAuditEntryForSubject(entry: AuditRow, subjectId: string): AuditRow {
+  if (entry.actorId === subjectId) {
+    const { metadata: _metadata, resourceId: _resourceId, ...own } = entry;
+    return { ...own, note: "Details about other people withheld." };
+  }
+  const {
+    actorId: _actorId,
+    actorEmail: _actorEmail,
+    ipAddress: _ipAddress,
+    userAgent: _userAgent,
+    ...about
+  } = entry;
+  return about as AuditRow;
+}
+
+/**
+ * Leave this person reviewed or approved over minimum cover belongs to a
+ * colleague: keep the decision this person made and when, not the colleague's
+ * dates, reasons or sickness details.
+ */
+export function decisionOnColleagueLeave(
+  row: LeaveRequestRow,
+  kind: "review" | "cover_override"
+): LeaveRequestRow {
+  return kind === "review"
+    ? { id: row.id, status: row.status, reviewedAt: row.reviewedAt ?? null }
+    : { id: row.id, coverOverrideAt: row.coverOverrideAt ?? null };
+}
+
+/** A location change this person made for a colleague: when, not who. */
+export function locationChangeMadeForColleague(row: RegionHistoryRow): RegionHistoryRow {
+  return { id: row.id, regionId: row.regionId ?? null, changedAt: row.changedAt };
+}
+
 function isoOrNull(d: Date | null | undefined): string | null {
   return d ? d.toISOString() : null;
 }
@@ -221,8 +264,10 @@ export async function buildSarExport(params: {
       serviceStartDate: isoOrNull(user.serviceStartDate),
     },
     leaveRequests,
-    leavesReviewedByThisUser: leavesReviewed,
-    leavesCoverOverriddenByThisUser: leavesCoverOverridden,
+    leavesReviewedByThisUser: leavesReviewed.map((r) => decisionOnColleagueLeave(r, "review")),
+    leavesCoverOverriddenByThisUser: leavesCoverOverridden.map((r) =>
+      decisionOnColleagueLeave(r, "cover_override")
+    ),
     jiraMapping,
     passwordResetTokens: resetTokens.map((t) => ({
       id: t.id,
@@ -235,8 +280,8 @@ export async function buildSarExport(params: {
     carryOverBalances,
     weeklyEarnings,
     regionHistoryAsSubject: regionHistory,
-    regionChangesMadeByThisUser: regionChangesMade,
-    auditLogActivity: auditEntries,
+    regionChangesMadeByThisUser: regionChangesMade.map(locationChangeMadeForColleague),
+    auditLogActivity: auditEntries.map((e) => redactAuditEntryForSubject(e, userId)),
   };
 }
 

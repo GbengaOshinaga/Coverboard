@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { keepingInTouchError } from "@/lib/keeping-in-touch";
 import { recomputeBradfordScore } from "@/lib/leave-requests/bradford";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -210,6 +211,15 @@ export async function PATCH(
           { error: "Only admins and managers can edit KIT days or evidence" },
           { status: 403 }
         );
+      }
+    }
+
+    // KIT days only on maternity/adoption (max 10), SPLIT days only on shared
+    // parental leave (max 20).
+    if (kitDaysUsed !== undefined || splitDaysUsed !== undefined) {
+      const kitProblem = keepingInTouchError(leaveRequest.leaveType.name, { kitDaysUsed, splitDaysUsed });
+      if (kitProblem) {
+        return NextResponse.json({ error: kitProblem }, { status: 400 });
       }
     }
 

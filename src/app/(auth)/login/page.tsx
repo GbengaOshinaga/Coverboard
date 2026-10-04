@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { signIn, getProviders } from "next-auth/react";
+import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -41,14 +41,6 @@ function LoginInner() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [googleAvailable, setGoogleAvailable] = useState(false);
-
-  // Show the Google button only when the provider is configured server-side.
-  useEffect(() => {
-    getProviders()
-      .then((providers) => setGoogleAvailable(Boolean(providers?.google)))
-      .catch(() => setGoogleAvailable(false));
-  }, []);
 
   // Surface OAuth errors redirected back to /login, then drop ?error= from the URL
   // so a stale failed Google attempt doesn't keep confusing later sign-ins.
@@ -121,20 +113,18 @@ function LoginInner() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {googleAvailable && (
-              <div className="mb-4 space-y-4">
-                <GoogleButton
-                  label="Continue with Google"
-                  onClick={() => signIn("google", { callbackUrl: "/" })}
-                  disabled={loading}
-                />
-                <div className="flex items-center gap-3">
-                  <div className="h-px flex-1 bg-gray-200" />
-                  <span className="text-xs text-gray-400">or</span>
-                  <div className="h-px flex-1 bg-gray-200" />
-                </div>
+            <div className="mb-4 space-y-4">
+              <GoogleButton
+                label="Continue with Google"
+                onClick={() => signIn("google", { callbackUrl: "/" })}
+                disabled={loading}
+              />
+              <div className="flex items-center gap-3">
+                <div className="h-px flex-1 bg-gray-200" />
+                <span className="text-xs text-gray-400">or</span>
+                <div className="h-px flex-1 bg-gray-200" />
               </div>
-            )}
+            </div>
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
                 <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">

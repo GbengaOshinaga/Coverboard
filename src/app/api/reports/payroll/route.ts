@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { countWeekdays } from "@/lib/utils";
+import { countWorkingDays, type WorkingWeek } from "@/lib/working-week";
+import { getWorkingWeek } from "@/lib/working-week-server";
 import {
   getDailyHolidayPayRateForUser,
   getHourlyHolidayPayRateForUser,
@@ -23,8 +24,8 @@ import {
   toExcel,
   EXPORT_CONTENT_TYPE,
   exportFilename,
-  type ExportColumn,
 } from "@/lib/export-formats";
+import { PAYROLL_EXPORT_COLUMNS, type PayrollReport, type PayrollRow } from "@/lib/payroll-columns";
 
 /**
  * Payroll export for a given date range.
@@ -87,7 +88,6 @@ export async function GET(request: Request) {
           name: true,
           email: true,
           department: true,
-          countryCode: true,
           workCountry: true,
           employmentType: true,
           averageWeeklyEarnings: true,
@@ -122,11 +122,23 @@ export async function GET(request: Request) {
 
   const referenceDate = to < new Date() ? to : new Date();
 
+  // Days are counted on each person's own working week (a 3-day worker off
+  // for a fortnight has 6 days, not 10).
+  const workingWeekCache = new Map<string, Promise<WorkingWeek>>();
+  function workingWeek(userId: string): Promise<WorkingWeek> {
+    if (!workingWeekCache.has(userId)) {
+      workingWeekCache.set(userId, getWorkingWeek(userId, referenceDate));
+    }
+    return workingWeekCache.get(userId)!;
+  }
+
   const rows = await Promise.all(
-    requests.map(async (r) => {
-      const daysTaken = countWeekdays(
+    requests.map(async (r): Promise<PayrollRow> => {
+      const week = await workingWeek(r.userId);
+      const daysTaken = countWorkingDays(
         r.startDate > from ? r.startDate : from,
-        r.endDate < to ? r.endDate : to
+        r.endDate < to ? r.endDate : to,
+        week.weekdays
       );
 
       const isAnnual = isAnnualLeaveType(r.leaveType.name);
@@ -178,7 +190,7 @@ export async function GET(request: Request) {
 
       // Neonatal Care Pay: a single weekly rate (lower of flat or 90% AWE) for
       // up to 12 weeks. Computed live from the employee's AWE; weeks-in-period
-      // is the working days taken ÷ 5.
+      // is the working days taken ÷ the days they work in a week.
       const neonatal =
         isNeonatalCareLeaveType(r.leaveType.name) && isUkBased
           ? (() => {
@@ -187,7 +199,7 @@ export async function GET(request: Request) {
                   ? null
                   : Number(r.user.averageWeeklyEarnings);
               const weeklyRate = calculateNeonatalWeeklyRate(awe);
-              const weeksTaken = Number((daysTaken / 5).toFixed(2));
+              const weeksTaken = Number((daysTaken / week.daysPerWeek).toFixed(2));
               return {
                 weeklyRate: weeklyRate > 0 ? weeklyRate : null,
                 weeksTaken,
@@ -205,13 +217,13 @@ export async function GET(request: Request) {
         name: r.user.name,
         email: r.user.email,
         department: r.user.department,
-        countryCode: r.user.countryCode,
+        workCountry: r.user.workCountry,
         employmentType: r.user.employmentType,
         leaveType: r.leaveType.name,
         leaveCategory: r.leaveType.category,
         isPaid: r.leaveType.isPaid,
-        startDate: r.startDate,
-        endDate: r.endDate,
+        startDate: r.startDate.toISOString(),
+        endDate: r.endDate.toISOString(),
         daysTaken,
         hoursTaken,
         hourlyRate: hourly,
@@ -238,8 +250,8 @@ export async function GET(request: Request) {
                 r.smpAverageWeeklyEarnings === null
                   ? null
                   : Number(r.smpAverageWeeklyEarnings),
-              phase1EndDate: smp.phase1EndDate,
-              phase2EndDate: smp.phase2EndDate,
+              phase1EndDate: smp.phase1EndDate.toISOString(),
+              phase2EndDate: smp.phase2EndDate.toISOString(),
               phase1WeeklyRate:
                 r.smpPhase1WeeklyRate === null
                   ? null
@@ -268,80 +280,19 @@ export async function GET(request: Request) {
 
   const format = parseExportFormat(searchParams.get("format"));
   if (format === "json") {
-    return NextResponse.json({
+    const report: PayrollReport = {
       from: from.toISOString(),
       to: to.toISOString(),
       rows,
       totals,
-    });
+    };
+    return NextResponse.json(report);
   }
 
-  // Flatten the nested SMP block into top-level columns for tabular export —
-  // payroll software won't read a JSON sub-object inside a CSV cell.
-  type PayrollRow = (typeof rows)[number];
-  const columns: ExportColumn<PayrollRow>[] = [
-    { key: "leaveRequestId", header: "Leave request ID" },
-    { key: "userId", header: "Employee ID" },
-    { key: "name", header: "Name" },
-    { key: "email", header: "Email" },
-    { key: "department", header: "Department" },
-    { key: "countryCode", header: "Country" },
-    { key: "employmentType", header: "Employment type" },
-    { key: "leaveType", header: "Leave type" },
-    { key: "leaveCategory", header: "Category" },
-    { key: "isPaid", header: "Paid" },
-    {
-      key: (r) =>
-        r.startDate instanceof Date ? r.startDate.toISOString() : r.startDate,
-      header: "Start date",
-    },
-    {
-      key: (r) =>
-        r.endDate instanceof Date ? r.endDate.toISOString() : r.endDate,
-      header: "End date",
-    },
-    { key: "daysTaken", header: "Days taken" },
-    {
-      key: (r) => (r as Record<string, unknown>).hoursTaken ?? null,
-      header: "Hours taken",
-    },
-    {
-      key: (r) => (r as Record<string, unknown>).dailyHolidayPayRate ?? null,
-      header: "Daily rate (£)",
-    },
-    {
-      key: (r) => (r as Record<string, unknown>).hourlyRate ?? null,
-      header: "Hourly rate (£)",
-    },
-    {
-      key: (r) => (r as Record<string, unknown>).estimatedPay ?? null,
-      header: "Estimated pay (£)",
-    },
-    {
-      key: (r) => (r as Record<string, unknown>).rateSource ?? null,
-      header: "Rate source",
-    },
-    {
-      key: (r) => r.smp?.phase ?? null,
-      header: "SMP phase",
-    },
-    {
-      key: (r) => r.smp?.weeklyRate ?? null,
-      header: "SMP weekly rate (£)",
-    },
-    {
-      key: (r) => r.smp?.averageWeeklyEarnings ?? null,
-      header: "AWE (£)",
-    },
-    {
-      key: (r) => r.neonatal?.weeklyRate ?? null,
-      header: "Neonatal weekly rate (£)",
-    },
-    {
-      key: (r) => r.neonatal?.estimatedPay ?? null,
-      header: "Neonatal estimated pay (£)",
-    },
-  ];
+  // Columns (and the row shape) live in payroll-columns so the API and the
+  // Reports page can't drift apart. Nested SMP/neonatal blocks are flattened
+  // there, since payroll software won't read a JSON object inside a cell.
+  const columns = PAYROLL_EXPORT_COLUMNS;
 
   const filename = exportFilename(
     `coverboard-payroll-${from.toISOString().slice(0, 10)}-to-${to.toISOString().slice(0, 10)}`,

@@ -63,27 +63,30 @@ export function CoverShiftsSection({ from, to }: { from: string; to: string }) {
               the leave export.
             </CardDescription>
           </div>
-          <div className="flex gap-2 text-sm">
-            {(["csv", "excel"] as const).map((f) => (
-              <a
-                key={f}
-                href={empty ? undefined : exportHref(f)}
-                aria-disabled={empty}
-                className={`rounded-md border px-2.5 py-1 font-medium ${
-                  empty ? "pointer-events-none border-gray-200 text-gray-300" : "border-gray-300 text-gray-700 hover:bg-gray-50"
-                }`}
-              >
-                {f === "csv" ? "CSV" : "Excel"}
-              </a>
-            ))}
-          </div>
+          {/* Only offer downloads when there's something in them; an empty
+              period says so below rather than showing greyed-out buttons. */}
+          {!empty && (
+            <div className="flex gap-2 text-sm">
+              {(["csv", "excel"] as const).map((f) => (
+                <a
+                  key={f}
+                  href={exportHref(f)}
+                  className="rounded-md border border-gray-300 px-2.5 py-1 font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  {f === "csv" ? "CSV" : "Excel"}
+                </a>
+              ))}
+            </div>
+          )}
         </div>
       </CardHeader>
       <CardContent>
         {error && <p className="text-sm text-red-700">Couldn&apos;t load cover shifts.</p>}
         {!error && !data && <p className="text-sm text-gray-500">Loading…</p>}
         {data && data.rows.length === 0 && (
-          <p className="text-sm text-gray-500">No cover shifts accepted in this period.</p>
+          <p className="text-sm text-gray-500">
+            No cover shifts accepted in these dates, so there&apos;s nothing to export.
+          </p>
         )}
         {data && data.rows.length > 0 && (
           <div className="overflow-x-auto">
