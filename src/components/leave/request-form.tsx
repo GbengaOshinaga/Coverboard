@@ -12,6 +12,7 @@ import { BalanceIndicator } from "./balance-indicator";
 import { CoverageWarning } from "./coverage-warning";
 import { RegionalCoverWarning } from "./regional-cover-warning";
 import { countWeekdays } from "@/lib/utils";
+import { countWorkingDays } from "@/lib/working-week";
 import { AddChildForm, childName, usageLine, useChildren } from "@/components/team/children";
 
 type LeaveType = {
@@ -20,6 +21,8 @@ type LeaveType = {
   color: string;
   requiresEvidence: boolean;
   minNoticeDays: number;
+  /** WEEKS for statutory family leave (shown in weeks as well as days). */
+  allowanceUnit?: "DAYS" | "WEEKS";
 };
 
 type OverlapData = {
@@ -138,9 +141,29 @@ export function RequestForm({
   const [childId, setChildId] = useState("");
   const [addingChild, setAddingChild] = useState(false);
 
+  // The days the person would have worked, as their balance counts them
+  // (a 4-day worker's four Mon–Fri weeks are 16 days, not 20).
+  const [workingWeek, setWorkingWeek] = useState<{ weekdays: number[] | null; daysPerWeek: number } | null>(null);
+  useEffect(() => {
+    const qs = forSomeoneElse ? `?userId=${encodeURIComponent(subjectId)}` : "";
+    fetch(`/api/working-week${qs}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setWorkingWeek)
+      .catch(() => setWorkingWeek(null));
+  }, [forSomeoneElse, subjectId]);
+
   const requestedDays = useMemo(() => {
     if (!startDate || !endDate) return 0;
-    return countWeekdays(new Date(startDate), new Date(endDate));
+    const start = new Date(`${startDate}T00:00:00Z`);
+    const end = new Date(`${endDate}T00:00:00Z`);
+    return workingWeek
+      ? countWorkingDays(start, end, workingWeek.weekdays)
+      : countWeekdays(new Date(startDate), new Date(endDate));
+  }, [startDate, endDate, workingWeek]);
+  const calendarWeeks = useMemo(() => {
+    if (!startDate || !endDate) return 0;
+    const days = (Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86_400_000 + 1;
+    return Math.round((days / 7) * 10) / 10;
   }, [startDate, endDate]);
 
   // Hours-based balances (irregular/zero-hours workers): the request deducts
@@ -332,7 +355,11 @@ export function RequestForm({
 
       {startDate && endDate && requestedDays > 0 && (
         <p className="text-xs text-gray-500">
-          {requestedDays} weekday{requestedDays !== 1 ? "s" : ""} selected
+          {selectedLeaveType?.allowanceUnit === "WEEKS" && `${calendarWeeks} week${calendarWeeks === 1 ? "" : "s"} · `}
+          {requestedDays} working day{requestedDays !== 1 ? "s" : ""}
+          {workingWeek && workingWeek.daysPerWeek !== 5
+            ? ` (${forSomeoneElse ? `${subjectName ?? "they"} works` : "you work"} ${workingWeek.daysPerWeek} days a week)`
+            : ""}
         </p>
       )}
 

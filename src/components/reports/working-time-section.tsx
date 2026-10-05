@@ -26,7 +26,13 @@ export function WorkingTimeSection() {
   // Most serious first: over the average without an opt-out, then short
   // rest, then single weeks over 48; otherwise alphabetical (as loaded).
   const severity = (r: WorkingTimeRow) =>
-    r.overAverageLimit ? 0 : r.restGapCount > 0 ? 1 : r.weeksOver48 > 0 ? 2 : 3;
+    r.overAverageLimit
+      ? 0
+      : r.restGapCount > 0 || r.upcomingRestGaps.length > 0
+        ? 1
+        : r.thisWeekHours > 48 || r.nextWeekHours > 48 || r.weeksOver48 > 0
+          ? 2
+          : 3;
   const rows = data ? [...data.rows].sort((a, b) => severity(a) - severity(b)) : [];
 
   return (
@@ -38,7 +44,9 @@ export function WorkingTimeSection() {
             <CardDescription>
               The last 17 full weeks{data ? ` (${fmt(data.from)} – week of ${fmt(data.toWeekStarting)})` : ""}:
               average weekly hours against the 48-hour limit, and rest under 11
-              hours between shifts. Hours are logged hours where recorded,
+              hours between shifts. This week and next show what&apos;s
+              rostered, so a new rota shows up before it&apos;s worked.
+              Hours are logged hours where recorded,
               otherwise working pattern and accepted cover, minus leave, so
               they&apos;re an estimate, not timesheets. New starters are
               averaged over the weeks since their employment start date, so add
@@ -69,6 +77,7 @@ export function WorkingTimeSection() {
                   <th className="pb-2 pr-4">Employee</th>
                   <th className="pb-2 pr-4 text-right">Average a week</th>
                   <th className="pb-2 pr-4 text-right">Highest week</th>
+                  <th className="pb-2 pr-4 text-right">This week (rostered)</th>
                   <th className="pb-2 pr-4">Rest under 11h</th>
                   <th className="pb-2">Status</th>
                 </tr>
@@ -93,16 +102,30 @@ export function WorkingTimeSection() {
                         </span>
                       )}
                     </td>
+                    <td className="py-2.5 pr-4 text-right font-mono">
+                      <span className={row.thisWeekHours > 48 ? "text-amber-700" : ""}>{row.thisWeekHours}h</span>
+                      <span className="block text-[11px] font-sans text-gray-500">next week {row.nextWeekHours}h</span>
+                    </td>
                     <td className="py-2.5 pr-4 text-xs text-gray-600">
-                      {row.restGapCount === 0
-                        ? "—"
-                        : `${row.restGapCount} time${row.restGapCount === 1 ? "" : "s"}, latest ${row.latestRestGap!.gapHours}h on ${fmt(row.latestRestGap!.date)}`}
+                      {row.upcomingRestGaps.length > 0 && (
+                        <span className="block text-amber-700">
+                          Coming up: {row.upcomingRestGaps[0].gapHours}h on {fmt(row.upcomingRestGaps[0].date)}
+                          {row.upcomingRestGaps.length > 1 ? ` (+${row.upcomingRestGaps.length - 1} more)` : ""}
+                        </span>
+                      )}
+                      {row.restGapCount > 0
+                        ? `${row.restGapCount} time${row.restGapCount === 1 ? "" : "s"}, latest ${row.latestRestGap!.gapHours}h on ${fmt(row.latestRestGap!.date)}`
+                        : row.upcomingRestGaps.length === 0
+                          ? "—"
+                          : null}
                     </td>
                     <td className="py-2.5">
                       {row.overAverageLimit ? (
                         <Badge variant="error">Over the 48-hour average, no opt-out</Badge>
-                      ) : row.restGapCount > 0 ? (
+                      ) : row.restGapCount > 0 || row.upcomingRestGaps.length > 0 ? (
                         <Badge variant="warning">Short rest between shifts</Badge>
+                      ) : row.thisWeekHours > 48 || row.nextWeekHours > 48 ? (
+                        <Badge variant="warning">Rostered over 48 this week or next</Badge>
                       ) : row.optedOut ? (
                         <Badge variant="outline">Opted out</Badge>
                       ) : (

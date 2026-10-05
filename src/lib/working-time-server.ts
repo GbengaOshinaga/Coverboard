@@ -28,6 +28,10 @@ export async function workingTimeRows(organizationId: string, today: Date = new 
   const weeks = referenceWeeks(today);
   const from = day(weeks[0]);
   const to = new Date(day(weeks[weeks.length - 1]).getTime() + 6 * DAY_MS);
+  // Looking ahead too: this week and next, as rostered (like the cover picker).
+  const thisMonday = new Date(to.getTime() + DAY_MS);
+  const nextMonday = new Date(thisMonday.getTime() + 7 * DAY_MS);
+  const aheadTo = new Date(nextMonday.getTime() + 6 * DAY_MS);
 
   const users = await prisma.user.findMany({
     where: { organizationId, isActive: true, workCountry: "GB" },
@@ -48,7 +52,7 @@ export async function workingTimeRows(organizationId: string, today: Date = new 
         },
       },
       leaveRequests: {
-        where: { status: "APPROVED", startDate: { lte: to }, endDate: { gte: from } },
+        where: { status: "APPROVED", startDate: { lte: aheadTo }, endDate: { gte: from } },
         select: { startDate: true, endDate: true },
       },
       weeklyHours: {
@@ -56,7 +60,7 @@ export async function workingTimeRows(organizationId: string, today: Date = new 
         select: { weekStartDate: true, hoursWorked: true },
       },
       coverOffersReceived: {
-        where: { status: "ACCEPTED", date: { gte: from, lte: to } },
+        where: { status: "ACCEPTED", date: { gte: from, lte: aheadTo } },
         select: { date: true, shiftType: { select: { startTime: true, endTime: true } } },
       },
     },
@@ -66,7 +70,7 @@ export async function workingTimeRows(organizationId: string, today: Date = new 
     const onLeave = (date: string) =>
       u.leaveRequests.some((l) => iso(l.startDate) <= date && iso(l.endDate) >= date);
     const shifts: WorkedShift[] = [];
-    for (let t = from.getTime(); t <= to.getTime(); t += DAY_MS) {
+    for (let t = from.getTime(); t <= aheadTo.getTime(); t += DAY_MS) {
       const date = iso(new Date(t));
       if (onLeave(date)) continue;
       const weekday = (new Date(t).getUTCDay() + 6) % 7;
@@ -81,6 +85,17 @@ export async function workingTimeRows(organizationId: string, today: Date = new 
     }
 
     const week = resolveWorkingWeek(weekdaysFromPatterns(u.workPatterns, to), u.daysWorkedPerWeek);
+    // The past 17 weeks for the average; this week and next looking ahead.
+    const pastShifts = shifts.filter((s) => s.start < thisMonday.getTime());
+    const ahead = summariseWorkingTime({
+      weeks: [iso(thisMonday), iso(nextMonday)],
+      // From the last past shift on, so a short rest across Sunday night counts.
+      shifts: shifts.filter((s) => s.end >= thisMonday.getTime() - DAY_MS),
+      loggedHours: new Map(),
+      leaveDays: 0,
+      daysPerWeek: 5,
+      optedOut: false,
+    });
     const leaveDays = u.leaveRequests.reduce(
       (s, l) =>
         s + countWorkingDays(l.startDate < from ? from : l.startDate, l.endDate > to ? to : l.endDate, week.weekdays),
@@ -89,7 +104,7 @@ export async function workingTimeRows(organizationId: string, today: Date = new 
     const loggedHours = new Map(u.weeklyHours.map((h) => [iso(h.weekStartDate), h.hoursWorked]));
     const summary = summariseWorkingTime({
       weeks,
-      shifts,
+      shifts: pastShifts,
       loggedHours,
       leaveDays,
       daysPerWeek: week.daysPerWeek,
@@ -109,6 +124,9 @@ export async function workingTimeRows(organizationId: string, today: Date = new 
       loggedWeeks: summary.weeks.filter((w) => w.logged).length,
       weeksCounted: summary.weeks.length,
       startDateKnown: !!u.serviceStartDate,
+      thisWeekHours: ahead.weeks[0].hours,
+      nextWeekHours: ahead.weeks[1].hours,
+      upcomingRestGaps: ahead.restGaps,
     };
   });
 }

@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { calculateHolidayPayRate } from "@/lib/holidayPay";
 import { syncUserAverageWeeklyEarnings } from "@/lib/smpCalculator";
 import { recomputeSspAfterEarningsChange } from "@/lib/leave-requests/ssp-spell";
+import { recomputeSmpAfterEarningsChange } from "@/lib/smp-request";
 import {
   holidayPayNotApplicablePayload,
   isUkHolidayPayApplicable,
@@ -92,6 +93,10 @@ export async function POST(
     );
     await recomputeSspAfterEarningsChange(memberId, earliestWeek).catch((err) =>
       console.error("Failed to recalculate SSP after an earnings change:", err)
+    );
+    // Maternity pay comes from the same earnings.
+    await recomputeSmpAfterEarningsChange(memberId).catch((err) =>
+      console.error("Failed to recalculate SMP after an earnings change:", err)
     );
   }
 

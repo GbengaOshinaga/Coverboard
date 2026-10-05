@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { countWorkingDays, resolveWorkingWeek, weekdaysFromPatterns } from "@/lib/working-week";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -57,6 +58,8 @@ export async function GET(request: Request) {
           countryCode: true,
           memberType: true,
           regionId: true,
+          daysWorkedPerWeek: true,
+          workPatterns: { select: { weekday: true, effectiveFrom: true, effectiveTo: true } },
         },
       },
       leaveType: {
@@ -107,7 +110,16 @@ export async function GET(request: Request) {
     });
   }
 
-  return NextResponse.json(visibleRequests);
+  // Days they'd have worked, on their working week when the leave starts —
+  // the same count as their balance and the parental tracker (a 4-day
+  // worker's four Mon–Fri weeks are 16 days, not 20).
+  return NextResponse.json(
+    visibleRequests.map((r) => {
+      const { workPatterns, daysWorkedPerWeek, ...user } = r.user;
+      const week = resolveWorkingWeek(weekdaysFromPatterns(workPatterns, r.startDate), daysWorkedPerWeek);
+      return { ...r, user, workingDays: countWorkingDays(r.startDate, r.endDate, week.weekdays) };
+    })
+  );
 }
 
 const createSchema = z.object({

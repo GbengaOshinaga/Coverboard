@@ -69,7 +69,7 @@ test("off sick: the untaken part of the 4 weeks carries for 18 months, then the 
   );
 });
 
-test("family leave, 3-day week, nothing taken: 4 weeks = 12 days into next year", () => {
+test("family leave, 3-day week, nothing taken: all 5.6 weeks (17 days) into next year", () => {
   const { rows } = planYearEndCarryOver({
     ...base,
     entitlement: 17,
@@ -79,7 +79,7 @@ test("family leave, 3-day week, nothing taken: 4 weeks = 12 days into next year"
     company: { ...base.company, enabled: false },
   });
   assert.deepEqual(rows.map((r) => [r.reason, r.carried, r.expiresAt?.toISOString().slice(0, 10)]), [
-    ["FAMILY_LEAVE", 12, "2027-12-31"],
+    ["FAMILY_LEAVE", 17, "2027-12-31"],
   ]);
 });
 
@@ -131,4 +131,23 @@ test("never more than the days they were off: one sick day carries at most one d
     company: { ...base.company, enabled: false },
   });
   assert.deepEqual(hours.rows.map((r) => [r.reason, r.carried]), [["SICKNESS", 15]]);
+});
+
+test("after family leave the extra 1.6 weeks carry too; after sickness only the 4 weeks", () => {
+  // 5-day week, took 0 of 28.
+  const nothingTaken = { ...base, takenBy: () => 0, company: { ...base.company, enabled: false } };
+  assert.deepEqual(planYearEndCarryOver({ ...nothingTaken, familyLeaveDays: 200 }).rows.map((r) => [r.reason, r.carried]), [
+    ["FAMILY_LEAVE", 28],
+  ]);
+  assert.deepEqual(planYearEndCarryOver({ ...nothingTaken, sicknessDays: 200 }).rows.map((r) => [r.reason, r.carried]), [
+    ["SICKNESS", 20],
+  ]);
+});
+
+test("family leave and sickness in the same year: family first, then sickness within its 4 weeks", () => {
+  // 5-day week, took 10 of 28: 18 unused. 10 days family leave, 30 sick.
+  const { rows } = planYearEndCarryOver({ ...base, familyLeaveDays: 10, sicknessDays: 30, company: { ...base.company, enabled: false } });
+  // Family: min(10 days off, 18 unused, 28 − 10 taken) = 10.
+  // Sickness: min(30, 8 left, 20 − 10 taken − 10 carried) = 0 → no row.
+  assert.deepEqual(rows.map((r) => [r.reason, r.carried]), [["FAMILY_LEAVE", 10]]);
 });

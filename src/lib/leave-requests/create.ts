@@ -10,15 +10,11 @@ import { recordAudit, type AuditContext } from "@/lib/audit";
 import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
 import { getDailyHolidayPayRateForUser } from "@/lib/holidayPay";
-import {
-  calculateSMPPhaseDates,
-  calculateSmpEntitlement,
-  getAweForUser,
-  isMaternityLeaveType,
-} from "@/lib/smpCalculator";
+import { isMaternityLeaveType } from "@/lib/smpCalculator";
 import { checkOnBehalf, isSicknessLeaveTypeName, noticeError } from "./rules";
 import { keepingInTouchError } from "@/lib/keeping-in-touch";
 import { uplError } from "@/lib/unpaid-parental";
+import { computeSmpFields } from "@/lib/smp-request";
 import { sicknessOverlapError } from "./sickness-overlap";
 import { computeSspForSpell, type SspInfo } from "./ssp-spell";
 
@@ -295,34 +291,19 @@ export async function createLeaveRequest(
   let smpInfo: Extract<CreateLeaveResult, { ok: true }>["smpInfo"] = null;
   if (isMaternityLeaveType(leaveTypeConfig.name)) {
     try {
-      smpAverageWeeklyEarnings = await getAweForUser(userId, startDate);
-      const smpEmployee = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { serviceStartDate: true },
-      });
-      // Stamp SMP pay rates only when the employee passes BOTH statutory limbs:
-      // the earnings test (AWE ≥ LEL) and — when an expected due date is given —
-      // 26 weeks' continuous service into the qualifying week. Otherwise rates
-      // stay null (Maternity Allowance instead). Maternity LEAVE is a day-one
-      // right, so the dates are recorded regardless of pay eligibility.
-      const smpEntitlement = calculateSmpEntitlement(smpAverageWeeklyEarnings, {
-        serviceStartDate: smpEmployee?.serviceStartDate ?? null,
-        expectedDueDate,
-      });
-      if (smpEntitlement.eligible) {
-        smpPhase1WeeklyRate = smpEntitlement.phase1Weekly;
-        smpPhase2WeeklyRate = smpEntitlement.phase2Weekly;
-        smpInfo = {
-          eligible: true,
-          phase1Weekly: smpEntitlement.phase1Weekly,
-          phase2Weekly: smpEntitlement.phase2Weekly,
-        };
-      } else {
-        smpInfo = { eligible: false, reason: smpEntitlement.reason };
-      }
-      const phases = calculateSMPPhaseDates(startDate);
-      smpPhase1EndDate = phases.phase1EndDate;
-      smpPhase2EndDate = phases.phase2EndDate;
+      // Earnings from the 8 weeks up to the qualifying week (15 weeks before
+      // the due week), not before the leave starts. Maternity LEAVE is a
+      // day-one right, so the dates are recorded whatever the pay outcome;
+      // rates stay null when not eligible (Maternity Allowance instead).
+      const smp = await computeSmpFields({ userId, startDate, expectedDueDate: expectedDueDate ?? null });
+      smpAverageWeeklyEarnings = smp.fields.smpAverageWeeklyEarnings;
+      smpPhase1WeeklyRate = smp.fields.smpPhase1WeeklyRate;
+      smpPhase2WeeklyRate = smp.fields.smpPhase2WeeklyRate;
+      smpPhase1EndDate = smp.fields.smpPhase1EndDate;
+      smpPhase2EndDate = smp.fields.smpPhase2EndDate;
+      smpInfo = smp.entitlement.eligible
+        ? { eligible: true, phase1Weekly: smp.entitlement.phase1Weekly, phase2Weekly: smp.entitlement.phase2Weekly }
+        : { eligible: false, reason: smp.entitlement.reason };
     } catch (err) {
       console.error("SMP phase calculation failed:", err);
     }

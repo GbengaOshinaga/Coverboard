@@ -11,8 +11,10 @@
  *    WTR reg. 13(15), reg. 15D(4).
  *  - FAMILY_LEAVE: leave someone couldn't take because of maternity,
  *    paternity, adoption, shared parental, bereavement or neonatal care leave.
- *    Carries into the next leave year. WTR reg. 13(14), reg. 15D(3).
+ *    All of it: the 4 weeks and the extra 1.6 (at most 28 days). Carries into
+ *    the next leave year. WTR reg. 13(14), reg. 13A(7A), reg. 15D(3).
  * https://www.legislation.gov.uk/uksi/1998/1833/regulation/13
+ * https://www.legislation.gov.uk/uksi/1998/1833/regulation/13A
  * https://www.legislation.gov.uk/uksi/1998/1833/regulation/15D
  *
  * Leave years are calendar years for now (a leave year setting is Phase 3).
@@ -20,8 +22,10 @@
 
 export type CarryOverReason = "COMPANY_POLICY" | "SICKNESS" | "FAMILY_LEAVE";
 
-/** Statutory weeks that must carry over when sickness or family leave prevented them. */
+/** Weeks that must carry over when sickness prevented them (reg. 13 leave). */
 export const STATUTORY_CARRY_WEEKS = 4;
+/** After family leave, all 5.6 weeks: reg. 13 leave and the extra 1.6 (reg. 13A(7A)). */
+export const FAMILY_CARRY_WEEKS = 5.6;
 
 export type CarryRow = {
   reason: CarryOverReason;
@@ -149,29 +153,33 @@ export function planYearEndCarryOver(input: YearEndInput): YearEndPlan {
       : []
   );
 
-  const offDays = input.sicknessDays + input.familyLeaveDays;
-  if (input.includeStatutory && offDays > 0 && left > 0) {
-    // The law covers leave they couldn't take because they were off, so never
-    // more than the time they were off: a year's maternity leave carries all
-    // of it, one sick day at most one day. (Hours: their days off × average day.)
-    const offCap = input.unit === "hours" ? offDays * input.avgHoursPerDay : offDays;
-    const owed = Math.min(
-      offCap,
-      input.unit === "hours"
-        ? left
-        : Math.min(left, Math.max(0, STATUTORY_CARRY_WEEKS * input.daysPerWeek - usedFromEntitlement))
-    );
-    if (owed > 0) {
-      const family = input.familyLeaveDays >= input.sicknessDays;
-      rows.push({
-        reason: family ? "FAMILY_LEAVE" : "SICKNESS",
-        carried: round2(owed),
-        expiresAt: family ? familyLeaveCarryExpiry(input.fromYear) : sicknessCarryExpiry(input.fromYear),
-        source: "this_year",
-      });
-      left = round2(left - owed);
-    }
-  }
+  // The law covers leave they couldn't take because they were off, so never
+  // more than the time they were off: a year's maternity leave carries all of
+  // it, one sick day at most one day. (Hours: their days off × average day.)
+  const cap = (days: number) => (input.unit === "hours" ? days * input.avgHoursPerDay : days);
+  let carriedThisYear = 0;
+  const statutory = (reason: "FAMILY_LEAVE" | "SICKNESS", offDays: number, limitDays: number) => {
+    if (!input.includeStatutory || offDays <= 0 || left <= 0) return;
+    // Irregular-hours staff carry all untaken hours (reg. 15D); others the
+    // untaken part of the statutory weeks this reason covers.
+    const untakenStatutory =
+      input.unit === "hours" ? left : Math.max(0, limitDays - usedFromEntitlement - carriedThisYear);
+    const owed = round2(Math.min(cap(offDays), left, untakenStatutory));
+    if (owed <= 0) return;
+    rows.push({
+      reason,
+      carried: owed,
+      expiresAt: reason === "FAMILY_LEAVE" ? familyLeaveCarryExpiry(input.fromYear) : sicknessCarryExpiry(input.fromYear),
+      source: "this_year",
+    });
+    carriedThisYear += owed;
+    left = round2(left - owed);
+  };
+  // Family leave: all statutory leave they couldn't take — the 4 weeks and
+  // the extra 1.6 (reg. 13(14) and 13A(7A)), at most 28 days.
+  statutory("FAMILY_LEAVE", input.familyLeaveDays, Math.min(28, Math.ceil(FAMILY_CARRY_WEEKS * input.daysPerWeek)));
+  // Sickness: the 4 weeks of regulation 13 leave (reg. 13(15)).
+  statutory("SICKNESS", input.sicknessDays, STATUTORY_CARRY_WEEKS * input.daysPerWeek);
 
   if (input.company.enabled && input.company.max > 0 && left > 0) {
     rows.push({

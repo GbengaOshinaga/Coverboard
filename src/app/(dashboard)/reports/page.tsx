@@ -181,9 +181,12 @@ export default function ReportsPage() {
   const [payrollReport, setPayrollReport] = useState<PayrollReport | null>(null);
   const [payrollLoading, setPayrollLoading] = useState(false);
 
-  const [rolloverYear, setRolloverYear] = useState(
-    new Date().getFullYear() - 1
-  );
+  // The year end to process: last year until mid-year, then this year (so in
+  // October it's the coming 31 December, not one that's long gone).
+  const [rolloverYear, setRolloverYear] = useState(() => {
+    const now = new Date();
+    return now.getMonth() < 6 ? now.getFullYear() - 1 : now.getFullYear();
+  });
   const [rolloverPreview, setRolloverPreview] = useState<
     RolloverPreviewRow[] | null
   >(null);
@@ -1799,8 +1802,10 @@ export default function ReportsPage() {
                   </li>
                   <li>
                     <strong>After family leave</strong> (maternity, paternity,
-                    adoption, shared parental, bereavement, neonatal) — the
-                    same, into next year. Required by law.
+                    adoption, shared parental, bereavement, neonatal) — all the
+                    statutory leave they couldn&apos;t take, including the
+                    extra 1.6 weeks (up to 28 days), into next year. Required by
+                    law.
                   </li>
                   <li>
                     <strong>Company carry-over</strong> — from what&apos;s
@@ -1919,10 +1924,15 @@ export default function ReportsPage() {
                                         </span>{" "}
                                         {CARRY_OVER_REASON_LABEL[r.reason]}
                                         {r.source === "brought_forward" ? " (brought forward)" : ""}
-                                        <span className="text-gray-400">
+                                        <span
+                                          className={
+                                            new Date(r.expiresAt) < new Date() ? "text-red-700" : "text-gray-400"
+                                          }
+                                        >
                                           {" "}
                                           · until{" "}
                                           {new Date(r.expiresAt).toLocaleDateString("en-GB", { timeZone: "UTC" })}
+                                          {new Date(r.expiresAt) < new Date() ? " (already passed: check the year)" : ""}
                                         </span>
                                       </li>
                                     ))}

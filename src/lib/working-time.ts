@@ -148,6 +148,11 @@ export type WorkingTimeRow = {
   weeksCounted: number;
   /** Without an employment start date, a new starter's average is diluted. */
   startDateKnown: boolean;
+  /** Rostered hours this week and next (pattern + accepted cover − leave). */
+  thisWeekHours: number;
+  nextWeekHours: number;
+  /** Rest under 11 hours coming up this week or next. */
+  upcomingRestGaps: RestGap[];
 };
 
 export const WORKING_TIME_COLUMNS: ExportColumn<WorkingTimeRow>[] = [
@@ -158,6 +163,9 @@ export const WORKING_TIME_COLUMNS: ExportColumn<WorkingTimeRow>[] = [
   { key: "weeksOver48", header: "Weeks over 48 hours" },
   { key: (r) => (r.optedOut ? "Yes" : "No"), header: "Opted out of 48-hour limit" },
   { key: (r) => (r.overAverageLimit ? "Yes" : "No"), header: "Over 48-hour average without opt-out" },
+  { key: "thisWeekHours", header: "This week, rostered (hours)" },
+  { key: "nextWeekHours", header: "Next week, rostered (hours)" },
+  { key: (r) => r.upcomingRestGaps.length, header: "Short rest coming up (this week or next)" },
   { key: "restGapCount", header: "Rest gaps under 11 hours" },
   { key: (r) => r.latestRestGap?.date ?? null, header: "Latest short rest (date)" },
   { key: (r) => r.latestRestGap?.gapHours ?? null, header: "Latest short rest (hours)" },
