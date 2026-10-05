@@ -54,6 +54,7 @@ type LeaveRequest = {
   smpPhase2WeeklyRate?: string | number | null;
   smpPhase1EndDate?: string | null;
   smpPhase2EndDate?: string | null;
+  smpEarningsWeeks?: number;
 };
 
 const statusVariant: Record<string, "success" | "warning" | "error" | "default"> = {

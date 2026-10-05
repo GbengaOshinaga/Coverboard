@@ -61,6 +61,8 @@ export type ParentalRow = {
   expectedReturnDate: string;
   /** Length of the leave in their working days (2 weeks' paternity = 10 on 5 days). */
   leaveDays: number;
+  /** Length in calendar weeks (to one decimal place). */
+  leaveWeeks: number;
   /**
    * KIT days (maternity/adoption, up to 10) or SPLIT days (shared parental,
    * up to 20); null for leave with neither, e.g. paternity.
@@ -194,6 +196,7 @@ export const UK_COMPLIANCE_TABLES = {
       { key: "leaveType", header: "Leave type" },
       { key: (r) => day(r.startDate), header: "Start date" },
       { key: (r) => day(r.expectedReturnDate), header: "Expected return" },
+      { key: "leaveWeeks", header: "Leave (weeks)" },
       { key: "leaveDays", header: "Leave (working days)" },
       // Paternity and other leave have no KIT/SPLIT days: say so, rather than
       // leaving cells blank that read as missing data.

@@ -237,6 +237,7 @@ export async function GET(request: Request) {
           leaveType: r.leaveType.name,
           startDate: r.startDate.toISOString(),
           expectedReturnDate: r.endDate.toISOString(),
+          leaveWeeks: Math.round(((r.endDate.getTime() - r.startDate.getTime()) / 86_400_000 + 1) / 7 * 10) / 10,
           leaveDays: countWorkingDays(
             r.startDate,
             r.endDate,

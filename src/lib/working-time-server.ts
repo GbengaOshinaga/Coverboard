@@ -59,6 +59,11 @@ export async function workingTimeRows(organizationId: string, today: Date = new 
         where: { weekStartDate: { gte: from, lte: to } },
         select: { weekStartDate: true, hoursWorked: true },
       },
+      // Hours on pay records count as logged too.
+      weeklyEarnings: {
+        where: { weekStartDate: { gte: from, lte: to }, isZeroPayWeek: false },
+        select: { weekStartDate: true, hoursWorked: true },
+      },
       coverOffersReceived: {
         where: { status: "ACCEPTED", date: { gte: from, lte: aheadTo } },
         select: { date: true, shiftType: { select: { startTime: true, endTime: true } } },
@@ -101,14 +106,25 @@ export async function workingTimeRows(organizationId: string, today: Date = new 
         s + countWorkingDays(l.startDate < from ? from : l.startDate, l.endDate > to ? to : l.endDate, week.weekdays),
       0
     );
-    const loggedHours = new Map(u.weeklyHours.map((h) => [iso(h.weekStartDate), h.hoursWorked]));
+    // Logged hours: the weekly hours log first, else hours on that week's pay record.
+    const loggedHours = new Map<string, number>();
+    for (const e of u.weeklyEarnings) {
+      if (Number(e.hoursWorked) > 0) loggedHours.set(iso(e.weekStartDate), Number(e.hoursWorked));
+    }
+    for (const h of u.weeklyHours) loggedHours.set(iso(h.weekStartDate), h.hoursWorked);
+
+    // Employed for less than the 17 weeks: average from their start date, or
+    // without one, from the first week with any recorded work (so a new
+    // starter's hours aren't spread over weeks before they joined).
+    const firstWorked = [...pastShifts.map((s) => iso(new Date(s.start))), ...loggedHours.keys()].sort()[0] ?? null;
+    const startedOn = u.serviceStartDate ? iso(u.serviceStartDate) : firstWorked;
     const summary = summariseWorkingTime({
       weeks,
       shifts: pastShifts,
       loggedHours,
       leaveDays,
       daysPerWeek: week.daysPerWeek,
-      startedOn: u.serviceStartDate ? iso(u.serviceStartDate) : null,
+      startedOn,
       optedOut: optOutInForce({ optOutFrom: u.workingTimeOptOutFrom, optOutUntil: u.workingTimeOptOutUntil }, today),
     });
     return {
@@ -124,6 +140,7 @@ export async function workingTimeRows(organizationId: string, today: Date = new 
       loggedWeeks: summary.weeks.filter((w) => w.logged).length,
       weeksCounted: summary.weeks.length,
       startDateKnown: !!u.serviceStartDate,
+      averagedFrom: u.serviceStartDate ? "start_date" : firstWorked ? "first_recorded_work" : "whole_period",
       thisWeekHours: ahead.weeks[0].hours,
       nextWeekHours: ahead.weeks[1].hours,
       upcomingRestGaps: ahead.restGaps,

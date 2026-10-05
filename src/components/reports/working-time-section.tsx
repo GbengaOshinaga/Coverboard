@@ -90,7 +90,8 @@ export function WorkingTimeSection() {
                       {row.averageHours}h
                       {row.weeksCounted < 17 && (
                         <span className="block text-[11px] font-sans text-gray-500">
-                          over {row.weeksCounted} week{row.weeksCounted === 1 ? "" : "s"} since starting
+                          over {row.weeksCounted} week{row.weeksCounted === 1 ? "" : "s"}{" "}
+                          {row.averagedFrom === "start_date" ? "since starting" : "since first recorded work"}
                         </span>
                       )}
                     </td>

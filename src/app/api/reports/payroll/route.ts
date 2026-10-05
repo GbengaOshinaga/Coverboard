@@ -235,6 +235,11 @@ export async function GET(request: Request) {
         startDate: r.startDate.toISOString(),
         endDate: r.endDate.toISOString(),
         daysTaken,
+        calendarDays: (() => {
+          const a = r.startDate > from ? r.startDate : from;
+          const b = r.endDate < to ? r.endDate : to;
+          return b < a ? 0 : Math.round((b.getTime() - a.getTime()) / 86_400_000) + 1;
+        })(),
         hoursTaken,
         hourlyRate: hourly,
         ...buildPayrollHolidayRateFields({

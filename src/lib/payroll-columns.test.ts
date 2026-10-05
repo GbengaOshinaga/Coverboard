@@ -18,6 +18,7 @@ const base: PayrollRow = {
   startDate: "2026-10-19T00:00:00.000Z",
   endDate: "2026-10-30T00:00:00.000Z",
   daysTaken: 6,
+  calendarDays: 12,
   hoursTaken: null,
   hourlyRate: null,
   dailyHolidayPayRate: 130,
@@ -35,7 +36,7 @@ test("payroll export headers are fixed (change them here on purpose)", () => {
   assert.deepEqual(PAYROLL_EXPORT_COLUMNS.map((c) => c.header), [
     "Leave request ID", "Employee ID", "Employee", "Email", "Department", "Work country",
     "Employment type", "Leave type", "Category", "Paid", "Start date", "End date",
-    "Days taken", "Hours taken", "Daily holiday pay rate (£)", "Hourly holiday pay rate (£)",
+    "Working days taken", "Calendar days", "Hours taken", "Daily holiday pay rate (£)", "Hourly holiday pay rate (£)",
     "Estimated holiday pay (£)", "Rate source", "SSP days", "SSP daily rate (£, 4 d.p. per HMRC tables)", "SSP pay (£)", "SSP rate basis",
     "SPP weekly rate (£)", "SPP pay (£)", "SPP basis", "SMP phase", "SMP weekly rate (£)",
     "SMP average weekly earnings (£)", "Neonatal weeks", "Neonatal weekly rate (£)",
@@ -47,7 +48,7 @@ test("UK holiday row: plain dates, Yes/No, money to 2 decimal places", () => {
   const [, row] = csvLines([base]);
   assert.equal(
     row,
-    "lr_1,u_1,Brian Lee,brian@example.com,,GB,PART_TIME,Annual Leave,STATUTORY,Yes,2026-10-19,2026-10-30,6,,130.00,,780.00,captured_at_booking,,,,,,,,,,,,,"
+    "lr_1,u_1,Brian Lee,brian@example.com,,GB,PART_TIME,Annual Leave,STATUTORY,Yes,2026-10-19,2026-10-30,6,12,,130.00,,780.00,captured_at_booking,,,,,,,,,,,,,"
   );
 });
 
@@ -78,7 +79,7 @@ test("non-UK row leaves the UK pay columns empty", () => {
   const { dailyHolidayPayRate: _d, estimatedPay: _e, rateSource: _r, ...rest } = base;
   const [, row] = csvLines([{ ...rest, workCountry: "NG" }]);
   assert.ok(row.includes(",NG,"));
-  assert.ok(row.endsWith(",6,,,,,,,,,,,,,,,,,,"), row);
+  assert.ok(row.endsWith(",6,12" + ",".repeat(18)), row); // 18 empty columns after "Calendar days"
 });
 
 test("Excel export has the same headers and numeric money cells", async () => {

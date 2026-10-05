@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { recomputeSspAfterEarningsChange } from "@/lib/leave-requests/ssp-spell";
+import { recomputeSmpAfterEarningsChange } from "@/lib/smp-request";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -132,6 +134,20 @@ export async function POST(request: Request) {
         console.error("Failed to sync average weekly earnings:", err)
       );
 
+      // Statutory pay comes from these earnings: recalculate SSP and SMP.
+
+      await recomputeSspAfterEarningsChange(parsed.data.userId, new Date(0)).catch((err) =>
+
+        console.error("Failed to recalculate SSP after an earnings change:", err)
+
+      );
+
+      await recomputeSmpAfterEarningsChange(parsed.data.userId).catch((err) =>
+
+        console.error("Failed to recalculate SMP after an earnings change:", err)
+
+      );
+
       return NextResponse.json(results, { status: 201 });
     }
 
@@ -176,6 +192,20 @@ export async function POST(request: Request) {
 
     await syncUserAverageWeeklyEarnings(parsed.data.userId).catch((err) =>
       console.error("Failed to sync average weekly earnings:", err)
+    );
+
+    // Statutory pay comes from these earnings: recalculate SSP and SMP.
+
+    await recomputeSspAfterEarningsChange(parsed.data.userId, new Date(0)).catch((err) =>
+
+      console.error("Failed to recalculate SSP after an earnings change:", err)
+
+    );
+
+    await recomputeSmpAfterEarningsChange(parsed.data.userId).catch((err) =>
+
+      console.error("Failed to recalculate SMP after an earnings change:", err)
+
     );
 
     return NextResponse.json(entry, { status: 201 });

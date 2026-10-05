@@ -25,7 +25,10 @@ export type PayrollRow = {
   /** ISO timestamps. */
   startDate: string;
   endDate: string;
+  /** Days they'd have worked (their working week), within the period. */
   daysTaken: number;
+  /** Calendar days within the period (weekly pay like SMP/SPP is per calendar day). */
+  calendarDays: number;
   hoursTaken: number | null;
   hourlyRate: number | null;
   /** Holiday pay fields: present for UK-based staff only. */
@@ -104,7 +107,8 @@ export const PAYROLL_EXPORT_COLUMNS: ExportColumn<PayrollRow>[] = [
   { key: (r) => (r.isPaid ? "Yes" : "No"), header: "Paid" },
   { key: (r) => day(r.startDate), header: "Start date" },
   { key: (r) => day(r.endDate), header: "End date" },
-  { key: "daysTaken", header: "Days taken" },
+  { key: "daysTaken", header: "Working days taken" },
+  { key: "calendarDays", header: "Calendar days" },
   { key: "hoursTaken", header: "Hours taken" },
   { key: (r) => r.dailyHolidayPayRate ?? null, header: "Daily holiday pay rate (£)", format: "money" },
   { key: "hourlyRate", header: "Hourly holiday pay rate (£)", format: "money" },

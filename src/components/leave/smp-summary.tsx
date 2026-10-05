@@ -23,8 +23,13 @@ export function SmpSummary({
     smpPhase2WeeklyRate?: Stored;
     smpPhase1EndDate?: string | null;
     smpPhase2EndDate?: string | null;
+    /** Weeks of the 8 with pay recorded (from the API). */
+    smpEarningsWeeks?: number;
   };
 }) {
+  const weeks = request.smpEarningsWeeks;
+  const fromWeeks =
+    weeks !== undefined && weeks > 0 && weeks < 8 ? ` (from ${weeks} of the 8 weeks; ${8 - weeks} with no pay recorded)` : "";
   const due = request.expectedDueDate ? new Date(request.expectedDueDate) : null;
   const qw = due ? qualifyingWeek(due) : null;
   const awe = num(request.smpAverageWeeklyEarnings);
@@ -56,7 +61,7 @@ export function SmpSummary({
       {p1 !== null && p2 !== null ? (
         <>
           <p>
-            Average weekly earnings {money(awe!)}: {money(p1)} a week (90%) for 6 weeks
+            Average weekly earnings {money(awe!)}{fromWeeks}: {money(p1)} a week (90%) for 6 weeks
             {request.smpPhase1EndDate ? `, to ${fmt(new Date(request.smpPhase1EndDate))}` : ""}, then{" "}
             {money(p2)} a week for 33 weeks
             {request.smpPhase2EndDate ? `, to ${fmt(new Date(request.smpPhase2EndDate))}` : ""}.

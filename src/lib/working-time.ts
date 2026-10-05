@@ -148,6 +148,11 @@ export type WorkingTimeRow = {
   weeksCounted: number;
   /** Without an employment start date, a new starter's average is diluted. */
   startDateKnown: boolean;
+  /**
+   * Where the average starts: their employment start date, the first week
+   * with recorded work (no start date), or the whole 17 weeks (no work yet).
+   */
+  averagedFrom: "start_date" | "first_recorded_work" | "whole_period";
   /** Rostered hours this week and next (pattern + accepted cover − leave). */
   thisWeekHours: number;
   nextWeekHours: number;
@@ -172,4 +177,13 @@ export const WORKING_TIME_COLUMNS: ExportColumn<WorkingTimeRow>[] = [
   { key: "weeksCounted", header: "Weeks averaged" },
   { key: "loggedWeeks", header: "Weeks from logged hours" },
   { key: (r) => (r.startDateKnown ? "Yes" : "No"), header: "Start date recorded" },
+  {
+    key: (r) =>
+      r.averagedFrom === "start_date"
+        ? "Start date"
+        : r.averagedFrom === "first_recorded_work"
+          ? "First recorded work"
+          : "Whole period",
+    header: "Averaged from",
+  },
 ];

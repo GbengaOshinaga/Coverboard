@@ -329,6 +329,20 @@ export async function getAweForUser(
   return aweFromEarningRows(rows);
 }
 
+/** Like getAweForUser, with how many of the 8 weeks had pay counted. */
+export async function getAweDetailForUser(
+  userId: string,
+  beforeDate: Date
+): Promise<{ awe: number | null; weeksCounted: number }> {
+  const { prisma } = await import("@/lib/prisma");
+  const windowStart = new Date(beforeDate.getTime() - 8 * 7 * 24 * 60 * 60 * 1000);
+  const rows = await prisma.weeklyEarning.findMany({
+    where: { userId, weekStartDate: { gte: windowStart, lt: beforeDate } },
+    orderBy: { weekStartDate: "asc" },
+  });
+  return { awe: aweFromEarningRows(rows), weeksCounted: countedEarningRows(rows).length };
+}
+
 /**
  * Average weekly earnings from the weeks recorded in the relevant period.
  *
@@ -339,12 +353,17 @@ export async function getAweForUser(
  * the pay hasn't been entered, so counting it as £0 would make SSP £0.
  * Also covers new starters with fewer than 8 weeks of employment.
  */
+/** Weeks that count towards average earnings (see aweFromEarningRows). */
+function countedEarningRows<T extends { grossEarnings: unknown; hoursWorked: unknown; isZeroPayWeek: boolean }>(
+  rows: ReadonlyArray<T>
+): T[] {
+  return rows.filter((r) => r.isZeroPayWeek || Number(r.grossEarnings) > 0 || Number(r.hoursWorked) <= 0);
+}
+
 export function aweFromEarningRows(
   rows: ReadonlyArray<{ grossEarnings: unknown; hoursWorked: unknown; isZeroPayWeek: boolean }>
 ): number | null {
-  const counted = rows.filter(
-    (r) => r.isZeroPayWeek || Number(r.grossEarnings) > 0 || Number(r.hoursWorked) <= 0
-  );
+  const counted = countedEarningRows(rows);
   if (counted.length === 0) return null;
   return calculateAWE(
     counted.map((r) => (r.isZeroPayWeek ? 0 : Number(r.grossEarnings))),

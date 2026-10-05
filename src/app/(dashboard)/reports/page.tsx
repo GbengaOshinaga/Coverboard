@@ -1192,7 +1192,7 @@ export default function ReportsPage() {
                           <th className="pb-2 pr-4">Employee</th>
                           <th className="pb-2 pr-4">Leave type</th>
                           <th className="pb-2 pr-4">Expected return</th>
-                          <th className="pb-2 pr-4 text-right">Leave (working days)</th>
+                          <th className="pb-2 pr-4 text-right">Leave</th>
                           <th className="pb-2 text-right">KIT/SPLIT used</th>
                           <th className="pb-2 text-right">Remaining</th>
                           <th className="pb-2 text-right">Allowed</th>
@@ -1215,8 +1215,11 @@ export default function ReportsPage() {
                                 row.expectedReturnDate
                               ).toLocaleDateString("en-GB")}
                             </td>
-                            <td className="py-2.5 pr-4 text-right font-mono text-gray-600">
-                              {row.leaveDays}
+                            <td className="py-2.5 pr-4 text-right text-gray-600">
+                              {row.leaveWeeks} week{row.leaveWeeks === 1 ? "" : "s"}
+                              <span className="block text-[11px] text-gray-500">
+                                {row.leaveDays} of their working days
+                              </span>
                             </td>
                             {row.keepingInTouch ? (
                               <>
