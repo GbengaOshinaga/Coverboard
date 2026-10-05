@@ -217,6 +217,33 @@ export function calculateSspDailyRate(
   return Math.floor(Number(((weeklyRate / safeQDays) * 10000).toFixed(6))) / 10000;
 }
 
+/**
+ * Why an SSP rate is what it is, in words, so a £0 or a flat rate is never a
+ * mystery on screen. From 6 April 2026 the weekly rate is the lower of the
+ * flat rate and 80% of average weekly earnings in the 8 weeks before.
+ */
+export function sspRateBasis(input: {
+  startDate: Date;
+  /** null: no pay recorded in the 8 weeks before. */
+  averageWeeklyEarnings: number | null;
+  flatRate?: number;
+}): string {
+  const flat = input.flatRate ?? UK_SSP_WEEKLY_RATE;
+  const money = (n: number) => `£${n.toFixed(2)}`;
+  if (input.startDate < SSP_REFORM_DATE) return `Flat rate of ${money(flat)} a week (before 6 April 2026)`;
+  const awe = input.averageWeeklyEarnings;
+  if (awe === null) {
+    return `No pay recorded in the 8 weeks before this absence, so the flat ${money(flat)} a week is used. Add their earnings to apply the 80% rule.`;
+  }
+  if (awe === 0) {
+    return "£0: every week recorded in the 8 weeks before was a no-pay week (SSP is 80% of average earnings).";
+  }
+  const eighty = Number((awe * SSP_LOW_EARNER_FRACTION).toFixed(2));
+  return eighty < flat
+    ? `80% of ${money(awe)} average weekly earnings = ${money(eighty)} a week`
+    : `Flat rate of ${money(flat)} a week (80% of ${money(awe)} average weekly earnings is more)`;
+}
+
 /** Rounds a fraction of a penny up to the next whole penny. */
 function ceilPenny(amount: number): number {
   return Math.ceil(Number((amount * 100).toFixed(6))) / 100;

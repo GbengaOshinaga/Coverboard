@@ -35,6 +35,10 @@ export type SspLiabilityRow = {
   endDate: string;
   qualifyingDaysPerWeek: number;
   dailyRate: number;
+  /** Earnings the rate came from (8 weeks before); null = no pay recorded. */
+  averageWeeklyEarnings: number | null;
+  /** Why the rate is what it is, in words. */
+  rateBasis: string;
   daysElapsed: number;
   payableDaysToDate: number;
   estimatedCostToDate: number;
@@ -168,6 +172,8 @@ export const UK_COMPLIANCE_TABLES = {
       { key: (r) => yesNo(r.sspLimitReached), header: "28-week limit reached" },
       { key: "estimatedCostToDate", header: "Cost to date (£)", format: "money" },
       { key: "estimatedTotalCost", header: "Cost, whole absence (£)", format: "money" },
+      { key: "averageWeeklyEarnings", header: "Average weekly earnings used (£)", format: "money" },
+      { key: "rateBasis", header: "How the rate was worked out" },
     ],
   }),
   parental: table<ParentalRow>({

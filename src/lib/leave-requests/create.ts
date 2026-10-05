@@ -314,6 +314,7 @@ export async function createLeaveRequest(
   const sspInfo: SspInfo | null = ssp?.info ?? null;
   const sspDaysPaid = ssp?.sspDaysPaid ?? 0;
   const sspDailyRate = ssp ? ssp.info.dailyRate : null;
+  const sspAverageWeeklyEarnings = ssp ? ssp.info.averageWeeklyEarnings : null;
   const sspLimitReached = ssp?.sspLimitReached ?? false;
   const notifyCapReached = ssp?.capReachedNow ?? false;
   const sspEmployeeSnapshot = ssp?.employee ?? null;
@@ -355,6 +356,7 @@ export async function createLeaveRequest(
     sspDaysPaid,
     sspLimitReached,
     sspDailyRate,
+    sspAverageWeeklyEarnings,
     smpAverageWeeklyEarnings: smpAverageWeeklyEarnings ?? undefined,
     smpPhase1EndDate: smpPhase1EndDate ?? undefined,
     smpPhase2EndDate: smpPhase2EndDate ?? undefined,

@@ -48,6 +48,17 @@ export type PayrollRow = {
     estimatedPay: number | null;
   } | null;
   /**
+   * Statutory Paternity Pay within the pay period (paternity leave, UK):
+   * weekly rate (null when not eligible or no pay recorded), the calendar
+   * days in these dates, pay, and why.
+   */
+  spp: {
+    weeklyRate: number | null;
+    calendarDays: number;
+    pay: number | null;
+    basis: string;
+  } | null;
+  /**
    * SSP for this absence within the pay period: days on their qualifying
    * days, at the daily rate stored when it was booked (null for absences
    * booked before the rate was stored).
@@ -56,6 +67,10 @@ export type PayrollRow = {
     daysInPeriod: number;
     dailyRate: number | null;
     pay: number | null;
+    /** Earnings the rate came from; null = no pay recorded (flat rate). */
+    averageWeeklyEarnings: number | null;
+    /** Why the rate is what it is, in words. */
+    basis: string | null;
   } | null;
 };
 
@@ -70,6 +85,7 @@ export type PayrollReport = {
     /** Estimated holiday pay. */
     totalEstimatedPay: number;
     totalSspPay: number;
+    totalSppPay: number;
   };
 };
 
@@ -97,6 +113,10 @@ export const PAYROLL_EXPORT_COLUMNS: ExportColumn<PayrollRow>[] = [
   { key: (r) => r.ssp?.daysInPeriod ?? null, header: "SSP days" },
   { key: (r) => r.ssp?.dailyRate ?? null, header: "SSP daily rate (£, 4 d.p. per HMRC tables)", format: "rate" },
   { key: (r) => r.ssp?.pay ?? null, header: "SSP pay (£)", format: "money" },
+  { key: (r) => r.ssp?.basis ?? null, header: "SSP rate basis" },
+  { key: (r) => r.spp?.weeklyRate ?? null, header: "SPP weekly rate (£)", format: "money" },
+  { key: (r) => r.spp?.pay ?? null, header: "SPP pay (£)", format: "money" },
+  { key: (r) => r.spp?.basis ?? null, header: "SPP basis" },
   { key: (r) => r.smp?.label ?? null, header: "SMP phase" },
   { key: (r) => r.smp?.weeklyRate ?? null, header: "SMP weekly rate (£)", format: "money" },
   { key: (r) => r.smp?.averageWeeklyEarnings ?? null, header: "SMP average weekly earnings (£)", format: "money" },

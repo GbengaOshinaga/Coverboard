@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { countWorkingDays, type WorkingWeek } from "@/lib/working-week";
 import { getWorkingWeek } from "@/lib/working-week-server";
 import { sspDaysInPeriod } from "@/lib/ssp-period";
-import { sspDailyRateFor } from "@/lib/leave-requests/ssp-spell";
+import { sspRateFor } from "@/lib/leave-requests/ssp-spell";
 import { sspPay } from "@/lib/uk-compliance";
 import {
   getDailyHolidayPayRateForUser,
@@ -13,8 +13,11 @@ import {
   isAnnualLeaveType,
 } from "@/lib/holidayPay";
 import {
+  calculatePaternityPay,
+  getAweForUser,
   getCurrentSMPPhase,
   isMaternityLeaveType,
+  weeklyStatutoryPayFor,
 } from "@/lib/smpCalculator";
 import {
   isNeonatalCareLeaveType,
@@ -94,6 +97,7 @@ export async function GET(request: Request) {
           workCountry: true,
           employmentType: true,
           averageWeeklyEarnings: true,
+          serviceStartDate: true,
         },
       },
       leaveType: {
@@ -268,6 +272,29 @@ export async function GET(request: Request) {
             }
           : null,
         neonatal,
+        // Statutory Paternity Pay for the paternity leave in these dates: a
+        // weekly payment for 7 calendar days a week.
+        spp:
+          isUkBased && /paternity/i.test(r.leaveType.name)
+            ? await (async () => {
+                const pay = calculatePaternityPay(await getAweForUser(r.userId, r.startDate), {
+                  serviceStartDate: r.user.serviceStartDate,
+                  expectedDueDate: r.childBirthDate,
+                });
+                const periodStart = r.startDate > from ? r.startDate : from;
+                const periodEnd = r.endDate < to ? r.endDate : to;
+                const calendarDays =
+                  periodEnd < periodStart
+                    ? 0
+                    : Math.round((periodEnd.getTime() - periodStart.getTime()) / 86_400_000) + 1;
+                return {
+                  weeklyRate: pay.weeklyRate,
+                  calendarDays,
+                  pay: pay.weeklyRate === null ? null : weeklyStatutoryPayFor(pay.weeklyRate, calendarDays),
+                  basis: pay.basis,
+                };
+              })()
+            : null,
         ssp: r.leaveType.name.includes("SSP")
           ? await (async () => {
               const days = sspDaysInPeriod({
@@ -280,11 +307,14 @@ export async function GET(request: Request) {
               });
               // Stored at booking; worked out now for absences booked before
               // rates were stored, so payroll always has a figure to pay.
-              const dailyRate = await sspDailyRateFor(r);
+              const rate = await sspRateFor(r);
+              const dailyRate = rate?.dailyRate ?? null;
               return {
                 daysInPeriod: days,
                 dailyRate,
                 pay: dailyRate === null ? null : sspPay(days, dailyRate, week.daysPerWeek),
+                averageWeeklyEarnings: rate?.averageWeeklyEarnings ?? null,
+                basis: rate?.basis ?? null,
               };
             })()
           : null,
@@ -302,6 +332,7 @@ export async function GET(request: Request) {
       rows.reduce((s, r) => s + (r.estimatedPay ?? 0), 0).toFixed(2)
     ),
     totalSspPay: Number(rows.reduce((s, r) => s + (r.ssp?.pay ?? 0), 0).toFixed(2)),
+    totalSppPay: Number(rows.reduce((s, r) => s + (r.spp?.pay ?? 0), 0).toFixed(2)),
   };
 
   const format = parseExportFormat(searchParams.get("format"));

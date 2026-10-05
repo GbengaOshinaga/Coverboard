@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { calculateHolidayPayRate } from "@/lib/holidayPay";
 import { syncUserAverageWeeklyEarnings } from "@/lib/smpCalculator";
+import { recomputeSspAfterEarningsChange } from "@/lib/leave-requests/ssp-spell";
 import {
   holidayPayNotApplicablePayload,
   isUkHolidayPayApplicable,
@@ -85,6 +86,14 @@ export async function POST(
   await syncUserAverageWeeklyEarnings(memberId).catch((err) =>
     console.error("Failed to sync average weekly earnings:", err)
   );
+  if (parsed.data.rows.length > 0) {
+    const earliestWeek = new Date(
+      Math.min(...parsed.data.rows.map((r) => new Date(r.weekStartDate).getTime()))
+    );
+    await recomputeSspAfterEarningsChange(memberId, earliestWeek).catch((err) =>
+      console.error("Failed to recalculate SSP after an earnings change:", err)
+    );
+  }
 
   // Return updated stats
   const entries = await prisma.weeklyEarning.findMany({

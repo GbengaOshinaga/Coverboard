@@ -30,6 +30,7 @@ async function main() {
       endDate: true,
       sspDaysPaid: true,
       sspDailyRate: true,
+      sspAverageWeeklyEarnings: true,
       user: { select: { name: true } },
     },
   });
@@ -43,14 +44,23 @@ async function main() {
     });
     if (!ssp) continue;
     const oldRate = spell.sspDailyRate === null ? null : Number(spell.sspDailyRate);
-    if (ssp.sspDaysPaid === spell.sspDaysPaid && oldRate === ssp.info.dailyRate) continue;
+    const oldAwe = spell.sspAverageWeeklyEarnings === null ? null : Number(spell.sspAverageWeeklyEarnings);
+    if (
+      ssp.sspDaysPaid === spell.sspDaysPaid &&
+      oldRate === ssp.info.dailyRate &&
+      oldAwe === ssp.info.averageWeeklyEarnings
+    ) {
+      continue;
+    }
     changes += 1;
     console.log(
       `${spell.user.name} ${spell.startDate.toISOString().slice(0, 10)}–${spell.endDate
         .toISOString()
         .slice(0, 10)}: days ${spell.sspDaysPaid} → ${ssp.sspDaysPaid}, daily rate ${
         oldRate ?? "not stored"
-      } → ${ssp.info.dailyRate}`
+      } → ${ssp.info.dailyRate}, average weekly earnings ${
+        oldAwe ?? "none"
+      } → ${ssp.info.averageWeeklyEarnings ?? "none recorded (flat rate)"}`
     );
   }
 

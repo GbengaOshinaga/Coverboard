@@ -1014,7 +1014,9 @@ export default function ReportsPage() {
                     <CardTitle>SSP liability</CardTitle>
                     <CardDescription>
                       Current and upcoming Statutory Sick Pay absences with
-                      estimated costs.
+                      estimated costs. Past absences aren&apos;t listed, but
+                      still count towards days left when they link (8 weeks or
+                      less between absences).
                     </CardDescription>
                     {ukOnlyNote && (
                       <p className="text-xs text-gray-500">{ukOnlyNote}</p>
@@ -1079,7 +1081,12 @@ export default function ReportsPage() {
                               {row.sspDaysPaid}
                             </td>
                             <td className="py-2.5 pr-4 text-right font-mono text-gray-600">
-                              &pound;{row.dailyRate.toFixed(2)}
+                              <span title={row.rateBasis}>&pound;{row.dailyRate.toFixed(2)}</span>
+                              {(row.averageWeeklyEarnings === null || row.dailyRate === 0) && (
+                                <span className="block max-w-56 text-[11px] font-sans text-amber-700">
+                                  {row.rateBasis}
+                                </span>
+                              )}
                             </td>
                             <td className="py-2.5 pr-4 text-right font-mono text-gray-600">
                               &pound;{row.estimatedCostToDate.toFixed(2)}
@@ -1510,7 +1517,8 @@ export default function ReportsPage() {
                       <code>recalculated</code> when computed now for
                       annual leave requests lacking a stored rate. SSP
                       absences show the SSP days in these dates, the daily
-                      rate and SSP pay.
+                      rate and SSP pay; paternity leave shows Statutory
+                      Paternity Pay (SPP).
                     </CardDescription>
                   </CardHeaderIntro>
                   {/* Only offered when there's leave in the period; an empty
@@ -1590,12 +1598,15 @@ export default function ReportsPage() {
                       </p>
                     </div>
                     <div className="rounded-md border border-gray-100 bg-gray-50 p-3">
-                      <p className="text-xs text-gray-500">SSP (£)</p>
+                      <p className="text-xs text-gray-500">Statutory pay (£)</p>
                       <p className="text-lg font-semibold text-gray-900">
-                        {payrollReport.totals.totalSspPay.toLocaleString("en-GB", {
+                        {(payrollReport.totals.totalSspPay + payrollReport.totals.totalSppPay).toLocaleString("en-GB", {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
                         })}
+                      </p>
+                      <p className="text-[11px] text-gray-500">
+                        SSP £{payrollReport.totals.totalSspPay.toFixed(2)} · SPP £{payrollReport.totals.totalSppPay.toFixed(2)}
                       </p>
                     </div>
                   </div>
@@ -1659,7 +1670,11 @@ export default function ReportsPage() {
                                 : row.daysTaken}
                             </td>
                             <td className="py-2 pr-4 text-right text-gray-700">
-                              {row.ssp
+                              {row.spp
+                                ? row.spp.weeklyRate == null
+                                  ? "—"
+                                  : `£${row.spp.weeklyRate.toFixed(2)}/wk SPP`
+                                : row.ssp
                                 ? row.ssp.dailyRate == null
                                   ? "—"
                                   : `£${row.ssp.dailyRate.toFixed(2)} SSP`
@@ -1672,16 +1687,30 @@ export default function ReportsPage() {
                                     : `£${row.dailyHolidayPayRate.toFixed(2)}`}
                             </td>
                             <td className="py-2 pr-4 text-right font-medium text-gray-900">
-                              {row.ssp
+                              {row.spp
+                                ? row.spp.pay == null
+                                  ? "—"
+                                  : `£${row.spp.pay.toFixed(2)}`
+                                : row.ssp
                                 ? row.ssp.pay == null
                                   ? "—"
                                   : `£${row.ssp.pay.toFixed(2)}`
                                 : row.estimatedPay == null
                                   ? "—"
                                   : `£${row.estimatedPay.toFixed(2)}`}
+                              {row.spp && (
+                                <div className="max-w-56 text-[11px] font-normal text-gray-500">
+                                  {row.spp.weeklyRate == null
+                                    ? row.spp.basis
+                                    : `${row.spp.calendarDays} days of SPP`}
+                                </div>
+                              )}
                               {row.ssp && (
-                                <div className="text-[11px] font-normal text-gray-500">
+                                <div className="max-w-56 text-[11px] font-normal text-gray-500">
                                   {row.ssp.daysInPeriod} SSP day{row.ssp.daysInPeriod === 1 ? "" : "s"}
+                                  {row.ssp.averageWeeklyEarnings === null || row.ssp.dailyRate === 0
+                                    ? ` · ${row.ssp.basis}`
+                                    : ""}
                                 </div>
                               )}
                             </td>

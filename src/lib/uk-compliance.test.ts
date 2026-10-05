@@ -17,6 +17,7 @@ import {
   calculateSspPayableDaysForSpell,
   calculateSspDailyRate,
   sspPay,
+  sspRateBasis,
   calculateSspWeeklyRate,
   calculateSspEntitlement,
   easterSunday,
@@ -470,4 +471,17 @@ test("sspPay: 28 weeks always pays exactly 28 × the weekly rate", () => {
     assert.equal(sspPay(28 * qDays, rate, qDays), 3451, `${qDays} qualifying days`);
   }
   assert.equal(sspPay(0, 41.0833, 3), 0);
+});
+
+test("sspRateBasis explains every SSP rate", () => {
+  const after = new Date("2026-11-02T00:00:00Z");
+  // Frank with no pay recorded: flat rate, and says so.
+  assert.match(sspRateBasis({ startDate: after, averageWeeklyEarnings: null, flatRate: 123.25 }), /No pay recorded .* flat £123\.25/);
+  assert.match(sspRateBasis({ startDate: after, averageWeeklyEarnings: 0, flatRate: 123.25 }), /^£0: every week recorded .* no-pay week/);
+  assert.equal(
+    sspRateBasis({ startDate: after, averageWeeklyEarnings: 120, flatRate: 123.25 }),
+    "80% of £120.00 average weekly earnings = £96.00 a week"
+  );
+  assert.match(sspRateBasis({ startDate: after, averageWeeklyEarnings: 480, flatRate: 123.25 }), /^Flat rate of £123\.25 a week \(80% of £480\.00/);
+  assert.match(sspRateBasis({ startDate: new Date("2026-03-02T00:00:00Z"), averageWeeklyEarnings: 120, flatRate: 118.75 }), /before 6 April 2026/);
 });

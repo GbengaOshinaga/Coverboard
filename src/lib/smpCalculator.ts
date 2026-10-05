@@ -147,6 +147,59 @@ export function calculateSmpEntitlement(
   };
 }
 
+/**
+ * Statutory Paternity Pay: the lower of the flat rate (the same as SMP's,
+ * £194.32 a week for 2026/27) and 90% of average weekly earnings, for the 1
+ * or 2 weeks of paternity leave. Same earnings and service tests as SMP.
+ * https://www.gov.uk/employers-paternity-pay-leave
+ */
+export const SPP_FLAT_RATE = SMP_FLAT_RATE;
+
+export type PaternityPay =
+  | { eligible: true; weeklyRate: number; basis: string }
+  | { eligible: false; weeklyRate: null; basis: string };
+
+export function calculatePaternityPay(
+  averageWeeklyEarnings: number | null | undefined,
+  opts: SmpEntitlementOpts = {}
+): PaternityPay {
+  const flat = opts.flatRate ?? SPP_FLAT_RATE;
+  const lel = opts.lelWeekly ?? UK_LEL_WEEKLY;
+  const money = (n: number) => `£${n.toFixed(2)}`;
+  const e = calculateSmpEntitlement(averageWeeklyEarnings, { ...opts, flatRate: flat });
+  if (!e.eligible) {
+    const basis =
+      e.reason === "Missing average weekly earnings"
+        ? "No pay recorded in the 8 weeks before, so paternity pay can't be worked out. Add their earnings."
+        : e.reason === "Below Lower Earnings Limit"
+          ? `Not eligible: average weekly earnings of ${money(Number(averageWeeklyEarnings))} are below the ${money(lel)} Lower Earnings Limit.`
+          : "Not eligible: less than 26 weeks' continuous service by the qualifying week.";
+    return { eligible: false, weeklyRate: null, basis };
+  }
+  const weeklyRate = e.phase2Weekly;
+  return {
+    eligible: true,
+    weeklyRate,
+    basis:
+      weeklyRate < flat
+        ? `90% of ${money(Number(averageWeeklyEarnings))} average weekly earnings = ${money(weeklyRate)} a week`
+        : `Flat rate of ${money(flat)} a week (90% of earnings is more)`,
+  };
+}
+
+/**
+ * Weekly statutory pay (SPP, SMP) is for 7 calendar days a week: full weeks
+ * pay the weekly rate, part weeks a seventh of it per day, rounded up to the
+ * penny.
+ */
+export function weeklyStatutoryPayFor(weeklyRate: number, calendarDays: number): number {
+  if (weeklyRate <= 0 || calendarDays <= 0) return 0;
+  const fullWeeks = Math.floor(calendarDays / 7);
+  const rest = calendarDays - fullWeeks * 7;
+  const part = Math.ceil(Number(((rest * weeklyRate) / 7 * 100).toFixed(6))) / 100;
+  return Number((fullWeeks * weeklyRate + part).toFixed(2));
+}
+
 export type SMPPhaseDates = {
   startDate: Date;
   phase1EndDate: Date;

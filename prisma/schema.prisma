@@ -236,6 +236,10 @@ model LeaveRequest {
   /// SSP per qualifying day (HMRC truncates to 4 decimal places), captured
   /// when the absence is booked or its dates change.
   sspDailyRate             Decimal?    @db.Decimal(10, 4)
+  /// Average weekly earnings the SSP rate was worked out from (8 weeks
+  /// before the absence); null when no pay was recorded, so the flat rate
+  /// applied.
+  sspAverageWeeklyEarnings Decimal?    @db.Decimal(10, 2)
   smpAverageWeeklyEarnings Decimal?    @db.Decimal(8, 2)
   smpPhase1EndDate         DateTime?   @db.Date
   smpPhase2EndDate         DateTime?   @db.Date

@@ -5,6 +5,7 @@ import {
   calculateSspPayableDaysForSpell,
   calculateSspEntitlement,
   sspPay,
+  sspRateBasis,
 } from "@/lib/uk-compliance";
 import { getAweForUser } from "@/lib/smpCalculator";
 import { linkedPriorChain } from "@/lib/sickness-spells";
@@ -19,6 +20,8 @@ export type SspInfo = {
   estimatedCost: number;
   remainingDaysAfter: number;
   limitReached: boolean;
+  /** Average weekly earnings in the 8 weeks before; null = no pay recorded. */
+  averageWeeklyEarnings: number | null;
 };
 
 export type SspSpellResult = {
@@ -77,20 +80,37 @@ export async function sspDaysRemainingAfter(input: {
   return { maxDays, remainingDays: Math.max(0, maxDays - chain.daysPaid - input.sspDaysPaid) };
 }
 
+type Stored = { toString(): string } | number | null;
+
 /**
- * The SSP daily rate for an absence: the rate stored when it was booked, or
- * — for absences booked before rates were stored — worked out the same way
- * now, so payroll is never left without one.
+ * The SSP daily rate for an absence and the earnings behind it: as stored
+ * when it was booked, or — for absences booked before rates were stored —
+ * worked out the same way now, so payroll is never left without one.
  */
-export async function sspDailyRateFor(absence: {
+export async function sspRateFor(absence: {
   userId: string;
   startDate: Date;
   endDate: Date;
-  sspDailyRate: { toString(): string } | number | null;
-}): Promise<number | null> {
-  if (absence.sspDailyRate !== null) return Number(absence.sspDailyRate);
-  const ssp = await computeSspForSpell(absence);
-  return ssp ? ssp.info.dailyRate : null;
+  sspDailyRate: Stored;
+  sspAverageWeeklyEarnings: Stored;
+}): Promise<{ dailyRate: number; averageWeeklyEarnings: number | null; basis: string } | null> {
+  let dailyRate: number;
+  let averageWeeklyEarnings: number | null;
+  if (absence.sspDailyRate !== null) {
+    dailyRate = Number(absence.sspDailyRate);
+    averageWeeklyEarnings =
+      absence.sspAverageWeeklyEarnings === null ? null : Number(absence.sspAverageWeeklyEarnings);
+  } else {
+    const ssp = await computeSspForSpell(absence);
+    if (!ssp) return null;
+    dailyRate = ssp.info.dailyRate;
+    averageWeeklyEarnings = ssp.info.averageWeeklyEarnings;
+  }
+  return {
+    dailyRate,
+    averageWeeklyEarnings,
+    basis: sspRateBasis({ startDate: absence.startDate, averageWeeklyEarnings }),
+  };
 }
 
 export async function computeSspForSpell(input: {
@@ -145,6 +165,7 @@ export async function computeSspForSpell(input: {
           SSP_MAX_WEEKS * workingWeek.daysPerWeek - cumulativePrior
         ),
         limitReached: entitlement.reason === "SSP 28-week limit reached",
+        averageWeeklyEarnings,
       },
       sspDaysPaid: 0,
       sspLimitReached: false,
@@ -173,6 +194,7 @@ export async function computeSspForSpell(input: {
       estimatedCost: sspPay(capped, entitlement.dailyRate, workingWeek.daysPerWeek),
       remainingDaysAfter: Math.max(0, entitlement.maxDays - cumulativeAfter),
       limitReached: sspLimitReached,
+      averageWeeklyEarnings,
     },
     sspDaysPaid: capped,
     sspLimitReached,
@@ -187,6 +209,7 @@ export function sspFields(ssp: SspSpellResult) {
     sspDaysPaid: ssp.sspDaysPaid,
     sspLimitReached: ssp.sspLimitReached,
     sspDailyRate: ssp.info.dailyRate,
+    sspAverageWeeklyEarnings: ssp.info.averageWeeklyEarnings,
   };
 }
 
@@ -213,6 +236,7 @@ async function recomputeSspSpells(userId: string, where: object): Promise<number
       sspDaysPaid: true,
       sspLimitReached: true,
       sspDailyRate: true,
+      sspAverageWeeklyEarnings: true,
     },
   });
   let changed = 0;
@@ -224,7 +248,9 @@ async function recomputeSspSpells(userId: string, where: object): Promise<number
       next.sspDaysPaid === spell.sspDaysPaid &&
       next.sspLimitReached === spell.sspLimitReached &&
       spell.sspDailyRate !== null &&
-      Number(spell.sspDailyRate) === next.sspDailyRate
+      Number(spell.sspDailyRate) === next.sspDailyRate &&
+      (spell.sspAverageWeeklyEarnings === null ? null : Number(spell.sspAverageWeeklyEarnings)) ===
+        next.sspAverageWeeklyEarnings
     ) {
       continue;
     }
@@ -257,3 +283,12 @@ export function recomputeAllSspSpells(userId: string): Promise<number> {
   return recomputeSspSpells(userId, {});
 }
 
+/**
+ * Pay is often entered after someone goes off sick. SSP is worked out from
+ * earnings in the 8 weeks before each absence, so when a week's earnings are
+ * added, changed or removed, absences starting after that week are
+ * recalculated (all of them, oldest first, because of the linked 28-week limit).
+ */
+export function recomputeSspAfterEarningsChange(userId: string, weekStartDate: Date): Promise<number> {
+  return recomputeSspSpells(userId, { startDate: { gt: weekStartDate } });
+}

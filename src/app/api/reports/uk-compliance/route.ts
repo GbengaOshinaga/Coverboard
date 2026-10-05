@@ -21,7 +21,7 @@ import {
 import { isHoursAveragedEmploymentType } from "@/lib/employment-types";
 import { recordReadAudit, requestAuditContext } from "@/lib/audit";
 import { keepingInTouchRule } from "@/lib/keeping-in-touch";
-import { sspDailyRateFor, sspDaysRemainingAfter } from "@/lib/leave-requests/ssp-spell";
+import { sspRateFor, sspDaysRemainingAfter } from "@/lib/leave-requests/ssp-spell";
 import {
   UK_COMPLIANCE_TABLES,
   isUkComplianceTableId,
@@ -150,7 +150,8 @@ export async function GET(request: Request) {
         const qDays = workingWeek.daysPerWeek;
         // Stored at booking; worked out now for absences booked before rates
         // were stored. Same function as payroll, so the two always agree.
-        const dailyRate = (await sspDailyRateFor({ ...r, userId: user.id })) ?? 0;
+        const rate = await sspRateFor({ ...r, userId: user.id });
+        const dailyRate = rate?.dailyRate ?? 0;
         // The 28-week limit covers the whole linked period, not just this absence.
         const { maxDays, remainingDays } = await sspDaysRemainingAfter({
           userId: user.id,
@@ -175,6 +176,8 @@ export async function GET(request: Request) {
           endDate: r.endDate.toISOString(),
           qualifyingDaysPerWeek: qDays,
           dailyRate,
+          averageWeeklyEarnings: rate?.averageWeeklyEarnings ?? null,
+          rateBasis: rate?.basis ?? "",
           daysElapsed,
           payableDaysToDate: payableToDate,
           estimatedCostToDate: sspPay(Math.min(payableToDate, sspDays), dailyRate, qDays),

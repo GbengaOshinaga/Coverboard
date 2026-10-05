@@ -28,6 +28,8 @@ const report: UkComplianceReport = {
       endDate: "2026-10-30T00:00:00.000Z",
       qualifyingDaysPerWeek: 3,
       dailyRate: 41.0833,
+      averageWeeklyEarnings: 480,
+      rateBasis: "Flat rate",
       daysElapsed: 6,
       payableDaysToDate: 6,
       estimatedCostToDate: 246.5,
@@ -83,7 +85,8 @@ test("compliance export headers are fixed per table (change them here on purpose
     ssp: [
       "Employee ID", "Employee", "Absence start", "Absence end", "Qualifying days per week",
       "Daily SSP rate (£, 4 d.p. per HMRC tables)", "SSP days", "SSP days remaining", "28-week limit reached",
-      "Cost to date (£)", "Cost, whole absence (£)",
+      "Cost to date (£)", "Cost, whole absence (£)", "Average weekly earnings used (£)",
+      "How the rate was worked out",
     ],
     parental: [
       "Employee ID", "Employee", "Leave type", "Start date", "Expected return", "Leave (working days)",
@@ -95,7 +98,7 @@ test("compliance export headers are fixed per table (change them here on purpose
 });
 
 test("SSP row: plain dates, Yes/No, HMRC 4-decimal rate, money to 2 places", () => {
-  assert.equal(csvLines("ssp")[1], "u1,Brian,2026-10-19,2026-10-30,3,41.0833,6,78,No,246.50,246.50");
+  assert.equal(csvLines("ssp")[1], "u1,Brian,2026-10-19,2026-10-30,3,41.0833,6,78,No,246.50,246.50,480.00,Flat rate");
 });
 
 test("holiday usage says whether it's days or hours", () => {
