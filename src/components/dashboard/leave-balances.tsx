@@ -1,5 +1,8 @@
 "use client";
 
+import { CARRY_OVER_REASON_LABEL } from "@/lib/carry-over";
+import type { LeaveBalance as LeaveBalanceType } from "@/lib/leave-balances";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wallet } from "lucide-react";
 
@@ -17,12 +20,7 @@ type LeaveBalance = {
   used: number;
   pending: number;
   remaining: number;
-  carryOver: {
-    carried: number;
-    remaining: number;
-    expiresAt: string | null;
-    expired: boolean;
-  };
+  carryOver: LeaveBalanceType["carryOver"];
 };
 
 /**
@@ -174,19 +172,19 @@ function BalanceCard({
           {isHours && hasHoursLogged && (
             <span>accrued at 12.07% of hours worked</span>
           )}
-          {balance.carryOver.expired ? (
-            <span className="text-gray-400">carry-over expired</span>
-          ) : (
-            balance.carryOver.remaining > 0 && (
-              <span>
-                carry-over {balance.carryOver.remaining}
-                {balance.carryOver.expiresAt
-                  ? ` (expires ${new Date(
-                      balance.carryOver.expiresAt
-                    ).toLocaleDateString()})`
+          {balance.carryOver.parts.map((p, i) =>
+            p.remaining > 0 ? (
+              <span key={i}>
+                {p.remaining} {CARRY_OVER_REASON_LABEL[p.reason]}
+                {p.expiresAt
+                  ? ` (use by ${new Date(p.expiresAt).toLocaleDateString("en-GB", { timeZone: "UTC" })})`
                   : ""}
               </span>
-            )
+            ) : p.lapsed > 0 ? (
+              <span key={i} className="text-gray-400">
+                {p.lapsed} {CARRY_OVER_REASON_LABEL[p.reason]} expired
+              </span>
+            ) : null
           )}
       </div>
     </div>

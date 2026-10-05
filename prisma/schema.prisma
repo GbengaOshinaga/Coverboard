@@ -402,21 +402,28 @@ model UserWeeklyHours {
 }
 
 model LeaveCarryOverBalance {
-  id            String   @id @default(cuid())
+  id            String          @id @default(cuid())
   userId        String
   leaveTypeId   String
   leaveYear     Int
+  /// Why it carried over; each reason has its own expiry (src/lib/carry-over.ts).
+  reason        CarryOverReason @default(COMPANY_POLICY)
   daysCarried   Float
   daysRemaining Float
   expiresAt     DateTime
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, leaveTypeId, leaveYear])
-  @@index([userId, leaveTypeId])
+  @@index([userId, leaveTypeId, leaveYear])
+}
+
+enum CarryOverReason {
+  COMPANY_POLICY
+  SICKNESS
+  FAMILY_LEAVE
 }
 
 model WeeklyEarning {

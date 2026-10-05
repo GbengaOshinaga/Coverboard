@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import type { PayrollReport } from "@/lib/payroll-columns";
 import type { Fte } from "@/lib/fte";
+import { CARRY_OVER_REASON_LABEL, type CarryOverReason } from "@/lib/carry-over";
 import {
   peopleOnSspToday,
   sspStarted,
@@ -99,7 +100,16 @@ type RolloverPreviewRow = {
   leaveTypeName: string;
   unusedDays: number;
   daysCarried: number;
-  unit?: "days" | "hours";
+  unit: "days" | "hours";
+  sicknessDays: number;
+  familyLeaveDays: number;
+  statutoryExcluded: boolean;
+  rows: Array<{
+    reason: CarryOverReason;
+    carried: number;
+    expiresAt: string;
+    source: "brought_forward" | "this_year";
+  }>;
 };
 
 /** Monday (YYYY-MM-DD) of the week containing a YYYY-MM-DD date. */
@@ -166,6 +176,8 @@ export default function ReportsPage() {
     RolloverPreviewRow[] | null
   >(null);
   const [rolloverProcessing, setRolloverProcessing] = useState(false);
+  // People whose sickness or family leave didn't stop them taking holiday.
+  const [rolloverExcluded, setRolloverExcluded] = useState<Set<string>>(new Set());
 
   const { toast } = useToast();
 
@@ -261,7 +273,11 @@ export default function ReportsPage() {
       const res = await fetch("/api/carry-over/process", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fromYear: rolloverYear, dryRun }),
+        body: JSON.stringify({
+          fromYear: rolloverYear,
+          dryRun,
+          excludeStatutory: [...rolloverExcluded],
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -1745,11 +1761,32 @@ export default function ReportsPage() {
                   Year-end carry-over rollover
                 </CardTitle>
                 <CardDescription>
-                  Process the end of a UK leave year. For each UK employee,
-                  unused Annual Leave (capped by your carry-over max) is
-                  carried into the next year and expires on the date configured
-                  in Settings.
+                  Process the end of a UK leave year. Unused Annual Leave
+                  carries into the next year:
                 </CardDescription>
+                <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-gray-600">
+                  <li>
+                    <strong>After sickness</strong> — the untaken part of the
+                    4 weeks (all untaken leave for irregular-hours staff), no
+                    more than the days they were off, to use within 18 months
+                    of the year end. Required by law.
+                  </li>
+                  <li>
+                    <strong>After family leave</strong> (maternity, paternity,
+                    adoption, shared parental, bereavement, neonatal) — the
+                    same, into next year. Required by law.
+                  </li>
+                  <li>
+                    <strong>Company carry-over</strong> — from what&apos;s
+                    left, up to your cap, expiring on the date set in
+                    Settings.
+                  </li>
+                </ul>
+                <p className="mt-1 text-xs text-gray-500">
+                  The law covers leave people couldn&apos;t take because they
+                  were off. Untick anyone whose absence didn&apos;t stop them
+                  taking it, then preview again.
+                </p>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap items-end gap-3">
@@ -1794,35 +1831,93 @@ export default function ReportsPage() {
                       <thead>
                         <tr className="border-b border-gray-100 text-left text-xs font-medium uppercase text-gray-500">
                           <th className="pb-2 pr-4">Employee</th>
-                          <th className="pb-2 pr-4">Email</th>
                           <th className="pb-2 pr-4 text-right">Unused</th>
-                          <th className="pb-2 text-right">Carried</th>
+                          <th className="pb-2 pr-4">Off sick / family leave</th>
+                          <th className="pb-2 pr-4">Carries over</th>
+                          <th className="pb-2 text-right">Total</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {rolloverPreview.map((row) => (
-                          <tr
-                            key={row.userId}
-                            className="border-b border-gray-50"
-                          >
-                            <td className="py-2.5 pr-4 font-medium text-gray-900">
-                              {row.name}
-                            </td>
-                            <td className="py-2.5 pr-4 text-gray-600">
-                              {row.email}
-                            </td>
-                            <td className="py-2.5 pr-4 text-right font-mono text-gray-600">
-                              {row.unusedDays}
-                              {row.unit === "hours" ? "h" : " days"}
-                            </td>
-                            <td className="py-2.5 text-right font-mono font-medium">
-                              {row.daysCarried}
-                              {row.unit === "hours" ? "h" : " days"}
-                            </td>
-                          </tr>
-                        ))}
+                        {rolloverPreview.map((row) => {
+                          const unit = row.unit === "hours" ? "h" : " days";
+                          const off = row.sicknessDays + row.familyLeaveDays > 0;
+                          return (
+                            <tr key={row.userId} className="border-b border-gray-50 align-top">
+                              <td className="py-2.5 pr-4">
+                                <div className="font-medium text-gray-900">{row.name}</div>
+                                <div className="text-[11px] text-gray-500">{row.email}</div>
+                              </td>
+                              <td className="py-2.5 pr-4 text-right font-mono text-gray-600">
+                                {row.unusedDays}
+                                {unit}
+                              </td>
+                              <td className="py-2.5 pr-4 text-xs text-gray-600">
+                                {off ? (
+                                  <label className="flex items-start gap-1.5">
+                                    <input
+                                      type="checkbox"
+                                      className="mt-0.5"
+                                      checked={!rolloverExcluded.has(row.userId)}
+                                      onChange={(e) => {
+                                        const next = new Set(rolloverExcluded);
+                                        if (e.target.checked) next.delete(row.userId);
+                                        else next.add(row.userId);
+                                        setRolloverExcluded(next);
+                                      }}
+                                    />
+                                    <span>
+                                      {row.sicknessDays > 0 &&
+                                        `${row.sicknessDays} day${row.sicknessDays === 1 ? "" : "s"} sick`}
+                                      {row.sicknessDays > 0 && row.familyLeaveDays > 0 && " · "}
+                                      {row.familyLeaveDays > 0 &&
+                                        `${row.familyLeaveDays} day${row.familyLeaveDays === 1 ? "" : "s"} family leave`}
+                                      <span className="block text-gray-400">
+                                        Carry over what they couldn&apos;t take
+                                      </span>
+                                    </span>
+                                  </label>
+                                ) : (
+                                  <span className="text-gray-400">—</span>
+                                )}
+                              </td>
+                              <td className="py-2.5 pr-4 text-xs text-gray-700">
+                                {row.rows.length === 0 ? (
+                                  <span className="text-gray-400">Nothing</span>
+                                ) : (
+                                  <ul className="space-y-0.5">
+                                    {row.rows.map((r, k) => (
+                                      <li key={k}>
+                                        <span className="font-mono">
+                                          {r.carried}
+                                          {unit}
+                                        </span>{" "}
+                                        {CARRY_OVER_REASON_LABEL[r.reason]}
+                                        {r.source === "brought_forward" ? " (brought forward)" : ""}
+                                        <span className="text-gray-400">
+                                          {" "}
+                                          · until{" "}
+                                          {new Date(r.expiresAt).toLocaleDateString("en-GB", { timeZone: "UTC" })}
+                                        </span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </td>
+                              <td className="py-2.5 text-right font-mono font-medium">
+                                {row.daysCarried}
+                                {unit}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
+                    {rolloverExcluded.size > 0 && (
+                      <p className="mt-2 text-xs text-amber-700">
+                        Changed who gets carry-over after an absence? Preview
+                        again before running.
+                      </p>
+                    )}
                   </div>
                 )}
               </CardContent>

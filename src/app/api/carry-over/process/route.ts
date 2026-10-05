@@ -2,23 +2,36 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getUserLeaveBalances } from "@/lib/leave-balances";
+import { getUserLeaveBalances, leaveTakenBy } from "@/lib/leave-balances";
+import {
+  isFamilyLeaveTypeName,
+  planYearEndCarryOver,
+  type YearEndRow,
+} from "@/lib/carry-over";
+import { isSicknessLeaveTypeName } from "@/lib/leave-requests/rules";
+import { countWorkingDays, resolveWorkingWeek, weekdaysFromPatterns } from "@/lib/working-week";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { z } from "zod";
 
 const bodySchema = z.object({
   fromYear: z.number().int().min(2020).max(2100),
   dryRun: z.boolean().optional(),
+  /**
+   * People whose sickness or family leave didn't stop them taking their
+   * holiday (the admin's judgement): no statutory carry-over for them.
+   */
+  excludeStatutory: z.array(z.string()).optional(),
 });
 
 /**
- * Year-end carry-over rollover. For every UK user in the org, find their
- * Annual Leave balance for `fromYear`, calculate unused days, cap at
- * `ukCarryOverMax`, and create a `LeaveCarryOverBalance` for `fromYear + 1`
- * with the org-configured expiry date.
- *
- * Does nothing if `ukCarryOverEnabled` is false. Idempotent: re-running
- * upserts the same balance row.
+ * Year-end carry-over for every UK employee's Annual Leave, into `fromYear + 1`
+ * (rules in src/lib/carry-over.ts):
+ *  - sickness carry-over still in date comes forward;
+ *  - after sickness or family leave, the untaken part of the 4 weeks (all
+ *    untaken leave for irregular-hours staff) — required by law, so it runs
+ *    whether or not the team's own carry-over is switched on;
+ *  - the team's carry-over from what's left, up to its cap.
+ * Idempotent: re-running replaces that person's carry-over for the new year.
  */
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
@@ -44,6 +57,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
   const { fromYear, dryRun } = parsed;
+  const excluded = new Set(parsed.excludeStatutory ?? []);
 
   const org = await prisma.organization.findUnique({
     where: { id: orgId },
@@ -59,19 +73,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Organization not found" }, { status: 404 });
   }
 
-  if (!org.ukCarryOverEnabled || org.ukCarryOverMax <= 0) {
-    return NextResponse.json(
-      { error: "Carry-over is not enabled. Configure it in Settings first." },
-      { status: 400 }
-    );
-  }
-
+  // UK statutory rules follow the work country, as everywhere else.
   const ukUsers = await prisma.user.findMany({
-    where: { organizationId: orgId, countryCode: "GB" },
-    select: { id: true, name: true, email: true },
+    where: { organizationId: orgId, workCountry: "GB" },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      daysWorkedPerWeek: true,
+      workPatterns: { select: { weekday: true, effectiveFrom: true, effectiveTo: true } },
+    },
   });
 
-  const expiresAt = new Date(
+  const companyExpiresAt = new Date(
     fromYear + 1,
     org.ukCarryOverExpiryMonth - 1,
     org.ukCarryOverExpiryDay,
@@ -80,6 +94,8 @@ export async function POST(request: Request) {
     59,
     999
   );
+  const yearStart = new Date(fromYear, 0, 1);
+  const yearEnd = new Date(fromYear, 11, 31, 23, 59, 59, 999);
 
   const summary: Array<{
     userId: string;
@@ -87,10 +103,16 @@ export async function POST(request: Request) {
     email: string;
     leaveTypeId: string;
     leaveTypeName: string;
-    unusedDays: number;
-    daysCarried: number;
     /** "hours" for irregular/zero-hours staff, whose holiday is in hours. */
     unit: "days" | "hours";
+    /** This year's own leave not taken. */
+    unusedDays: number;
+    sicknessDays: number;
+    familyLeaveDays: number;
+    statutoryExcluded: boolean;
+    rows: YearEndRow[];
+    /** Total carried into next year. */
+    daysCarried: number;
   }> = [];
 
   for (const user of ukUsers) {
@@ -104,19 +126,85 @@ export async function POST(request: Request) {
     const annualLeave = balances.find((b) => b.leaveTypeName === "Annual Leave");
     if (!annualLeave) continue;
 
-    // Irregular/zero-hours holiday is in hours: carry hours, with the cap
-    // (set in days) converted at their average day. Carry-over stored for
-    // them is in hours, and their next year's hours balance adds it back.
-    const isHours = annualLeave.unit === "hours";
-    const baseAllowance = annualLeave.allowance - annualLeave.carryOver.remaining;
-    const round2 = (n: number) => Math.round(n * 100) / 100;
-    const unusedDays = round2(Math.max(0, baseAllowance - annualLeave.used));
-    const cap = isHours
-      ? org.ukCarryOverMax * (annualLeave.avgHoursPerDay ?? 7.5)
-      : org.ukCarryOverMax;
-    const daysCarried = round2(Math.min(unusedDays, cap));
+    const unit = annualLeave.unit === "hours" ? "hours" : "days";
+    const workingWeek = resolveWorkingWeek(
+      weekdaysFromPatterns(user.workPatterns, yearEnd),
+      user.daysWorkedPerWeek
+    );
+    const avgHoursPerDay = annualLeave.avgHoursPerDay ?? 7.5;
 
-    if (daysCarried <= 0) continue;
+    const [annualRequests, absences, carriedIn] = await Promise.all([
+      prisma.leaveRequest.findMany({
+        where: {
+          userId: user.id,
+          leaveTypeId: annualLeave.leaveTypeId,
+          status: "APPROVED",
+          startDate: { lte: yearEnd },
+          endDate: { gte: yearStart },
+        },
+        select: { startDate: true, endDate: true, hoursBooked: true },
+      }),
+      prisma.leaveRequest.findMany({
+        where: {
+          userId: user.id,
+          status: "APPROVED",
+          startDate: { lte: yearEnd },
+          endDate: { gte: yearStart },
+        },
+        select: { startDate: true, endDate: true, leaveType: { select: { name: true } } },
+      }),
+      prisma.leaveCarryOverBalance.findMany({
+        where: { userId: user.id, leaveTypeId: annualLeave.leaveTypeId, leaveYear: fromYear },
+        select: { reason: true, daysCarried: true, expiresAt: true },
+      }),
+    ]);
+
+    const daysOff = (match: (name: string) => boolean) =>
+      absences
+        .filter((a) => match(a.leaveType.name))
+        .reduce(
+          (sum, a) =>
+            sum +
+            countWorkingDays(
+              a.startDate < yearStart ? yearStart : a.startDate,
+              a.endDate > yearEnd ? yearEnd : a.endDate,
+              workingWeek.weekdays
+            ),
+          0
+        );
+    const sicknessDays = daysOff(isSicknessLeaveTypeName);
+    const familyLeaveDays = daysOff(isFamilyLeaveTypeName);
+
+    const takenBy = leaveTakenBy(annualRequests, {
+      yearStart,
+      yearEnd,
+      weekdays: workingWeek.weekdays,
+      unit,
+      avgHoursPerDay,
+    });
+    const entitlement = annualLeave.allowance - annualLeave.carryOver.inAllowance;
+    const { unused, rows } = planYearEndCarryOver({
+      fromYear,
+      unit,
+      entitlement,
+      carriedIn: carriedIn.map((c) => ({ reason: c.reason, carried: c.daysCarried, expiresAt: c.expiresAt })),
+      takenBy,
+      daysPerWeek: workingWeek.daysPerWeek,
+      avgHoursPerDay,
+      sicknessDays,
+      familyLeaveDays,
+      includeStatutory: !excluded.has(user.id),
+      company: {
+        enabled: org.ukCarryOverEnabled,
+        // The cap is set in days; irregular-hours staff carry hours.
+        max: unit === "hours" ? org.ukCarryOverMax * avgHoursPerDay : org.ukCarryOverMax,
+        expiresAt: companyExpiresAt,
+      },
+    });
+
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+    const daysCarried = round2(rows.reduce((sum, r) => sum + r.carried, 0));
+    if (daysCarried <= 0 && sicknessDays + familyLeaveDays === 0) continue;
 
     summary.push({
       userId: user.id,
@@ -124,34 +212,33 @@ export async function POST(request: Request) {
       email: user.email,
       leaveTypeId: annualLeave.leaveTypeId,
       leaveTypeName: annualLeave.leaveTypeName,
-      unusedDays,
+      unit,
+      unusedDays: unused,
+      sicknessDays,
+      familyLeaveDays,
+      statutoryExcluded: excluded.has(user.id),
+      rows,
       daysCarried,
-      unit: isHours ? "hours" : "days",
     });
 
     if (!dryRun) {
-      await prisma.leaveCarryOverBalance.upsert({
-        where: {
-          userId_leaveTypeId_leaveYear: {
+      // Replace this person's carry-over for the new year (re-runnable).
+      await prisma.$transaction([
+        prisma.leaveCarryOverBalance.deleteMany({
+          where: { userId: user.id, leaveTypeId: annualLeave.leaveTypeId, leaveYear: fromYear + 1 },
+        }),
+        prisma.leaveCarryOverBalance.createMany({
+          data: rows.map((r) => ({
             userId: user.id,
             leaveTypeId: annualLeave.leaveTypeId,
             leaveYear: fromYear + 1,
-          },
-        },
-        update: {
-          daysCarried,
-          daysRemaining: daysCarried,
-          expiresAt,
-        },
-        create: {
-          userId: user.id,
-          leaveTypeId: annualLeave.leaveTypeId,
-          leaveYear: fromYear + 1,
-          daysCarried,
-          daysRemaining: daysCarried,
-          expiresAt,
-        },
-      });
+            reason: r.reason,
+            daysCarried: r.carried,
+            daysRemaining: r.carried,
+            expiresAt: r.expiresAt,
+          })),
+        }),
+      ]);
     }
   }
 
@@ -170,7 +257,8 @@ export async function POST(request: Request) {
         fromYear,
         toYear: fromYear + 1,
         processed: summary.length,
-        expiresAt: expiresAt.toISOString(),
+        companyExpiresAt: companyExpiresAt.toISOString(),
+        statutoryExcluded: [...excluded],
       },
       context: requestAuditContext(request),
     });
@@ -179,7 +267,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     fromYear,
     toYear: fromYear + 1,
-    expiresAt: expiresAt.toISOString(),
+    companyExpiresAt: companyExpiresAt.toISOString(),
     dryRun: !!dryRun,
     processed: summary.length,
     summary,
