@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { EmploymentType } from "@prisma/client";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireActiveSession } from "@/lib/require-active-session";
 import { prisma } from "@/lib/prisma";
 import { getUserLeaveBalances } from "@/lib/leave-balances";
 import { WhoIsOut } from "@/components/dashboard/who-is-out";
@@ -22,10 +21,10 @@ import { Users, CalendarDays, Clock, AlertTriangle, Plus, Thermometer, Wallet } 
 export const metadata: Metadata = { title: "Dashboard" };
 
 export default async function DashboardPage() {
-  const session = await getServerSession(authOptions);
-  const orgId = (session!.user as Record<string, unknown>).organizationId as string;
-  const currentUserId = (session!.user as Record<string, unknown>).id as string;
-  const userRole = (session!.user as Record<string, unknown>).role as string;
+  const { session } = await requireActiveSession();
+  const orgId = (session.user as Record<string, unknown>).organizationId as string;
+  const currentUserId = (session.user as Record<string, unknown>).id as string;
+  const userRole = (session.user as Record<string, unknown>).role as string;
   const canSeeComplianceAlerts = userRole === "ADMIN" || userRole === "MANAGER";
   const isAdmin = userRole === "ADMIN";
 

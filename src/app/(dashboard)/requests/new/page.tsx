@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireActiveSession } from "@/lib/require-active-session";
 import { prisma } from "@/lib/prisma";
 import { RequestForm } from "@/components/leave/request-form";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -8,9 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 export const metadata: Metadata = { title: "New Request" };
 
 export default async function NewRequestPage() {
-  const session = await getServerSession(authOptions);
-  const orgId = (session!.user as Record<string, unknown>).organizationId as string;
-  const currentUserId = (session!.user as Record<string, unknown>).id as string;
+  const { session } = await requireActiveSession();
+  const orgId = (session.user as Record<string, unknown>).organizationId as string;
+  const currentUserId = (session.user as Record<string, unknown>).id as string;
 
   const leaveTypes = await prisma.leaveType.findMany({
     where: { organizationId: orgId },
