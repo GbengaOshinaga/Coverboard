@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { getWorkingWeek } from "@/lib/working-week-server";
-import { countWorkingDays } from "@/lib/working-week";
 import { recomputeBradfordScore } from "./bradford";
 import { getUserLeaveBalance } from "@/lib/leave-balances";
 import { countWeekdays } from "@/lib/utils";
@@ -19,6 +18,7 @@ import {
 } from "@/lib/smpCalculator";
 import { checkOnBehalf, isSicknessLeaveTypeName, noticeError } from "./rules";
 import { keepingInTouchError } from "@/lib/keeping-in-touch";
+import { uplError } from "@/lib/unpaid-parental";
 import { computeSspForSpell, type SspInfo } from "./ssp-spell";
 
 /**
@@ -58,6 +58,8 @@ export type CreateLeaveInput = {
    * before a shift). Recorded as approved straight away; evidence can follow.
    */
   onBehalfOfUserId?: string;
+  /** Unpaid parental leave: which child it's for. */
+  childId?: string;
   context?: AuditContext;
 };
 
@@ -113,6 +115,7 @@ export async function createLeaveRequest(
     expectedDueDate,
     splCurtailmentConfirmed,
     onBehalfOfUserId,
+    childId,
     context,
   } = input;
   const onBehalf = !!onBehalfOfUserId && onBehalfOfUserId !== actor.id;
@@ -220,39 +223,40 @@ export async function createLeaveRequest(
     }
   }
 
-  // ── Unpaid Parental Leave: 4 weeks a year (per child) ───────────────
-  // A "week" is their normal working week, so the cap is 4 × the days they
-  // work, counted on the days they'd have worked.
+  // ── Unpaid Parental Leave: per child ────────────────────────────────
+  // Up to 18 weeks for each child before their 18th birthday, at most 4 weeks
+  // for each child a year (rules and wording in src/lib/unpaid-parental.ts).
   const isUpl = /unpaid parental/i.test(leaveTypeConfig.name);
   if (isUpl) {
-    const workingWeek = await getWorkingWeek(userId, startDate);
-    const capDays = 4 * workingWeek.daysPerWeek;
-    const yearStart = new Date(Date.UTC(startDate.getUTCFullYear(), 0, 1));
-    const yearEnd = new Date(
-      Date.UTC(startDate.getUTCFullYear(), 11, 31, 23, 59, 59, 999)
-    );
-    const existingUpl = await prisma.leaveRequest.findMany({
-      where: {
-        userId,
-        leaveType: { name: { contains: "Unpaid Parental" } },
-        status: { in: ["APPROVED", "PENDING"] },
-        startDate: { lte: yearEnd },
-        endDate: { gte: yearStart },
-      },
-      select: { startDate: true, endDate: true },
-    });
-    const usedUplDays = existingUpl.reduce(
-      (sum, r) => sum + countWorkingDays(r.startDate, r.endDate, workingWeek.weekdays),
-      0
-    );
-    const requestedDays = countWorkingDays(startDate, endDate, workingWeek.weekdays);
-    if (usedUplDays + requestedDays > capDays) {
+    if (!childId) {
       return {
         ok: false,
         status: 400,
-        error: `Unpaid Parental Leave is capped at 4 weeks (${capDays} working days) a year. ${Math.max(0, capDays - usedUplDays)} days remaining.`,
+        error: "Choose which child this unpaid parental leave is for.",
       };
     }
+    const child = await prisma.child.findFirst({
+      where: { id: childId, userId },
+      select: { label: true, dateOfBirth: true, weeksTakenElsewhere: true },
+    });
+    if (!child) {
+      return { ok: false, status: 404, error: "Child not found" };
+    }
+    const workingWeek = await getWorkingWeek(userId, startDate);
+    const bookings = await prisma.leaveRequest.findMany({
+      where: { childId, status: { in: ["APPROVED", "PENDING"] } },
+      select: { startDate: true, endDate: true },
+    });
+    const uplProblem = uplError({
+      childName: child.label?.trim() || "this child",
+      dateOfBirth: child.dateOfBirth,
+      request: { startDate, endDate },
+      bookings,
+      weeksTakenElsewhere: child.weeksTakenElsewhere,
+      daysPerWeek: workingWeek.daysPerWeek,
+      weekdays: workingWeek.weekdays,
+    });
+    if (uplProblem) return { ok: false, status: 400, error: uplProblem };
   }
 
   // For annual-leave requests, capture the 52-week average daily rate so
@@ -309,6 +313,7 @@ export async function createLeaveRequest(
     : null;
   const sspInfo: SspInfo | null = ssp?.info ?? null;
   const sspDaysPaid = ssp?.sspDaysPaid ?? 0;
+  const sspDailyRate = ssp ? ssp.info.dailyRate : null;
   const sspLimitReached = ssp?.sspLimitReached ?? false;
   const notifyCapReached = ssp?.capReachedNow ?? false;
   const sspEmployeeSnapshot = ssp?.employee ?? null;
@@ -343,11 +348,13 @@ export async function createLeaveRequest(
     splitDaysUsed: splitDaysUsed ?? 0,
     hoursBooked: resolvedHoursBooked ?? undefined,
     childBirthDate: childBirthDate ?? undefined,
+    childId: isUpl ? childId : undefined,
     expectedDueDate: expectedDueDate ?? undefined,
     splCurtailmentConfirmed: splCurtailmentConfirmed ?? false,
     dailyHolidayPayRate: dailyHolidayPayRate ?? undefined,
     sspDaysPaid,
     sspLimitReached,
+    sspDailyRate,
     smpAverageWeeklyEarnings: smpAverageWeeklyEarnings ?? undefined,
     smpPhase1EndDate: smpPhase1EndDate ?? undefined,
     smpPhase2EndDate: smpPhase2EndDate ?? undefined,

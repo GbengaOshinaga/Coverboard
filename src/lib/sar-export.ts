@@ -39,6 +39,9 @@ export type SarPrisma = {
   auditLog: {
     findMany(args: { where: object; orderBy?: object; take?: number }): Promise<AuditRow[]>;
   };
+  child: {
+    findMany(args: { where: { userId: string }; orderBy?: object }): Promise<ChildRow[]>;
+  };
 };
 
 type UserRow = {
@@ -81,6 +84,7 @@ type CarryOverRow = Record<string, unknown> & { id: string };
 type EarningRow = Record<string, unknown> & { id: string };
 type RegionHistoryRow = Record<string, unknown> & { id: string };
 type AuditRow = Record<string, unknown> & { id: string };
+type ChildRow = Record<string, unknown> & { id: string };
 
 export type SarExport = {
   exportVersion: string;
@@ -108,6 +112,8 @@ export type SarExport = {
   regionHistoryAsSubject: RegionHistoryRow[];
   regionChangesMadeByThisUser: RegionHistoryRow[];
   auditLogActivity: AuditRow[];
+  /** Children recorded for unpaid parental leave. */
+  children: ChildRow[];
 };
 
 /**
@@ -186,6 +192,7 @@ export async function buildSarExport(params: {
     regionHistory,
     regionChangesMade,
     auditEntries,
+    children,
   ] = await Promise.all([
     prisma.leaveRequest.findMany({
       where: { userId },
@@ -235,6 +242,10 @@ export async function buildSarExport(params: {
       orderBy: { createdAt: "desc" },
       take: auditLimit,
     }),
+    prisma.child.findMany({
+      where: { userId },
+      orderBy: { dateOfBirth: "asc" },
+    }),
   ]);
 
   // Strip the password hash and reset-token strings before serialising.
@@ -282,6 +293,7 @@ export async function buildSarExport(params: {
     regionHistoryAsSubject: regionHistory,
     regionChangesMadeByThisUser: regionChangesMade.map(locationChangeMadeForColleague),
     auditLogActivity: auditEntries.map((e) => redactAuditEntryForSubject(e, userId)),
+    children,
   };
 }
 

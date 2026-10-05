@@ -95,6 +95,7 @@ export type UkComplianceReport = {
 };
 
 const day = (iso: string) => iso.slice(0, 10);
+const NOT_APPLICABLE = "Not applicable";
 const yesNo = (v: boolean) => (v ? "Yes" : "No");
 
 type Table<T> = {
@@ -159,7 +160,7 @@ export const UK_COMPLIANCE_TABLES = {
       { key: (r) => day(r.startDate), header: "Absence start" },
       { key: (r) => day(r.endDate), header: "Absence end" },
       { key: "qualifyingDaysPerWeek", header: "Qualifying days per week" },
-      { key: "dailyRate", header: "Daily SSP rate (£)", format: "money" },
+      { key: "dailyRate", header: "Daily SSP rate (£)", format: "rate" },
       { key: "sspDaysPaid", header: "SSP days" },
       { key: "remainingDays", header: "SSP days remaining" },
       { key: (r) => yesNo(r.sspLimitReached), header: "28-week limit reached" },
@@ -177,10 +178,12 @@ export const UK_COMPLIANCE_TABLES = {
       { key: "leaveType", header: "Leave type" },
       { key: (r) => day(r.startDate), header: "Start date" },
       { key: (r) => day(r.expectedReturnDate), header: "Expected return" },
-      { key: (r) => r.keepingInTouch?.kind ?? "None", header: "KIT or SPLIT days" },
-      { key: (r) => r.keepingInTouch?.used ?? null, header: "Days used" },
-      { key: (r) => r.keepingInTouch?.allowed ?? null, header: "Days allowed" },
-      { key: (r) => r.keepingInTouch?.remaining ?? null, header: "Days remaining" },
+      // Paternity and other leave have no KIT/SPLIT days: say so, rather than
+      // leaving cells blank that read as missing data.
+      { key: (r) => r.keepingInTouch?.kind ?? NOT_APPLICABLE, header: "KIT or SPLIT days" },
+      { key: (r) => r.keepingInTouch?.used ?? NOT_APPLICABLE, header: "Days used" },
+      { key: (r) => r.keepingInTouch?.allowed ?? NOT_APPLICABLE, header: "Days allowed" },
+      { key: (r) => r.keepingInTouch?.remaining ?? NOT_APPLICABLE, header: "Days remaining" },
       { key: (r) => r.smp?.label ?? null, header: "SMP phase" },
       { key: (r) => r.smp?.weeklyRate ?? null, header: "SMP weekly rate (£)", format: "money" },
     ],

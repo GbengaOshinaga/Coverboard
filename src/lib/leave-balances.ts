@@ -224,7 +224,9 @@ export async function getUserLeaveBalances(
     },
   });
 
-  return leaveTypes.map((lt) => {
+  // Unpaid parental leave isn't a per-person allowance: it's 4 weeks a year
+  // and 18 in total for each child, shown per child (src/lib/unpaid-parental.ts).
+  return leaveTypes.filter((lt) => !/unpaid parental/i.test(lt.name)).map((lt) => {
     const policy = lt.leavePolicies[0];
     const baseAllowance = policy?.annualAllowance ?? lt.defaultDays;
     // Statutory family leave is set in weeks of their normal working week:

@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { qualifyingDaysFor } from "@/lib/working-week-server";
+import { recomputeCurrentSspSpells } from "@/lib/leave-requests/ssp-spell";
+import { ftesFor } from "@/lib/fte-server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -100,7 +103,8 @@ export async function GET(
     });
   }
 
-  return NextResponse.json(member);
+  const fte = (await ftesFor(orgId, [member])).get(member.id);
+  return NextResponse.json({ ...member, fte });
 }
 
 export async function PATCH(
@@ -169,7 +173,12 @@ export async function PATCH(
 
     const member = await prisma.user.update({
       where: { id },
-      data: parsed.data,
+      data: {
+        ...parsed.data,
+        ...(parsed.data.daysWorkedPerWeek !== undefined
+          ? { qualifyingDaysPerWeek: qualifyingDaysFor(parsed.data.daysWorkedPerWeek) }
+          : {}),
+      },
       select: {
         id: true,
         name: true,
@@ -186,6 +195,12 @@ export async function PATCH(
         organizationId: true,
       },
     });
+
+    // Without a working pattern, days worked decides which days SSP is paid
+    // on; recalculate sickness still going on or still to come.
+    if (parsed.data.daysWorkedPerWeek !== undefined) {
+      await recomputeCurrentSspSpells(id);
+    }
 
     if (previous && previous.organizationId === member.organizationId) {
       const actor = {

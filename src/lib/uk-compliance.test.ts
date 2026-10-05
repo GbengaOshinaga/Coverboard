@@ -16,6 +16,7 @@ import {
   calculateSspPayableDays,
   calculateSspPayableDaysForSpell,
   calculateSspDailyRate,
+  sspPay,
   calculateSspWeeklyRate,
   calculateSspEntitlement,
   easterSunday,
@@ -215,14 +216,14 @@ test("SSP daily rate uses qualifying days — 5-day week", () => {
 
 test("SSP daily rate uses qualifying days — 4-day week", () => {
   const rate = calculateSspDailyRate(4, 123.25);
-  // 123.25 / 4 = 30.8125 → rounded to 30.81
-  assert.equal(rate, 30.81);
+  // 123.25 / 4 = 30.8125 (HMRC daily rate table, 4 decimal places)
+  assert.equal(rate, 30.8125);
 });
 
 test("SSP daily rate uses qualifying days — 3-day week", () => {
   const rate = calculateSspDailyRate(3, 123.25);
-  // 123.25 / 3 = 41.0833… → rounded to 41.08
-  assert.equal(rate, 41.08);
+  // 123.25 / 3 = 41.08333… → truncated to 41.0833 (HMRC daily rate table)
+  assert.equal(rate, 41.0833);
 });
 
 test("SSP daily rate defaults to 5-day week when qualifyingDays missing/invalid", () => {
@@ -380,7 +381,7 @@ test("SSP entitlement returns the correct daily rate for the employee's qualifyi
   });
   assert.equal(result.eligible, true);
   if (result.eligible) {
-    assert.equal(result.dailyRate, 30.81);
+    assert.equal(result.dailyRate, 30.8125);
   }
 });
 
@@ -437,4 +438,36 @@ test("SSP payable days count only qualifying (working) days", () => {
     calculateSspPayableDaysForSpell(d("2026-01-05"), d("2026-01-16"), { linkedToPriorPiw: true, qualifyingWeekdays: [0, 2, 4] }),
     6
   );
+});
+
+// HMRC SSP daily rate table for 2026/27 (£123.25 a week): unrounded daily
+// rate, and the amount for 1..n days, each rounded up to the penny.
+const HMRC_SSP_TABLE_2026: Array<[number, number, number[]]> = [
+  [7, 17.6071, [17.61, 35.22, 52.83, 70.43, 88.04, 105.65, 123.25]],
+  [6, 20.5416, [20.55, 41.09, 61.63, 82.17, 102.71, 123.25]],
+  [5, 24.65, [24.65, 49.3, 73.95, 98.6, 123.25]],
+  [4, 30.8125, [30.82, 61.63, 92.44, 123.25]],
+  [3, 41.0833, [41.09, 82.17, 123.25]],
+];
+
+test("SSP daily rates and amounts match HMRC's 2026/27 table", () => {
+  for (const [qDays, rate, amounts] of HMRC_SSP_TABLE_2026) {
+    assert.equal(calculateSspDailyRate(qDays, 123.25), rate, `${qDays} qualifying days`);
+    amounts.forEach((amount, i) => {
+      assert.equal(sspPay(i + 1, rate, qDays), amount, `${qDays} qualifying days, ${i + 1} paid`);
+    });
+  }
+});
+
+test("Brian: 3-day week, 6 SSP days = 2 full weeks = £246.50 (not 6 × £41.08 = £246.48)", () => {
+  const rate = calculateSspDailyRate(3, 123.25);
+  assert.equal(sspPay(6, rate, 3), 246.5);
+  assert.equal(sspPay(7, rate, 3), 287.59); // 2 weeks + 1 day (£41.09)
+});
+
+test("sspPay: 28 weeks always pays exactly 28 × the weekly rate", () => {
+  for (const [qDays, rate] of HMRC_SSP_TABLE_2026) {
+    assert.equal(sspPay(28 * qDays, rate, qDays), 3451, `${qDays} qualifying days`);
+  }
+  assert.equal(sspPay(0, 41.0833, 3), 0);
 });

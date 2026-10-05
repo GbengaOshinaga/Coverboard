@@ -2,28 +2,27 @@ import { prisma } from "@/lib/prisma";
 import { resolveWorkingWeek, weekdaysFromPatterns, type WorkingWeek } from "@/lib/working-week";
 
 /**
- * A person's working week on a date. `basis` picks the stored fallback when
- * they have no working pattern: "holiday" uses daysWorkedPerWeek, "ssp" uses
- * qualifyingDaysPerWeek (the days SSP is payable on).
+ * A person's working week on a date: their working pattern's weekdays when
+ * they have one, else their stored days worked per week. The same answer for
+ * holiday and SSP — SSP qualifying days are the days they normally work.
+ * (`qualifyingDaysPerWeek` is kept in step for display but never read here:
+ * nothing in the app set it, so it said 5 for everyone.)
  */
-export async function getWorkingWeek(
-  userId: string,
-  onDate: Date = new Date(),
-  basis: "holiday" | "ssp" = "holiday"
-): Promise<WorkingWeek> {
+export async function getWorkingWeek(userId: string, onDate: Date = new Date()): Promise<WorkingWeek> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
       daysWorkedPerWeek: true,
-      qualifyingDaysPerWeek: true,
       workPatterns: { select: { weekday: true, effectiveFrom: true, effectiveTo: true } },
     },
   });
   if (!user) return resolveWorkingWeek(null, null);
-  return resolveWorkingWeek(
-    weekdaysFromPatterns(user.workPatterns, onDate),
-    basis === "ssp" ? Number(user.qualifyingDaysPerWeek) : user.daysWorkedPerWeek
-  );
+  return resolveWorkingWeek(weekdaysFromPatterns(user.workPatterns, onDate), user.daysWorkedPerWeek);
+}
+
+/** qualifyingDaysPerWeek is a whole number; keep it in step with days worked. */
+export function qualifyingDaysFor(daysWorkedPerWeek: number): number | undefined {
+  return daysWorkedPerWeek >= 1 ? Math.min(7, Math.max(1, Math.round(daysWorkedPerWeek))) : undefined;
 }
 
 /**

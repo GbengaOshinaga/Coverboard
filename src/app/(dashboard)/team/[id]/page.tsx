@@ -1,5 +1,7 @@
 "use client";
 
+import { fteLabel, type Fte } from "@/lib/fte";
+
 import { useState, useEffect, useCallback, useRef, use } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
@@ -27,6 +29,7 @@ import { COUNTRY_NAMES } from "@/lib/utils";
 import { formatEmploymentType } from "@/lib/employment-types";
 import { ActivityLog } from "@/components/team/activity-log";
 import { WorkPatternCard } from "@/components/team/work-pattern-card";
+import { ChildrenCard } from "@/components/team/children";
 import { hasAuditTrail, type AnyPlan } from "@/lib/plans";
 import {
   parseEarningsCsv,
@@ -64,6 +67,7 @@ type Member = {
   employmentType: string;
   daysWorkedPerWeek: number;
   fteRatio: number;
+  fte?: Fte;
   department: string | null;
   countryCode: string;
   workCountry: string | null;
@@ -765,7 +769,8 @@ export default function EmployeeProfilePage({
                 )}
               </div>
               <p className="mt-1 text-sm text-gray-500">
-                {formatEmploymentType(member.employmentType)} · FTE {member.fteRatio} ·{" "}
+                {formatEmploymentType(member.employmentType)} ·{" "}
+                {member.fte ? fteLabel(member.fte) : `FTE ${member.fteRatio}`} ·{" "}
                 {member.daysWorkedPerWeek} days/week
               </p>
               {member.bradfordScore > 0 && (
@@ -923,6 +928,9 @@ export default function EmployeeProfilePage({
       </Dialog>
 
       <WorkPatternCard memberId={memberId} canManage={canManage} />
+
+      {/* Unpaid parental leave is per child (UK) */}
+      {member.workCountry === "GB" && <ChildrenCard memberId={memberId} />}
 
       {/* Holiday pay earnings history (UK-only) */}
       {member.workCountry === "GB" && (

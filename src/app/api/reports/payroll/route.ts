@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { countWorkingDays, type WorkingWeek } from "@/lib/working-week";
 import { getWorkingWeek } from "@/lib/working-week-server";
+import { sspDaysInPeriod } from "@/lib/ssp-period";
+import { sspPay } from "@/lib/uk-compliance";
 import {
   getDailyHolidayPayRateForUser,
   getHourlyHolidayPayRateForUser,
@@ -122,19 +124,21 @@ export async function GET(request: Request) {
 
   const referenceDate = to < new Date() ? to : new Date();
 
-  // Days are counted on each person's own working week (a 3-day worker off
-  // for a fortnight has 6 days, not 10).
+  // Days are counted on the person's working week as it was when the absence
+  // started (a 3-day worker off for a fortnight has 6 days, not 10) — the
+  // same week its SSP and holiday pay were worked out on.
   const workingWeekCache = new Map<string, Promise<WorkingWeek>>();
-  function workingWeek(userId: string): Promise<WorkingWeek> {
-    if (!workingWeekCache.has(userId)) {
-      workingWeekCache.set(userId, getWorkingWeek(userId, referenceDate));
+  function workingWeek(userId: string, onDate: Date): Promise<WorkingWeek> {
+    const key = `${userId}:${onDate.toISOString()}`;
+    if (!workingWeekCache.has(key)) {
+      workingWeekCache.set(key, getWorkingWeek(userId, onDate));
     }
-    return workingWeekCache.get(userId)!;
+    return workingWeekCache.get(key)!;
   }
 
   const rows = await Promise.all(
     requests.map(async (r): Promise<PayrollRow> => {
-      const week = await workingWeek(r.userId);
+      const week = await workingWeek(r.userId, r.startDate);
       const daysTaken = countWorkingDays(
         r.startDate > from ? r.startDate : from,
         r.endDate < to ? r.endDate : to,
@@ -263,6 +267,24 @@ export async function GET(request: Request) {
             }
           : null,
         neonatal,
+        ssp: r.leaveType.name.includes("SSP")
+          ? (() => {
+              const days = sspDaysInPeriod({
+                startDate: r.startDate,
+                endDate: r.endDate,
+                sspDaysPaid: r.sspDaysPaid,
+                weekdays: week.weekdays,
+                from,
+                to,
+              });
+              const dailyRate = r.sspDailyRate === null ? null : Number(r.sspDailyRate);
+              return {
+                daysInPeriod: days,
+                dailyRate,
+                pay: dailyRate === null ? null : sspPay(days, dailyRate, week.daysPerWeek),
+              };
+            })()
+          : null,
       };
     })
   );

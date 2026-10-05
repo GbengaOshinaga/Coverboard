@@ -9,6 +9,7 @@ import {
   UK_LEL_WEEKLY,
   calculateSspPayableDays,
   calculateSspDailyRate,
+  sspPay,
   calculateSspWeeklyRate,
 } from "@/lib/uk-compliance";
 import {
@@ -79,7 +80,7 @@ export async function GET(request: Request) {
       name: true,
       department: true,
       employmentType: true,
-      qualifyingDaysPerWeek: true,
+      daysWorkedPerWeek: true,
       averageWeeklyEarnings: true,
       workPatterns: { select: { weekday: true, effectiveFrom: true, effectiveTo: true } },
       leaveRequests: {
@@ -138,25 +139,29 @@ export async function GET(request: Request) {
   });
 
   const sspCurrent = users.flatMap((user) => {
-    // SSP is payable on the days they normally work: their working pattern's
-    // days when they have one, else their stored qualifying-day count.
-    const workingWeek = resolveWorkingWeek(
-      weekdaysFromPatterns(user.workPatterns, new Date()),
-      user.qualifyingDaysPerWeek
-    );
-    const qDays = workingWeek.daysPerWeek;
     // Post-reform SSP rate is capped at 80% of AWE; fall back to the flat rate
-    // when earnings are unknown.
+    // when earnings are unknown. Only used for absences booked before the
+    // daily rate was stored on them.
     const weeklyRate = calculateSspWeeklyRate(
       user.averageWeeklyEarnings === null
         ? null
         : Number(user.averageWeeklyEarnings)
     );
-    const dailyRate = calculateSspDailyRate(qDays, weeklyRate);
-    const maxDays = SSP_MAX_WEEKS * qDays;
     return user.leaveRequests
       .filter((r) => r.leaveType.name.includes("SSP") && r.endDate >= new Date())
       .map((r): SspLiabilityRow => {
+        // SSP is payable on the days they normally work, as they were when
+        // this absence started — the same week the SSP was worked out on.
+        const workingWeek = resolveWorkingWeek(
+          weekdaysFromPatterns(user.workPatterns, r.startDate),
+          user.daysWorkedPerWeek
+        );
+        const qDays = workingWeek.daysPerWeek;
+        const dailyRate =
+          r.sspDailyRate !== null
+            ? Number(r.sspDailyRate)
+            : calculateSspDailyRate(qDays, weeklyRate);
+        const maxDays = SSP_MAX_WEEKS * qDays;
         const now = new Date();
         const toDate = r.endDate < now ? r.endDate : now;
         const started = r.startDate <= now;
@@ -176,12 +181,12 @@ export async function GET(request: Request) {
           dailyRate,
           daysElapsed,
           payableDaysToDate: payableToDate,
-          estimatedCostToDate: Number((dailyRate * Math.min(payableToDate, sspDays || payableToDate)).toFixed(2)),
-          estimatedTotalCost: Number((dailyRate * sspDays).toFixed(2)),
-          sspDaysPaid: r.sspDaysPaid ?? 0,
+          estimatedCostToDate: sspPay(Math.min(payableToDate, sspDays), dailyRate, qDays),
+          estimatedTotalCost: sspPay(sspDays, dailyRate, qDays),
+          sspDaysPaid: sspDays,
           sspLimitReached: r.sspLimitReached ?? false,
           maxDays,
-          remainingDays: Math.max(0, maxDays - (r.sspDaysPaid ?? 0)),
+          remainingDays: Math.max(0, maxDays - sspDays),
           belowLel:
             user.averageWeeklyEarnings === null ||
             user.averageWeeklyEarnings === undefined

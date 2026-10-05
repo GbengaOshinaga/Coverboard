@@ -124,6 +124,8 @@ const createSchema = z.object({
   expectedDueDate: z.string().transform((s) => new Date(s)).optional(),
   splCurtailmentConfirmed: z.boolean().optional(),
   onBehalfOfUserId: z.string().optional(),
+  /** Unpaid parental leave: which of their children it's for. */
+  childId: z.string().optional(),
 });
 
 export async function POST(request: Request) {

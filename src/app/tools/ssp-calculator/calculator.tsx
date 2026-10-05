@@ -6,6 +6,7 @@ import {
   SSP_MAX_WEEKS,
   calculateSspWeeklyRate,
   calculateSspDailyRate,
+  sspPay,
 } from "@/lib/uk-compliance";
 
 function num(v: string): number {
@@ -28,7 +29,7 @@ export function SspCalculator() {
   const dailyRate = calculateSspDailyRate(qDays, weeklyRate);
   const maxDays = SSP_MAX_WEEKS * qDays;
   const payableDays = Math.min(Math.round(num(sickDays)), maxDays);
-  const total = Number((dailyRate * payableDays).toFixed(2));
+  const total = sspPay(payableDays, dailyRate, qDays);
   const usesPercentage = aweNum > 0 && weeklyRate < UK_SSP_WEEKLY_RATE;
 
   const inputClass =

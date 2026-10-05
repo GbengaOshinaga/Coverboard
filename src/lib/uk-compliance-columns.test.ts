@@ -90,8 +90,8 @@ test("compliance export headers are fixed per table (change them here on purpose
   });
 });
 
-test("SSP row: plain dates, Yes/No, money to 2 decimal places", () => {
-  assert.equal(csvLines("ssp")[1], "u1,Brian,2026-10-19,2026-10-30,3,41.08,6,78,No,246.50,246.50");
+test("SSP row: plain dates, Yes/No, HMRC 4-decimal rate, money to 2 places", () => {
+  assert.equal(csvLines("ssp")[1], "u1,Brian,2026-10-19,2026-10-30,3,41.0833,6,78,No,246.50,246.50");
 });
 
 test("holiday usage says whether it's days or hours", () => {
@@ -122,9 +122,9 @@ test("the Excel pack has one sheet per table with the same headers", async () =>
   }
 });
 
-test("parental rows say KIT, SPLIT or None", () => {
+test("parental rows say KIT, SPLIT or Not applicable (never blank)", () => {
   assert.deepEqual(csvLines("parental").slice(1), [
-    "u3,Tom,Statutory Paternity Leave,2026-10-05,2026-10-16,None,,,,,",
+    "u3,Tom,Statutory Paternity Leave,2026-10-05,2026-10-16,Not applicable,Not applicable,Not applicable,Not applicable,,",
     "u4,Sara,Shared Parental Leave (SPL),2026-09-01,2027-03-01,SPLIT,4,20,16,,",
   ]);
 });

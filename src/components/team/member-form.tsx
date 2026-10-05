@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { COUNTRY_NAMES } from "@/lib/utils";
-import { EMPLOYMENT_TYPE_OPTIONS } from "@/lib/employment-types";
+import { EMPLOYMENT_TYPE_OPTIONS, isHoursAveragedEmploymentType } from "@/lib/employment-types";
 
 type MemberData = {
   id?: string;
@@ -21,6 +21,8 @@ type MemberData = {
   countryCode: string;
   workCountry: string;
   serviceStartDate?: string | null;
+  /** New members only: the location to assign them to. */
+  regionId?: string | null;
 };
 
 const roleOptions = [
@@ -43,16 +45,26 @@ const countryOptions = Object.entries(COUNTRY_NAMES).map(([code, name]) => ({
 export function MemberForm({
   initialData,
   defaultCountry = "GB",
+  locations,
   onSubmit,
   onCancel,
 }: {
   initialData?: MemberData;
+  /**
+   * Active locations, when the team uses them. Shown when adding someone, so
+   * they don't land unassigned and silently miss cover.
+   */
+  locations?: { id: string; name: string }[];
   /** Country for a new member: the org's usual one, never a hardcoded guess. */
   defaultCountry?: string;
   onSubmit: (data: MemberData) => Promise<void>;
   onCancel: () => void;
 }) {
   const isEdit = !!initialData?.id;
+  const showLocation = !isEdit && !!locations && locations.length > 0;
+  const [regionId, setRegionId] = useState(
+    locations && locations.length === 1 ? locations[0].id : ""
+  );
   const [name, setName] = useState(initialData?.name ?? "");
   const [email, setEmail] = useState(initialData?.email ?? "");
   const [role, setRole] = useState(initialData?.role ?? "MEMBER");
@@ -114,6 +126,7 @@ export function MemberForm({
         countryCode,
         workCountry,
         serviceStartDate: serviceStartDate || null,
+        ...(showLocation ? { regionId: regionId || null } : {}),
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -206,16 +219,22 @@ export function MemberForm({
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Input
-          id="fteRatio"
-          label="FTE ratio"
-          type="number"
-          min="0"
-          max="1"
-          step="0.01"
-          value={fteRatio}
-          onChange={(e) => setFteRatio(e.target.value)}
-        />
+        {isHoursAveragedEmploymentType(employmentType) ? (
+          <p className="self-end pb-2 text-xs text-gray-500">
+            FTE is worked out from their logged weekly hours.
+          </p>
+        ) : (
+          <Input
+            id="fteRatio"
+            label="Contracted FTE"
+            type="number"
+            min="0"
+            max="1"
+            step="0.01"
+            value={fteRatio}
+            onChange={(e) => setFteRatio(e.target.value)}
+          />
+        )}
         <Input
           id="department"
           label="Department"
@@ -231,6 +250,19 @@ export function MemberForm({
           onChange={(e) => setServiceStartDate(e.target.value)}
         />
       </div>
+
+      {showLocation && (
+        <Select
+          id="regionId"
+          label="Location"
+          options={[
+            { value: "", label: "No location yet" },
+            ...locations!.map((l) => ({ value: l.id, label: l.name })),
+          ]}
+          value={regionId}
+          onChange={(e) => setRegionId(e.target.value)}
+        />
+      )}
 
       <Select
         id="rightToWorkVerified"

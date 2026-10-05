@@ -5,7 +5,7 @@ import { emailSspCapReached } from "@/lib/email-notifications";
 import { UK_SSP_WEEKLY_RATE } from "@/lib/uk-compliance";
 import { countWeekdays } from "@/lib/utils";
 import { checkEndDateChange, isSicknessLeaveTypeName, rescaleHours } from "./rules";
-import { computeSspForSpell, recomputeLaterSspSpells } from "./ssp-spell";
+import { computeSspForSpell, recomputeLaterSspSpells, sspFields } from "./ssp-spell";
 import { syncFitNoteEvidence } from "./fit-notes";
 
 export type ChangeEndDateResult =
@@ -95,7 +95,7 @@ export async function changeSicknessEndDate(input: {
     data: {
       endDate: newEndDate,
       hoursBooked: rescaleHours(request.hoursBooked, oldDays, newDays),
-      ...(ssp ? { sspDaysPaid: ssp.sspDaysPaid, sspLimitReached: ssp.sspLimitReached } : {}),
+      ...(ssp ? sspFields(ssp) : {}),
     },
     select: { id: true, userId: true, startDate: true, endDate: true },
   });

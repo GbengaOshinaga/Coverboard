@@ -12,6 +12,7 @@ import { BalanceIndicator } from "./balance-indicator";
 import { CoverageWarning } from "./coverage-warning";
 import { RegionalCoverWarning } from "./regional-cover-warning";
 import { countWeekdays } from "@/lib/utils";
+import { AddChildForm, childName, usageLine, useChildren } from "@/components/team/children";
 
 type LeaveType = {
   id: string;
@@ -112,6 +113,13 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
 
   const isSickness = /SSP|Sick/i.test(selectedLeaveType?.name ?? "");
   const isMaternityLeave = /maternity/i.test(selectedLeaveType?.name ?? "");
+  // Unpaid parental leave is per child, so the booking names the child.
+  const isUnpaidParental = /unpaid parental/i.test(selectedLeaveType?.name ?? "");
+  const { children, reload: reloadChildren } = useChildren(
+    isUnpaidParental ? currentUserId : undefined
+  );
+  const [childId, setChildId] = useState("");
+  const [addingChild, setAddingChild] = useState(false);
 
   const requestedDays = useMemo(() => {
     if (!startDate || !endDate) return 0;
@@ -202,6 +210,7 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
             isMaternityLeave && expectedDueDate
               ? new Date(expectedDueDate).toISOString()
               : undefined,
+          childId: isUnpaidParental ? childId || undefined : undefined,
         }),
       });
 
@@ -280,6 +289,54 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
         onChange={(e) => setLeaveTypeId(e.target.value)}
         required
       />
+
+      {/* Unpaid parental leave: which child (limits are per child) */}
+      {isUnpaidParental && currentUserId && (
+        <div className="space-y-2">
+          {children && children.length > 0 && (
+            <Select
+              id="childId"
+              label="Which child is this leave for?"
+              options={[
+                { value: "", label: "Choose a child" },
+                ...children.map((c) => ({ value: c.id, label: childName(c) })),
+              ]}
+              value={childId}
+              onChange={(e) => setChildId(e.target.value)}
+            />
+          )}
+          {children?.find((c) => c.id === childId) && (
+            <p className="text-xs text-gray-500">
+              {usageLine(children.find((c) => c.id === childId)!)}
+            </p>
+          )}
+          {children && children.length === 0 && !addingChild && (
+            <p className="text-sm text-gray-600">
+              Unpaid parental leave is per child (up to 18 weeks each, at most 4 a year). Add
+              the child it&apos;s for.
+            </p>
+          )}
+          {addingChild ? (
+            <AddChildForm
+              memberId={currentUserId}
+              onAdded={async (id) => {
+                setAddingChild(false);
+                await reloadChildren();
+                setChildId(id);
+              }}
+              onCancel={() => setAddingChild(false)}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAddingChild(true)}
+              className="text-sm font-medium text-brand-700 hover:underline"
+            >
+              + Add a child
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Expected due date — maternity, for SMP eligibility (qualifying week) */}
       {isMaternityLeave && (

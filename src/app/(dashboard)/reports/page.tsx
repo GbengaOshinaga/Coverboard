@@ -30,6 +30,7 @@ import {
   CalendarClock,
 } from "lucide-react";
 import type { PayrollReport } from "@/lib/payroll-columns";
+import type { Fte } from "@/lib/fte";
 import type { UkComplianceReport, UkComplianceTableId } from "@/lib/uk-compliance-columns";
 import { AbsenceTrendsSection } from "@/components/reports/absence-trends-section";
 import { RegionalCoverSection } from "@/components/reports/regional-cover-section";
@@ -50,6 +51,8 @@ type VariableHoursUser = {
   name: string;
   email: string;
   employmentType: string;
+  /** Calculated by the API from logged hours (src/lib/fte.ts). */
+  fte?: Fte;
 };
 
 type UKReport = UkComplianceReport;
@@ -313,25 +316,26 @@ export default function ReportsPage() {
     }
   }
 
-  useEffect(() => {
-    async function fetchVariableUsers() {
-      try {
-        const res = await fetch("/api/team-members");
-        if (res.ok) {
-          const all = await res.json();
-          setVariableUsers(
-            all.filter(
-              (u: VariableHoursUser) =>
-                isHoursAveragedEmploymentType(u.employmentType)
-            )
-          );
-        }
-      } catch {
-        // ignore
+  const fetchVariableUsers = useCallback(async () => {
+    try {
+      const res = await fetch("/api/team-members");
+      if (res.ok) {
+        const all = await res.json();
+        setVariableUsers(
+          all.filter(
+            (u: VariableHoursUser) =>
+              isHoursAveragedEmploymentType(u.employmentType)
+          )
+        );
       }
+    } catch {
+      // ignore
     }
-    void fetchVariableUsers();
   }, []);
+
+  useEffect(() => {
+    void fetchVariableUsers();
+  }, [fetchVariableUsers]);
 
   useEffect(() => {
     async function loadHours() {
@@ -385,6 +389,8 @@ export default function ReportsPage() {
           `/api/weekly-hours?userId=${selectedUser}`
         );
         if (refresh.ok) setWeeklyHours(await refresh.json());
+        // Their FTE is worked out from these hours; refresh it too.
+        void fetchVariableUsers();
       } else {
         const err = await res.json();
         toast(err.error || "Failed to save hours", "error");
@@ -913,15 +919,11 @@ export default function ReportsPage() {
                         ).toFixed(1)}
                         h/week
                       </strong>{" "}
-                      &rarr; FTE ratio:{" "}
+                      &rarr; FTE:{" "}
                       <strong>
-                        {Math.min(
-                          1,
-                          weeklyHours.reduce((s, e) => s + e.hoursWorked, 0) /
-                            weeklyHours.length /
-                            37.5
-                        ).toFixed(3)}
-                      </strong>
+                        {variableUsers.find((u) => u.id === selectedUser)?.fte?.value ?? "—"}
+                      </strong>{" "}
+                      (shown on their profile too)
                     </p>
                   </div>
                 )}

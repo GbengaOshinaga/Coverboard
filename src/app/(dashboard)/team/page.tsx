@@ -52,6 +52,11 @@ export default function TeamPage() {
   const [regions, setRegions] = useState<Region[]>([]);
   const [regionsEnabled, setRegionsEnabled] = useState(false);
   const [regionFilter, setRegionFilter] = useState<string>("ALL");
+  const [justAdded, setJustAdded] = useState<{
+    id: string;
+    name: string;
+    locationName: string | null;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
@@ -221,11 +226,13 @@ export default function TeamPage() {
     department?: string;
     countryCode: string;
     workCountry: string;
+    regionId?: string | null;
   }) {
+    const { regionId, ...member } = data;
     const res = await fetch("/api/team-members", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
+      body: JSON.stringify(member),
     });
 
     if (!res.ok) {
@@ -233,11 +240,33 @@ export default function TeamPage() {
       throw new Error(err.error || "Failed to add member");
     }
     const created = (await res.json()) as {
+      id: string;
+      name: string;
       ukStatutorySetupSuggested?: boolean;
     };
 
+    // Location goes through the same endpoint as "Assign location" (checks,
+    // history, audit). The member exists either way, so a failure here is a
+    // warning, not a failed add.
+    let locationName: string | null = null;
+    if (regionId) {
+      const regionRes = await fetch(`/api/team-members/${created.id}/region`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ regionId }),
+      });
+      if (regionRes.ok) {
+        locationName = regions.find((r) => r.id === regionId)?.name ?? null;
+      } else {
+        toast("Member added, but their location couldn't be set. Assign it below.", "error");
+      }
+    }
+
     toast("Team member added", "success");
     setShowForm(false);
+    setJustAdded(
+      regionsEnabled ? { id: created.id, name: created.name, locationName } : null
+    );
     if (created.ukStatutorySetupSuggested && userRole === "ADMIN") {
       const enable = window.confirm(
         "You've added a UK-based employee. Would you like to enable UK statutory leave types? This includes SSP, maternity, paternity, and all other statutory entitlements."
@@ -384,6 +413,36 @@ export default function TeamPage() {
         </div>
       )}
 
+      {justAdded && (
+        <div className="flex items-start gap-3 rounded-md border border-brand-200 bg-brand-50 px-4 py-3 text-sm">
+          <div className="flex-1 text-gray-900">
+            <p className="font-medium">
+              {justAdded.name} added
+              {justAdded.locationName ? ` to ${justAdded.locationName}` : ""}.
+            </p>
+            <p className="mt-0.5 text-xs text-gray-600">
+              {justAdded.locationName
+                ? "They won't count towards shift cover until they have a working pattern. "
+                : "They have no location yet, so they won't count towards cover. "}
+              <Link
+                href={`/team/${justAdded.id}`}
+                className="font-medium text-brand-700 underline hover:no-underline"
+              >
+                {justAdded.locationName ? "Set their working pattern →" : "Open their profile →"}
+              </Link>
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setJustAdded(null)}
+            className="text-xs text-gray-500 hover:text-gray-700"
+            aria-label="Dismiss"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {regionsEnabled &&
         canManage &&
         unassignedOthersCount > 0 &&
@@ -486,6 +545,11 @@ export default function TeamPage() {
       >
         <MemberForm
           defaultCountry={defaultCountry}
+          locations={
+            regionsEnabled
+              ? regions.filter((r) => r.isActive).map((r) => ({ id: r.id, name: r.name }))
+              : undefined
+          }
           onSubmit={handleAddMember}
           onCancel={() => setShowForm(false)}
         />

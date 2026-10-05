@@ -212,7 +212,35 @@ export function calculateSspDailyRate(
   const qDays = Number(qualifyingDaysPerWeek);
   const safeQDays =
     Number.isFinite(qDays) && qDays >= 1 && qDays <= 7 ? qDays : 5;
-  return Number((weeklyRate / safeQDays).toFixed(2));
+  // HMRC's daily rate tables truncate to 4 decimal places (£123.25 ÷ 3 =
+  // £41.0833); the amount paid is then rounded up to the penny — see sspPay.
+  return Math.floor(Number(((weeklyRate / safeQDays) * 10000).toFixed(6))) / 10000;
+}
+
+/** Rounds a fraction of a penny up to the next whole penny. */
+function ceilPenny(amount: number): number {
+  return Math.ceil(Number((amount * 100).toFixed(6))) / 100;
+}
+
+/**
+ * SSP payable for a number of qualifying days, the way HMRC's daily rate
+ * tables work: each full week of qualifying days pays the weekly amount
+ * (days × daily rate, rounded up to the penny — exactly the weekly rate), and
+ * the days left over are days × daily rate, rounded up to the penny.
+ * A 3-day worker off for 6 qualifying days: 2 × £123.25 = £246.50.
+ * https://www.gov.uk/employers-sick-pay/what-you-need-to-pay
+ */
+export function sspPay(
+  days: number,
+  dailyRate: number,
+  qualifyingDaysPerWeek: number
+): number {
+  if (days <= 0 || dailyRate <= 0) return 0;
+  const q = qualifyingDaysPerWeek >= 1 && qualifyingDaysPerWeek <= 7 ? Math.round(qualifyingDaysPerWeek) : 5;
+  const fullWeeks = Math.floor(days / q);
+  const rest = days - fullWeeks * q;
+  const weekPay = ceilPenny(q * dailyRate);
+  return Number((fullWeeks * weekPay + ceilPenny(rest * dailyRate)).toFixed(2));
 }
 
 /**
@@ -335,7 +363,7 @@ export function calculateEstimatedSspCost(
 ): number {
   const payableDays = calculateSspPayableDays(startDate, endDate);
   const daily = calculateSspDailyRate(qualifyingDaysPerWeek, weeklyRate);
-  return Number((daily * payableDays).toFixed(2));
+  return sspPay(payableDays, daily, qualifyingDaysPerWeek);
 }
 
 // ─── Easter & Bank Holiday Algorithm ─────────────────────────────────────────

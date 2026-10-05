@@ -47,6 +47,16 @@ export type PayrollRow = {
     weeksTaken: number;
     estimatedPay: number | null;
   } | null;
+  /**
+   * SSP for this absence within the pay period: days on their qualifying
+   * days, at the daily rate stored when it was booked (null for absences
+   * booked before the rate was stored).
+   */
+  ssp: {
+    daysInPeriod: number;
+    dailyRate: number | null;
+    pay: number | null;
+  } | null;
 };
 
 export type PayrollReport = {
@@ -82,6 +92,9 @@ export const PAYROLL_EXPORT_COLUMNS: ExportColumn<PayrollRow>[] = [
   { key: "hourlyRate", header: "Hourly holiday pay rate (£)", format: "money" },
   { key: (r) => r.estimatedPay ?? null, header: "Estimated holiday pay (£)", format: "money" },
   { key: (r) => r.rateSource ?? null, header: "Rate source" },
+  { key: (r) => r.ssp?.daysInPeriod ?? null, header: "SSP days" },
+  { key: (r) => r.ssp?.dailyRate ?? null, header: "SSP daily rate (£)", format: "rate" },
+  { key: (r) => r.ssp?.pay ?? null, header: "SSP pay (£)", format: "money" },
   { key: (r) => r.smp?.label ?? null, header: "SMP phase" },
   { key: (r) => r.smp?.weeklyRate ?? null, header: "SMP weekly rate (£)", format: "money" },
   { key: (r) => r.smp?.averageWeeklyEarnings ?? null, header: "SMP average weekly earnings (£)", format: "money" },

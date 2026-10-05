@@ -4,6 +4,7 @@ import {
   SSP_MAX_WEEKS,
   calculateSspPayableDaysForSpell,
   calculateSspEntitlement,
+  sspPay,
 } from "@/lib/uk-compliance";
 import { resolveAverageWeeklyEarnings } from "@/lib/smpCalculator";
 import { linkedPriorChain } from "@/lib/sickness-spells";
@@ -50,7 +51,6 @@ export async function computeSspForSpell(input: {
     select: {
       name: true,
       organizationId: true,
-      qualifyingDaysPerWeek: true,
       averageWeeklyEarnings: true,
     },
   });
@@ -78,7 +78,7 @@ export async function computeSspForSpell(input: {
 
   // SSP is payable on qualifying days — the days they normally work. Their
   // working pattern says which; without one, the stored count (Mon–Fri days).
-  const workingWeek = await getWorkingWeek(userId, startDate, "ssp");
+  const workingWeek = await getWorkingWeek(userId, startDate);
 
   const entitlement = calculateSspEntitlement({
     averageWeeklyEarnings,
@@ -129,7 +129,7 @@ export async function computeSspForSpell(input: {
       sspDaysPaidThisRequest: capped,
       cumulativeSspDaysPaid: cumulativeAfter,
       dailyRate: entitlement.dailyRate,
-      estimatedCost: Number((entitlement.dailyRate * capped).toFixed(2)),
+      estimatedCost: sspPay(capped, entitlement.dailyRate, workingWeek.daysPerWeek),
       remainingDaysAfter: Math.max(0, entitlement.maxDays - cumulativeAfter),
       limitReached: sspLimitReached,
     },
@@ -140,42 +140,79 @@ export async function computeSspForSpell(input: {
   };
 }
 
+/** The SSP fields stored on a sickness absence. */
+export function sspFields(ssp: SspSpellResult) {
+  return {
+    sspDaysPaid: ssp.sspDaysPaid,
+    sspLimitReached: ssp.sspLimitReached,
+    sspDailyRate: ssp.info.dailyRate,
+  };
+}
+
 /**
- * After an SSP spell changes, later spells may link differently (or stop
- * linking), which changes their waiting days and their share of the 28-week
- * cap. Recomputes each later live SSP spell in date order, so every one sees
- * the corrected spells before it. Returns how many rows changed.
+ * Recomputes the given live SSP spells in date order, so each sees the
+ * corrected spells before it. Returns how many rows changed.
  *
  * Not transactional: each step reads the rows the previous step wrote. A
  * failure part-way leaves later spells as they were before, never worse.
  */
-export async function recomputeLaterSspSpells(userId: string, after: Date): Promise<number> {
-  const later = await prisma.leaveRequest.findMany({
+async function recomputeSspSpells(userId: string, where: object): Promise<number> {
+  const spells = await prisma.leaveRequest.findMany({
     where: {
       userId,
       leaveType: { name: { contains: "SSP" } },
       status: { notIn: ["REJECTED", "CANCELLED"] },
-      startDate: { gt: after },
+      ...where,
     },
     orderBy: { startDate: "asc" },
-    select: { id: true, startDate: true, endDate: true, sspDaysPaid: true, sspLimitReached: true },
+    select: {
+      id: true,
+      startDate: true,
+      endDate: true,
+      sspDaysPaid: true,
+      sspLimitReached: true,
+      sspDailyRate: true,
+    },
   });
   let changed = 0;
-  for (const spell of later) {
-    const ssp = await computeSspForSpell({
-      userId,
-      startDate: spell.startDate,
-      endDate: spell.endDate,
-    });
+  for (const spell of spells) {
+    const ssp = await computeSspForSpell({ userId, startDate: spell.startDate, endDate: spell.endDate });
     if (!ssp) continue;
-    if (ssp.sspDaysPaid === spell.sspDaysPaid && ssp.sspLimitReached === spell.sspLimitReached) {
+    const next = sspFields(ssp);
+    if (
+      next.sspDaysPaid === spell.sspDaysPaid &&
+      next.sspLimitReached === spell.sspLimitReached &&
+      spell.sspDailyRate !== null &&
+      Number(spell.sspDailyRate) === next.sspDailyRate
+    ) {
       continue;
     }
-    await prisma.leaveRequest.update({
-      where: { id: spell.id },
-      data: { sspDaysPaid: ssp.sspDaysPaid, sspLimitReached: ssp.sspLimitReached },
-    });
+    await prisma.leaveRequest.update({ where: { id: spell.id }, data: next });
     changed += 1;
   }
   return changed;
 }
+
+/**
+ * After an SSP spell changes, later spells may link differently (or stop
+ * linking), which changes their waiting days and their share of the 28-week
+ * cap.
+ */
+export function recomputeLaterSspSpells(userId: string, after: Date): Promise<number> {
+  return recomputeSspSpells(userId, { startDate: { gt: after } });
+}
+
+/**
+ * After someone's working pattern changes, SSP for absences still going on or
+ * still to come is recalculated on their new working week. Past absences keep
+ * the figures they were paid on.
+ */
+export function recomputeCurrentSspSpells(userId: string, today: Date = new Date()): Promise<number> {
+  return recomputeSspSpells(userId, { endDate: { gte: today } });
+}
+
+/** All of a person's live SSP spells, oldest first (used by the backfill). */
+export function recomputeAllSspSpells(userId: string): Promise<number> {
+  return recomputeSspSpells(userId, {});
+}
+

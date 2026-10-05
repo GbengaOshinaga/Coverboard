@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { qualifyingDaysFor } from "@/lib/working-week-server";
+import { ftesFor } from "@/lib/fte-server";
 import { unusablePasswordHash } from "@/lib/invite-links";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -56,7 +58,8 @@ export async function GET() {
     orderBy: { name: "asc" },
   });
 
-  return NextResponse.json(members);
+  const ftes = await ftesFor(orgId, members);
+  return NextResponse.json(members.map((m) => ({ ...m, fte: ftes.get(m.id) })));
 }
 
 export async function POST(request: Request) {
@@ -157,6 +160,7 @@ export async function POST(request: Request) {
         memberType: memberType as "EMPLOYEE" | "CONTRACTOR" | "FREELANCER",
         employmentType,
         daysWorkedPerWeek,
+        qualifyingDaysPerWeek: qualifyingDaysFor(daysWorkedPerWeek),
         fteRatio,
         rightToWorkVerified: rightToWorkVerified ?? null,
         department: department ?? null,
