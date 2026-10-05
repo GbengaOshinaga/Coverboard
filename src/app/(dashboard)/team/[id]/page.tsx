@@ -31,6 +31,7 @@ import { ActivityLog } from "@/components/team/activity-log";
 import { WorkPatternCard } from "@/components/team/work-pattern-card";
 import { ChildrenCard } from "@/components/team/children";
 import { RightToWorkCard } from "@/components/team/right-to-work-card";
+import { WorkingTimeOptOutCard } from "@/components/team/working-time-opt-out-card";
 import { hasAuditTrail, type AnyPlan } from "@/lib/plans";
 import {
   parseEarningsCsv,
@@ -64,6 +65,8 @@ type Member = {
   /** false once they've left (records kept for 6 years). */
   isActive?: boolean;
   leftOn?: string | null;
+  workingTimeOptOutFrom?: string | null;
+  workingTimeOptOutUntil?: string | null;
   name: string;
   email: string;
   role: string;
@@ -971,6 +974,16 @@ export default function EmployeeProfilePage({
 
       {/* Right-to-work checks (UK, admins and managers) */}
       {member.workCountry === "GB" && canManage && <RightToWorkCard memberId={memberId} />}
+
+      {/* 48-hour week opt-out (UK, admins and managers) */}
+      {member.workCountry === "GB" && canManage && (
+        <WorkingTimeOptOutCard
+          memberId={memberId}
+          optOutFrom={member.workingTimeOptOutFrom}
+          optOutUntil={member.workingTimeOptOutUntil}
+          onSaved={() => window.location.reload()}
+        />
+      )}
 
       {/* Unpaid parental leave is per child (UK) */}
       {member.workCountry === "GB" && <ChildrenCard memberId={memberId} />}

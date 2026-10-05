@@ -34,6 +34,9 @@ const updateSchema = z.object({
     .transform((s) => new Date(s))
     .nullable()
     .optional(),
+  /** Written opt-out of the 48-hour average: signed on / until (null clears). */
+  workingTimeOptOutFrom: z.string().date().transform((s) => new Date(`${s}T00:00:00Z`)).nullable().optional(),
+  workingTimeOptOutUntil: z.string().date().transform((s) => new Date(`${s}T00:00:00Z`)).nullable().optional(),
 }).transform((data) =>
   data.employmentType === "ZERO_HOURS"
     ? { ...data, daysWorkedPerWeek: 0 }
@@ -77,6 +80,8 @@ export async function GET(
       workCountry: true,
       isActive: true,
       leftOn: true,
+      workingTimeOptOutFrom: true,
+      workingTimeOptOutUntil: true,
       serviceStartDate: true,
       bradfordScore: true,
       createdAt: true,

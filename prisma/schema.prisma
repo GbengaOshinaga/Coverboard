@@ -137,6 +137,10 @@ model User {
   /// (src/lib/right-to-work.ts). Expires on: null = no time limit.
   rightToWorkCheckedOn      DateTime?      @db.Date
   rightToWorkExpiresOn      DateTime?      @db.Date
+  /// Written opt-out of the 48-hour average (WTR reg. 5): signed on, and
+  /// until (null = no end date). src/lib/working-time.ts.
+  workingTimeOptOutFrom     DateTime?      @db.Date
+  workingTimeOptOutUntil    DateTime?      @db.Date
   department                String?
   serviceStartDate          DateTime?
   ukParentalLeaveChildCount Int            @default(0)

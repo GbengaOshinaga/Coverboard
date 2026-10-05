@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import type { PayrollReport } from "@/lib/payroll-columns";
 import type { Fte } from "@/lib/fte";
+import { WorkingTimeSection } from "@/components/reports/working-time-section";
 import { rightToWorkAtRisk } from "@/lib/right-to-work";
 import { CARRY_OVER_REASON_LABEL, type CarryOverReason } from "@/lib/carry-over";
 import {
@@ -72,6 +73,7 @@ const REPORT_TABS = [
   "regional-cover",
   "right-to-work",
   "weekly-hours",
+  "working-time",
   "holiday-usage",
   "ssp",
   "parental",
@@ -456,6 +458,7 @@ export default function ReportsPage() {
       },
       { id: "right-to-work", label: "Right to work", requiresUk: true },
       { id: "weekly-hours", label: "Weekly hours" },
+      { id: "working-time", label: "Working time", requiresUk: true },
       { id: "holiday-usage", label: "Holiday usage", requiresUk: true },
       { id: "ssp", label: "SSP liability", requiresUk: true },
       { id: "parental", label: "Parental leave", requiresUk: true },
@@ -752,6 +755,9 @@ export default function ReportsPage() {
 
           {/* Regional cover (Scale+) */}
           {activeTab === "regional-cover" && <RegionalCoverSection />}
+
+          {/* Working time: 48-hour average, opt-outs, rest */}
+          {activeTab === "working-time" && <WorkingTimeSection />}
 
           {/* Right to work */}
           {activeTab === "right-to-work" && (
