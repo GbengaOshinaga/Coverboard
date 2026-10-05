@@ -38,5 +38,6 @@ export function describeFte(input: {
 export function fteLabel(fte: Fte): string {
   if (fte.basis === "contracted") return `FTE ${fte.value} (contracted)`;
   if (fte.value === null) return "FTE: no hours logged yet";
-  return `FTE ${fte.value} (${fte.weeks} week${fte.weeks === 1 ? "" : "s"}' logged hours)`;
+  // "1 week's logged hours", "12 weeks' logged hours".
+  return `FTE ${fte.value} (${fte.weeks} ${fte.weeks === 1 ? "week's" : "weeks'"} logged hours)`;
 }

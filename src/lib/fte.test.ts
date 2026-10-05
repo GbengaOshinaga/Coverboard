@@ -30,3 +30,8 @@ test("no hours logged yet: says so instead of guessing 1", () => {
   assert.deepEqual(fte, { value: null, basis: "logged_hours", weeks: 0 });
   assert.equal(fteLabel(fte), "FTE: no hours logged yet");
 });
+
+test("one week of logged hours reads \"1 week's\", not \"1 week'\"", () => {
+  const fte = describeFte({ employmentType: "ZERO_HOURS", fteRatio: 1, weeklyHours: [40] });
+  assert.equal(fteLabel(fte), "FTE 1 (1 week's logged hours)");
+});
