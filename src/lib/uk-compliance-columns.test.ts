@@ -5,6 +5,8 @@ import { toCsv, toExcel } from "./export-formats";
 import {
   UK_COMPLIANCE_TABLES,
   isUkComplianceTableId,
+  peopleOnSspToday,
+  sspStarted,
   type UkComplianceReport,
 } from "./uk-compliance-columns";
 
@@ -78,7 +80,7 @@ test("compliance export headers are fixed per table (change them here on purpose
     "holiday-usage": ["Employee ID", "Employee", "Department", "Contract type", "Taken this year", "Unit"],
     ssp: [
       "Employee ID", "Employee", "Absence start", "Absence end", "Qualifying days per week",
-      "Daily SSP rate (£)", "SSP days", "SSP days remaining", "28-week limit reached",
+      "Daily SSP rate (£, 4 d.p. per HMRC tables)", "SSP days", "SSP days remaining", "28-week limit reached",
       "Cost to date (£)", "Cost, whole absence (£)",
     ],
     parental: [
@@ -127,4 +129,23 @@ test("parental rows say KIT, SPLIT or Not applicable (never blank)", () => {
     "u3,Tom,Statutory Paternity Leave,2026-10-05,2026-10-16,Not applicable,Not applicable,Not applicable,Not applicable,,",
     "u4,Sara,Shared Parental Leave (SPL),2026-09-01,2027-03-01,SPLIT,4,20,16,,",
   ]);
+});
+
+test("on SSP today counts people off now, not upcoming sickness or repeat rows", () => {
+  const row = (userId: string, start: string, end: string) => ({
+    ...report.sspLiability[0],
+    userId,
+    startDate: `${start}T00:00:00.000Z`,
+    endDate: `${end}T00:00:00.000Z`,
+  });
+  const now = new Date("2026-10-06T10:00:00Z");
+  const rows = [
+    row("amy", "2026-10-05", "2026-10-09"), // off today
+    row("amy", "2026-10-20", "2026-10-23"), // Amy again, later
+    row("brian", "2026-10-19", "2026-10-30"), // upcoming
+    row("cara", "2026-10-06", "2026-10-06"), // today only
+  ];
+  assert.equal(peopleOnSspToday(rows, now), 2);
+  assert.equal(sspStarted(rows[0], now), true);
+  assert.equal(sspStarted(rows[2], now), false);
 });

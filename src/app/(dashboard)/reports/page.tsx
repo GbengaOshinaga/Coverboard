@@ -31,7 +31,12 @@ import {
 } from "lucide-react";
 import type { PayrollReport } from "@/lib/payroll-columns";
 import type { Fte } from "@/lib/fte";
-import type { UkComplianceReport, UkComplianceTableId } from "@/lib/uk-compliance-columns";
+import {
+  peopleOnSspToday,
+  sspStarted,
+  type UkComplianceReport,
+  type UkComplianceTableId,
+} from "@/lib/uk-compliance-columns";
 import { AbsenceTrendsSection } from "@/components/reports/absence-trends-section";
 import { RegionalCoverSection } from "@/components/reports/regional-cover-section";
 import { LeaveOperationsSection } from "@/components/reports/leave-operations-section";
@@ -541,9 +546,9 @@ export default function ReportsPage() {
                 <Clock className="h-5 w-5 text-blue-500" />
                 <div>
                   <p className="text-2xl font-bold">
-                    {report.sspLiability.length}
+                    {peopleOnSspToday(report.sspLiability)}
                   </p>
-                  <p className="text-xs text-gray-500">On SSP currently</p>
+                  <p className="text-xs text-gray-500">On SSP today</p>
                 </div>
               </div>
             </CardContent>
@@ -1008,8 +1013,8 @@ export default function ReportsPage() {
                   <CardHeaderIntro>
                     <CardTitle>SSP liability</CardTitle>
                     <CardDescription>
-                      Employees currently on Statutory Sick Pay with estimated
-                      costs.
+                      Current and upcoming Statutory Sick Pay absences with
+                      estimated costs.
                     </CardDescription>
                     {ukOnlyNote && (
                       <p className="text-xs text-gray-500">{ukOnlyNote}</p>
@@ -1027,7 +1032,7 @@ export default function ReportsPage() {
               <CardContent>
                 {(report?.sspLiability.length ?? 0) === 0 ? (
                   <p className="py-4 text-center text-sm text-gray-400">
-                    No employees currently on SSP.
+                    No current or upcoming SSP absences.
                   </p>
                 ) : (
                   <div className="overflow-x-auto">
@@ -1055,6 +1060,11 @@ export default function ReportsPage() {
                               {new Date(row.startDate).toLocaleDateString("en-GB")}
                               {" – "}
                               {new Date(row.endDate).toLocaleDateString("en-GB")}
+                              {!sspStarted(row) && (
+                                <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                                  Upcoming
+                                </span>
+                              )}
                             </td>
                             <td
                               className="py-2.5 pr-4 text-right text-gray-600"

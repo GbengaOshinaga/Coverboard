@@ -5,12 +5,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
-  SSP_MAX_WEEKS,
   UK_LEL_WEEKLY,
   calculateSspPayableDays,
-  calculateSspDailyRate,
   sspPay,
-  calculateSspWeeklyRate,
 } from "@/lib/uk-compliance";
 import {
   getCurrentSMPPhase,
@@ -24,6 +21,7 @@ import {
 import { isHoursAveragedEmploymentType } from "@/lib/employment-types";
 import { recordReadAudit, requestAuditContext } from "@/lib/audit";
 import { keepingInTouchRule } from "@/lib/keeping-in-touch";
+import { sspDailyRateFor, sspDaysRemainingAfter } from "@/lib/leave-requests/ssp-spell";
 import {
   UK_COMPLIANCE_TABLES,
   isUkComplianceTableId,
@@ -138,18 +136,11 @@ export async function GET(request: Request) {
     };
   });
 
-  const sspCurrent = users.flatMap((user) => {
-    // Post-reform SSP rate is capped at 80% of AWE; fall back to the flat rate
-    // when earnings are unknown. Only used for absences booked before the
-    // daily rate was stored on them.
-    const weeklyRate = calculateSspWeeklyRate(
-      user.averageWeeklyEarnings === null
-        ? null
-        : Number(user.averageWeeklyEarnings)
-    );
+  // Current and upcoming SSP absences.
+  const sspCurrent = await Promise.all(users.flatMap((user) => {
     return user.leaveRequests
       .filter((r) => r.leaveType.name.includes("SSP") && r.endDate >= new Date())
-      .map((r): SspLiabilityRow => {
+      .map(async (r): Promise<SspLiabilityRow> => {
         // SSP is payable on the days they normally work, as they were when
         // this absence started — the same week the SSP was worked out on.
         const workingWeek = resolveWorkingWeek(
@@ -157,11 +148,16 @@ export async function GET(request: Request) {
           user.daysWorkedPerWeek
         );
         const qDays = workingWeek.daysPerWeek;
-        const dailyRate =
-          r.sspDailyRate !== null
-            ? Number(r.sspDailyRate)
-            : calculateSspDailyRate(qDays, weeklyRate);
-        const maxDays = SSP_MAX_WEEKS * qDays;
+        // Stored at booking; worked out now for absences booked before rates
+        // were stored. Same function as payroll, so the two always agree.
+        const dailyRate = (await sspDailyRateFor({ ...r, userId: user.id })) ?? 0;
+        // The 28-week limit covers the whole linked period, not just this absence.
+        const { maxDays, remainingDays } = await sspDaysRemainingAfter({
+          userId: user.id,
+          startDate: r.startDate,
+          sspDaysPaid: r.sspDaysPaid ?? 0,
+          daysPerWeek: qDays,
+        });
         const now = new Date();
         const toDate = r.endDate < now ? r.endDate : now;
         const started = r.startDate <= now;
@@ -186,7 +182,7 @@ export async function GET(request: Request) {
           sspDaysPaid: sspDays,
           sspLimitReached: r.sspLimitReached ?? false,
           maxDays,
-          remainingDays: Math.max(0, maxDays - sspDays),
+          remainingDays,
           belowLel:
             user.averageWeeklyEarnings === null ||
             user.averageWeeklyEarnings === undefined
@@ -194,7 +190,7 @@ export async function GET(request: Request) {
               : Number(user.averageWeeklyEarnings) < UK_LEL_WEEKLY,
         };
       });
-  });
+  }));
 
   const today = new Date();
   const parental = users.flatMap((user) =>

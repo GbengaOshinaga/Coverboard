@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { allowanceLabel } from "@/lib/leave-type-labels";
-import type { UkComplianceReport } from "@/lib/uk-compliance-columns";
+import { peopleOnSspToday, type UkComplianceReport } from "@/lib/uk-compliance-columns";
 import { useSession } from "next-auth/react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -897,7 +897,7 @@ export default function SettingsPage() {
                   Bradford triggers above {ukReport.absenceTrigger.threshold}:{" "}
                   <strong>{ukReport.absenceTrigger.rows.filter((r) => r.flagged).length}</strong>
                 </p>
-                <p>Employees currently on SSP: <strong>{ukReport.sspLiability.length}</strong></p>
+                <p>Employees on SSP today: <strong>{peopleOnSspToday(ukReport.sspLiability)}</strong></p>
                 <p>Active parental leave cases: <strong>{ukReport.parentalTracker.length}</strong></p>
               </>
             ) : null}

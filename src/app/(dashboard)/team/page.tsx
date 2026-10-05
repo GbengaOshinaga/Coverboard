@@ -204,7 +204,8 @@ export default function TeamPage() {
       if (res.ok) {
         toast("Location updated", "success");
         setAssigningRegion(null);
-        await fetchMembers();
+        // Location member counts change too.
+        await Promise.all([fetchMembers(), fetchRegions()]);
       } else {
         const data = await res.json().catch(() => null);
         toast(data?.error ?? "Failed to update location", "error");
@@ -267,6 +268,7 @@ export default function TeamPage() {
     setJustAdded(
       regionsEnabled ? { id: created.id, name: created.name, locationName } : null
     );
+    if (regionsEnabled) void fetchRegions();
     if (created.ukStatutorySetupSuggested && userRole === "ADMIN") {
       const enable = window.confirm(
         "You've added a UK-based employee. Would you like to enable UK statutory leave types? This includes SSP, maternity, paternity, and all other statutory entitlements."

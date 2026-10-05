@@ -35,7 +35,7 @@ test("payroll export headers are fixed (change them here on purpose)", () => {
     "Leave request ID", "Employee ID", "Employee", "Email", "Department", "Work country",
     "Employment type", "Leave type", "Category", "Paid", "Start date", "End date",
     "Days taken", "Hours taken", "Daily holiday pay rate (£)", "Hourly holiday pay rate (£)",
-    "Estimated holiday pay (£)", "Rate source", "SSP days", "SSP daily rate (£)", "SSP pay (£)", "SMP phase", "SMP weekly rate (£)",
+    "Estimated holiday pay (£)", "Rate source", "SSP days", "SSP daily rate (£, 4 d.p. per HMRC tables)", "SSP pay (£)", "SMP phase", "SMP weekly rate (£)",
     "SMP average weekly earnings (£)", "Neonatal weeks", "Neonatal weekly rate (£)",
     "Neonatal estimated pay (£)",
   ]);

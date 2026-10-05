@@ -160,7 +160,7 @@ export const UK_COMPLIANCE_TABLES = {
       { key: (r) => day(r.startDate), header: "Absence start" },
       { key: (r) => day(r.endDate), header: "Absence end" },
       { key: "qualifyingDaysPerWeek", header: "Qualifying days per week" },
-      { key: "dailyRate", header: "Daily SSP rate (£)", format: "rate" },
+      { key: "dailyRate", header: "Daily SSP rate (£, 4 d.p. per HMRC tables)", format: "rate" },
       { key: "sspDaysPaid", header: "SSP days" },
       { key: "remainingDays", header: "SSP days remaining" },
       { key: (r) => yesNo(r.sspLimitReached), header: "28-week limit reached" },
@@ -210,4 +210,23 @@ export type UkComplianceTableId = keyof typeof UK_COMPLIANCE_TABLES;
 
 export function isUkComplianceTableId(v: string | null): v is UkComplianceTableId {
   return v !== null && Object.prototype.hasOwnProperty.call(UK_COMPLIANCE_TABLES, v);
+}
+
+/** Has this SSP absence started (it's in the list until it ends)? */
+export function sspStarted(row: Pick<SspLiabilityRow, "startDate">, now: Date = new Date()): boolean {
+  return row.startDate.slice(0, 10) <= now.toISOString().slice(0, 10);
+}
+
+/**
+ * People off sick on SSP today. The SSP list also holds sickness logged for
+ * later dates, so its length isn't this number; one person can also have more
+ * than one absence listed.
+ */
+export function peopleOnSspToday(rows: SspLiabilityRow[], now: Date = new Date()): number {
+  const today = now.toISOString().slice(0, 10);
+  return new Set(
+    rows
+      .filter((r) => r.startDate.slice(0, 10) <= today && r.endDate.slice(0, 10) >= today)
+      .map((r) => r.userId)
+  ).size;
 }

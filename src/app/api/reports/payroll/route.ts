@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { countWorkingDays, type WorkingWeek } from "@/lib/working-week";
 import { getWorkingWeek } from "@/lib/working-week-server";
 import { sspDaysInPeriod } from "@/lib/ssp-period";
+import { sspDailyRateFor } from "@/lib/leave-requests/ssp-spell";
 import { sspPay } from "@/lib/uk-compliance";
 import {
   getDailyHolidayPayRateForUser,
@@ -268,7 +269,7 @@ export async function GET(request: Request) {
           : null,
         neonatal,
         ssp: r.leaveType.name.includes("SSP")
-          ? (() => {
+          ? await (async () => {
               const days = sspDaysInPeriod({
                 startDate: r.startDate,
                 endDate: r.endDate,
@@ -277,7 +278,9 @@ export async function GET(request: Request) {
                 from,
                 to,
               });
-              const dailyRate = r.sspDailyRate === null ? null : Number(r.sspDailyRate);
+              // Stored at booking; worked out now for absences booked before
+              // rates were stored, so payroll always has a figure to pay.
+              const dailyRate = await sspDailyRateFor(r);
               return {
                 daysInPeriod: days,
                 dailyRate,

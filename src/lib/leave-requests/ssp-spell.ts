@@ -40,6 +40,59 @@ export type SspSpellResult = {
  * years). Rejected and cancelled requests never happened, so they don't count
  * towards linking or the cap.
  */
+/**
+ * The earlier SSP absences linked to one starting on `startDate` (each within
+ * 56 days of the next; a linked period can last up to 3 years) and the SSP
+ * days already paid across them. Rejected and cancelled requests never
+ * happened, so they don't count.
+ */
+export async function priorLinkedSsp(userId: string, startDate: Date) {
+  const lookbackFloor = new Date(startDate);
+  lookbackFloor.setUTCFullYear(lookbackFloor.getUTCFullYear() - 3);
+  const priorSsp = await prisma.leaveRequest.findMany({
+    where: {
+      userId,
+      leaveType: { name: { contains: "SSP" } },
+      status: { notIn: ["REJECTED", "CANCELLED"] },
+      endDate: { gte: lookbackFloor, lt: startDate },
+    },
+    select: { startDate: true, endDate: true, sspDaysPaid: true },
+  });
+  return linkedPriorChain(priorSsp, startDate);
+}
+
+/**
+ * SSP days left in the 28-week limit after this absence. The limit covers the
+ * whole linked period, so earlier linked absences count too: 84 days for a
+ * 3-day worker, minus 6 on the first absence and 2 on a linked second = 76.
+ */
+export async function sspDaysRemainingAfter(input: {
+  userId: string;
+  startDate: Date;
+  sspDaysPaid: number;
+  daysPerWeek: number;
+}): Promise<{ maxDays: number; remainingDays: number }> {
+  const chain = await priorLinkedSsp(input.userId, input.startDate);
+  const maxDays = SSP_MAX_WEEKS * input.daysPerWeek;
+  return { maxDays, remainingDays: Math.max(0, maxDays - chain.daysPaid - input.sspDaysPaid) };
+}
+
+/**
+ * The SSP daily rate for an absence: the rate stored when it was booked, or
+ * — for absences booked before rates were stored — worked out the same way
+ * now, so payroll is never left without one.
+ */
+export async function sspDailyRateFor(absence: {
+  userId: string;
+  startDate: Date;
+  endDate: Date;
+  sspDailyRate: { toString(): string } | number | null;
+}): Promise<number | null> {
+  if (absence.sspDailyRate !== null) return Number(absence.sspDailyRate);
+  const ssp = await computeSspForSpell(absence);
+  return ssp ? ssp.info.dailyRate : null;
+}
+
 export async function computeSspForSpell(input: {
   userId: string;
   startDate: Date;
@@ -56,18 +109,7 @@ export async function computeSspForSpell(input: {
   });
   if (!employee) return null;
 
-  const lookbackFloor = new Date(startDate);
-  lookbackFloor.setUTCFullYear(lookbackFloor.getUTCFullYear() - 3);
-  const priorSsp = await prisma.leaveRequest.findMany({
-    where: {
-      userId,
-      leaveType: { name: { contains: "SSP" } },
-      status: { notIn: ["REJECTED", "CANCELLED"] },
-      endDate: { gte: lookbackFloor, lt: startDate },
-    },
-    select: { startDate: true, endDate: true, sspDaysPaid: true },
-  });
-  const chain = linkedPriorChain(priorSsp, startDate);
+  const chain = await priorLinkedSsp(userId, startDate);
   const cumulativePrior = chain.daysPaid;
 
   const averageWeeklyEarnings = await resolveAverageWeeklyEarnings(
