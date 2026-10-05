@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { scheduleDeletion } from "@/lib/deletionScheduler";
 import { emailDeletionComplete } from "@/lib/billing-emails";
 import { verifyCronAuth } from "@/lib/cron-auth";
+import { removeFormerStaffPastRetention } from "@/lib/former-staff-retention";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -143,6 +144,8 @@ export async function POST(request: Request) {
     succeeded: 0,
     failed: 0,
     failures: [] as string[],
+    formerStaffRemoved: 0,
+    rightToWorkChecksRemoved: 0,
   };
 
   try {
@@ -179,6 +182,12 @@ export async function POST(request: Request) {
         await recordFailure(org.id, org.name, err);
       }
     }
+
+    // People who left more than 6 years ago (2 for right-to-work checks):
+    // past the legal retention periods, so their data goes.
+    const retention = await removeFormerStaffPastRetention({ now });
+    result.formerStaffRemoved = retention.formerStaff;
+    result.rightToWorkChecksRemoved = retention.rightToWorkChecks;
 
     return NextResponse.json({ success: true, ...result });
   } catch (error) {

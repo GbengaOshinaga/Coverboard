@@ -978,6 +978,9 @@ export default function ReportsPage() {
                     <CardTitle>Holiday usage</CardTitle>
                     <CardDescription>
                       Annual leave days taken per UK employee this year.
+                      Holiday records are kept for at least 6 years, including
+                      for people who&apos;ve left; the payroll export covers any
+                      dates you need.
                     </CardDescription>
                     {ukOnlyNote && (
                       <p className="text-xs text-gray-500">{ukOnlyNote}</p>

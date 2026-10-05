@@ -129,6 +129,9 @@ model User {
   countryCode               String         @default("NG")
   workCountry               String?
   isActive                  Boolean        @default(true)
+  /// The day they left. Leavers keep their records (holiday records must be
+  /// kept for 6 years) but can't sign in; data retention removes them later.
+  leftOn                    DateTime?      @db.Date
   rightToWorkVerified       Boolean?
   /// Latest right-to-work check, kept in step with RightToWorkCheck
   /// (src/lib/right-to-work.ts). Expires on: null = no time limit.

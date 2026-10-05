@@ -695,6 +695,12 @@ export default function SettingsPage() {
             <CardDescription>Company-level UK leave and residency controls</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <p className="rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-600">
+              Holiday records (leave taken, carry-over and holiday pay) are kept
+              for at least 6 years, as employers have had to since 6 April 2026,
+              including for people who&apos;ve left. People marked as left are
+              removed 6 years after leaving.
+            </p>
             <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border border-gray-200 p-4 transition-colors hover:bg-gray-50">
               <span className="text-sm font-semibold text-gray-900">
                 Annual leave includes bank holidays

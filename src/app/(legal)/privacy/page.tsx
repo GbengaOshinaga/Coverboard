@@ -239,6 +239,14 @@ export default function PrivacyPage() {
             reportable.
           </li>
           <li>
+            <strong>People who leave a team</strong>: when an admin marks
+            someone as left, they can no longer sign in, but their records are
+            kept because employers must keep holiday and holiday pay records
+            for 6 years. Their right-to-work check records are deleted
+            automatically 2 years after they leave, and the rest of their data
+            6 years after they leave.
+          </li>
+          <li>
             <strong>Billing records</strong>: retained for the period
             required by UK tax law (currently 6 years).
           </li>

@@ -35,6 +35,9 @@ type Member = {
   rightToWorkVerified: boolean | null;
   rightToWorkExpiresOn?: string | null;
   rightToWorkCheckedOn?: string | null;
+  /** false once they've left (shown with "Show people who've left"). */
+  isActive?: boolean;
+  leftOn?: string | null;
   department?: string | null;
   countryCode: string;
   workCountry: string | null;
@@ -106,14 +109,16 @@ export default function TeamPage() {
   const canManage = userRole === "ADMIN" || userRole === "MANAGER";
   const { toast } = useToast();
 
+  // People who've left are kept for 6 years (holiday records); listed only on request.
+  const [showFormer, setShowFormer] = useState(false);
   const fetchMembers = useCallback(async () => {
     setLoading(true);
-    const res = await fetch("/api/team-members");
+    const res = await fetch(`/api/team-members${showFormer ? "?former=1" : ""}`);
     if (res.ok) {
       setMembers(await res.json());
     }
     setLoading(false);
-  }, []);
+  }, [showFormer]);
 
   const fetchRegions = useCallback(async () => {
     const res = await fetch("/api/regions");
@@ -358,9 +363,19 @@ export default function TeamPage() {
         <div>
           <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Team</h1>
           <p className="text-xs text-gray-500 sm:text-sm">
-            {members.length} member{members.length !== 1 ? "s" : ""} in your
-            team
+            {members.filter((m) => m.isActive !== false).length} member
+            {members.filter((m) => m.isActive !== false).length !== 1 ? "s" : ""} in your team
           </p>
+          {canManage && (
+            <label className="mt-1 flex items-center gap-1.5 text-xs text-gray-500">
+              <input
+                type="checkbox"
+                checked={showFormer}
+                onChange={(e) => setShowFormer(e.target.checked)}
+              />
+              Show people who&apos;ve left
+            </label>
+          )}
         </div>
         {canManage && (
           <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">

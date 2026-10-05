@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { dbDate, endWorkPatternOps, ukToday } from "@/lib/workPattern";
 import { qualifyingDaysFor } from "@/lib/working-week-server";
 import { recomputeCurrentSspSpells } from "@/lib/leave-requests/ssp-spell";
 import { ftesFor } from "@/lib/fte-server";
@@ -75,6 +76,7 @@ export async function GET(
       countryCode: true,
       workCountry: true,
       isActive: true,
+      leftOn: true,
       serviceStartDate: true,
       bradfordScore: true,
       createdAt: true,
@@ -246,6 +248,14 @@ export async function PATCH(
   }
 }
 
+/**
+ * Someone leaving: marked as left, not deleted. Holiday records (leave,
+ * carry-over, holiday pay) must be kept for 6 years from when they were made
+ * (Employment Rights Act 2025, from 6 April 2026), so their history stays.
+ * They can't sign in, they're off the team list, their working pattern ends
+ * after today, their future leave and cover are cancelled (so the cover shows
+ * short again), and data retention removes them 6 years after leaving.
+ */
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -259,47 +269,76 @@ export async function DELETE(
   const userRole = sessionUser.role as string;
   if (userRole !== "ADMIN") {
     return NextResponse.json(
-      { error: "Only admins can remove team members" },
+      { error: "Only admins can mark someone as having left" },
       { status: 403 }
     );
   }
 
   const { id } = await params;
   const userId = sessionUser.id as string;
+  const orgId = sessionUser.organizationId as string;
 
   if (id === userId) {
     return NextResponse.json(
-      { error: "You cannot remove yourself" },
+      { error: "You can't mark yourself as having left" },
       { status: 400 }
     );
   }
 
   try {
-    const target = await prisma.user.findUnique({
-      where: { id },
-      select: { email: true, name: true, organizationId: true },
+    // Only people in your own team.
+    const target = await prisma.user.findFirst({
+      where: { id, organizationId: orgId },
+      select: { email: true, name: true, isActive: true },
     });
-    await prisma.user.delete({ where: { id } });
-
-    if (target) {
-      recordAudit({
-        organizationId: target.organizationId,
-        action: "team_member.deleted",
-        resource: "team_member",
-        resourceId: id,
-        actor: {
-          id: userId,
-          email: session.user.email ?? null,
-          role: userRole,
-        },
-        metadata: { name: target.name, email: target.email },
-        context: requestAuditContext(request),
-      });
+    if (!target) {
+      return NextResponse.json({ error: "Team member not found" }, { status: 404 });
+    }
+    if (!target.isActive) {
+      return NextResponse.json({ error: `${target.name} has already left` }, { status: 409 });
     }
 
-    return NextResponse.json({ success: true });
+    const today = ukToday();
+    const lastDay = dbDate(today);
+    const dayAfter = new Date(lastDay.getTime() + 24 * 60 * 60 * 1000);
+    const [, , cancelledLeave, cancelledCover] = await prisma.$transaction([
+      prisma.user.update({ where: { id }, data: { isActive: false, leftOn: lastDay } }),
+      // Patterns run to today; cover from tomorrow no longer counts them.
+      ...endWorkPatternOps(id, dayAfter),
+      prisma.leaveRequest.updateMany({
+        where: { userId: id, status: { in: ["PENDING", "APPROVED"] }, startDate: { gt: lastDay } },
+        data: { status: "CANCELLED" },
+      }),
+      prisma.coverOffer.updateMany({
+        where: { userId: id, status: { in: ["PENDING", "ACCEPTED"] }, date: { gt: lastDay } },
+        data: { status: "WITHDRAWN" },
+      }),
+    ]);
+
+    recordAudit({
+      organizationId: orgId,
+      action: "team_member.deleted",
+      resource: "team_member",
+      resourceId: id,
+      actor: {
+        id: userId,
+        email: session.user.email ?? null,
+        role: userRole,
+      },
+      metadata: {
+        event: "team_member.left",
+        name: target.name,
+        email: target.email,
+        leftOn: today,
+        futureLeaveCancelled: cancelledLeave.count,
+        futureCoverWithdrawn: cancelledCover.count,
+      },
+      context: requestAuditContext(request),
+    });
+
+    return NextResponse.json({ success: true, leftOn: today });
   } catch (error) {
-    console.error("Delete team member error:", error);
+    console.error("Mark as left error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

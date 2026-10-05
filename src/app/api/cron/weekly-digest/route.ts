@@ -90,6 +90,8 @@ export async function POST(request: Request) {
           where: {
             organizationId: org.id,
             role: { in: ["ADMIN", "MANAGER"] },
+            // People who've left don't approve or get alerts.
+            isActive: true,
             digestOptOut: false,
           },
           select: { id: true, name: true, email: true },

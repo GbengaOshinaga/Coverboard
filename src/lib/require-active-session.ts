@@ -34,14 +34,15 @@ export const requireActiveSession = cache(async function requireActiveSession():
   const orgId = sessionUser.organizationId as string;
 
   const [user, org] = await Promise.all([
-    prisma.user.findUnique({ where: { id: userId }, select: { id: true } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { id: true, isActive: true } }),
     prisma.organization.findUnique({
       where: { id: orgId },
       select: { deletionConfirmedAt: true },
     }),
   ]);
 
-  if (!user || !org || org.deletionConfirmedAt) {
+  // Deleted, or marked as left while signed in: sign them out.
+  if (!user || !user.isActive || !org || org.deletionConfirmedAt) {
     redirect(SIGN_OUT_AFTER_DELETION);
   }
 

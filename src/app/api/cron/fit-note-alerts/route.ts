@@ -102,6 +102,8 @@ async function runFitNoteAlerts(now: Date): Promise<{
       where: {
         organizationId: org.id,
         role: { in: ["ADMIN", "MANAGER"] },
+        // People who've left don't approve or get alerts.
+        isActive: true,
       },
       select: { name: true, email: true },
     });

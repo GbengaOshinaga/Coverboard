@@ -59,6 +59,8 @@ export async function GET() {
         organizationId: orgId,
         id: { not: userId },
         role: { in: ["ADMIN", "MANAGER"] },
+        // People who've left don't approve or get alerts.
+        isActive: true,
       },
     }),
   ]);

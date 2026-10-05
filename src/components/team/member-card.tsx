@@ -23,6 +23,8 @@ type Member = {
   rightToWorkVerified: boolean | null;
   rightToWorkCheckedOn?: string | null;
   rightToWorkExpiresOn?: string | null;
+  isActive?: boolean;
+  leftOn?: string | null;
   department?: string | null;
   countryCode: string;
   workCountry: string | null;
@@ -101,6 +103,15 @@ export function MemberCard({
             ? COUNTRY_NAMES[member.workCountry] ?? member.workCountry
             : "Not set"}
         </p>
+        {member.isActive === false && (
+          <p className="text-xs font-medium text-amber-700">
+            Left
+            {member.leftOn
+              ? ` ${new Date(member.leftOn).toLocaleDateString("en-GB", { timeZone: "UTC" })}`
+              : ""}
+            {" "}· records kept for 6 years
+          </p>
+        )}
         <p className="text-xs text-gray-400 mt-0.5">
           {formatEmploymentType(member.employmentType)} •{" "}
           {member.fte ? fteLabel(member.fte) : `FTE ${member.fteRatio}`}

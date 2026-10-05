@@ -115,6 +115,8 @@ export async function reviewLeaveRequest(
         organizationId,
         id: { not: reviewer.id },
         role: { in: ["ADMIN", "MANAGER"] },
+        // People who've left don't approve or get alerts.
+        isActive: true,
       },
     });
     if (otherApprovers > 0) {

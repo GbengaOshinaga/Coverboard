@@ -351,6 +351,8 @@ export async function createLeaveRequest(
       organizationId: orgId,
       id: { not: userId },
       role: { in: ["ADMIN", "MANAGER"] },
+      // People who've left don't approve or get alerts.
+      isActive: true,
     },
   });
   // Sickness logged by a manager is a record of fact, not a request to review.
