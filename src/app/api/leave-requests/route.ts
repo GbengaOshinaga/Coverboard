@@ -150,6 +150,7 @@ export async function POST(request: Request) {
       actor: {
         id: sessionUser.id as string,
         email: (session.user.email as string | null) ?? null,
+        name: (session.user.name as string | null) ?? null,
         role: sessionUser.role as string,
         plan: sessionUser.plan as string | undefined,
       },
@@ -167,6 +168,7 @@ export async function POST(request: Request) {
         ...result.request,
         balanceWarning: result.balanceWarning,
         sspInfo: result.sspInfo,
+        smpInfo: result.smpInfo,
         firstRequest: result.firstRequest,
       },
       { status: 201 }

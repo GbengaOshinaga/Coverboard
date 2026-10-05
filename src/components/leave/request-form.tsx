@@ -50,9 +50,25 @@ type LeaveBalance = {
   avgHoursPerDay?: number;
 };
 
-export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveType[]; currentUserId?: string }) {
+export function RequestForm({
+  leaveTypes,
+  currentUserId,
+  teamMembers,
+}: {
+  leaveTypes: LeaveType[];
+  currentUserId?: string;
+  /**
+   * Admins and managers: the team, so they can record leave for someone else
+   * (e.g. maternity leave from a MATB1). Recorded as approved.
+   */
+  teamMembers?: { id: string; name: string }[];
+}) {
   const router = useRouter();
   const { toast } = useToast();
+  // Who the leave is for: themselves, or (managers) someone on their team.
+  const [subjectId, setSubjectId] = useState(currentUserId ?? "");
+  const forSomeoneElse = !!currentUserId && !!subjectId && subjectId !== currentUserId;
+  const subjectName = teamMembers?.find((m) => m.id === subjectId)?.name ?? null;
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [leaveTypeId, setLeaveTypeId] = useState("");
@@ -71,12 +87,13 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
   // Expected due date — maternity only, for the SMP service-test.
   const [expectedDueDate, setExpectedDueDate] = useState("");
 
-  // Fetch the user's leave balances on mount
+  // Balances of whoever the leave is for.
   useEffect(() => {
     async function fetchBalances() {
       setBalanceLoading(true);
       try {
-        const res = await fetch("/api/leave-balances");
+        const qs = forSomeoneElse ? `?userId=${encodeURIComponent(subjectId)}` : "";
+        const res = await fetch(`/api/leave-balances${qs}`);
         if (res.ok) {
           setBalances(await res.json());
         }
@@ -86,7 +103,7 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
       setBalanceLoading(false);
     }
     fetchBalances();
-  }, []);
+  }, [forSomeoneElse, subjectId]);
 
   const selectedLeaveType = useMemo(
     () => leaveTypes.find((lt) => lt.id === leaveTypeId) ?? null,
@@ -116,7 +133,7 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
   // Unpaid parental leave is per child, so the booking names the child.
   const isUnpaidParental = /unpaid parental/i.test(selectedLeaveType?.name ?? "");
   const { children, reload: reloadChildren } = useChildren(
-    isUnpaidParental ? currentUserId : undefined
+    isUnpaidParental ? subjectId || undefined : undefined
   );
   const [childId, setChildId] = useState("");
   const [addingChild, setAddingChild] = useState(false);
@@ -211,6 +228,7 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
               ? new Date(expectedDueDate).toISOString()
               : undefined,
           childId: isUnpaidParental ? childId || undefined : undefined,
+          onBehalfOfUserId: forSomeoneElse ? subjectId : undefined,
         }),
       });
 
@@ -221,10 +239,21 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
         return;
       }
 
-      if (data.firstRequest) {
+      if (forSomeoneElse) {
+        toast(`Recorded for ${subjectName ?? "them"} as approved. They've been emailed.`, "success");
+      } else if (data.firstRequest) {
         toast(
           "🎉 Your first request is in! You'll hear back once it's reviewed.",
           "success"
+        );
+      }
+      // Maternity: SMP from the earnings in the 8 weeks before.
+      if (data.smpInfo) {
+        toast(
+          data.smpInfo.eligible
+            ? `SMP: £${data.smpInfo.phase1Weekly.toFixed(2)} a week for 6 weeks, then £${data.smpInfo.phase2Weekly.toFixed(2)} a week for 33 weeks.`
+            : `No SMP: ${data.smpInfo.reason}. They may get Maternity Allowance instead (form SMP1).`,
+          data.smpInfo.eligible ? "success" : "error"
         );
       }
 
@@ -251,6 +280,33 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
       {error && (
         <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
           {error}
+        </div>
+      )}
+
+      {teamMembers && teamMembers.length > 0 && currentUserId && (
+        <div className="space-y-1">
+          <Select
+            id="subject"
+            label="Who is it for?"
+            options={[
+              { value: currentUserId, label: "Me" },
+              ...teamMembers
+                .filter((m) => m.id !== currentUserId)
+                .map((m) => ({ value: m.id, label: m.name })),
+            ]}
+            value={subjectId}
+            onChange={(e) => {
+              setSubjectId(e.target.value);
+              setChildId("");
+            }}
+          />
+          {forSomeoneElse && (
+            <p className="text-xs text-gray-500">
+              Recorded as approved for {subjectName}, for leave already agreed
+              with them; notice periods don&apos;t apply. They&apos;ll get an email,
+              and it&apos;s in the audit log as recorded by you.
+            </p>
+          )}
         </div>
       )}
 
@@ -318,7 +374,7 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
           )}
           {addingChild ? (
             <AddChildForm
-              memberId={currentUserId}
+              memberId={subjectId}
               onAdded={async (id) => {
                 setAddingChild(false);
                 await reloadChildren();
@@ -457,7 +513,7 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
         </div>
       )}
 
-      {selectedLeaveType && selectedLeaveType.minNoticeDays > 0 && (
+      {selectedLeaveType && selectedLeaveType.minNoticeDays > 0 && !forSomeoneElse && (
         <p className="text-xs text-gray-500">
           This leave type requires at least {selectedLeaveType.minNoticeDays}{" "}
           day{selectedLeaveType.minNoticeDays !== 1 ? "s" : ""} notice before the
@@ -490,7 +546,13 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
 
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={loading}>
-          {loading ? "Submitting..." : "Submit request"}
+          {loading
+            ? forSomeoneElse
+              ? "Recording..."
+              : "Submitting..."
+            : forSomeoneElse
+              ? "Record leave"
+              : "Submit request"}
         </Button>
         <Button
           type="button"

@@ -56,14 +56,14 @@ function absenceRow(a: DigestAbsence): string {
   return `
     <tr>
       <td style="padding:8px 0;vertical-align:middle;">
-        <div style="display:inline-block;width:32px;height:32px;border-radius:50%;background-color:#e5e7eb;text-align:center;line-height:32px;font-size:12px;font-weight:600;color:#4b5563;">${initials}</div>
+        <div style="display:inline-block;width:32px;height:32px;border-radius:50%;background-color:#e5e7eb;text-align:center;line-height:32px;font-size:12px;font-weight:600;color:#4b5563;">${esc(initials)}</div>
       </td>
       <td style="padding:8px 8px;vertical-align:middle;">
-        <div style="font-size:14px;font-weight:600;color:#111827;">${a.name}</div>
+        <div style="font-size:14px;font-weight:600;color:#111827;">${esc(a.name)}</div>
         <div style="font-size:12px;color:#6b7280;">${formatDateRange(a.startDate, a.endDate)}</div>
       </td>
       <td style="padding:8px 0;vertical-align:middle;text-align:right;">
-        <span style="display:inline-block;background-color:${a.leaveColor}20;color:${a.leaveColor};font-size:12px;font-weight:600;padding:2px 8px;border-radius:4px;">${a.leaveType}</span>
+        <span style="display:inline-block;background-color:${safeColor(a.leaveColor)}20;color:${safeColor(a.leaveColor)};font-size:12px;font-weight:600;padding:2px 8px;border-radius:4px;">${esc(a.leaveType)}</span>
       </td>
     </tr>`;
 }
@@ -103,7 +103,7 @@ export function weeklyDigestEmail(data: {
     html: layout(`
       <h1 style="margin:0 0 4px;font-size:20px;color:#111827;">Weekly leave digest</h1>
       <p style="margin:0 0 20px;font-size:14px;color:#6b7280;">
-        Hi ${data.recipientName}, here&rsquo;s the leave overview for ${data.orgName}.
+        Hi ${esc(data.recipientName)}, here&rsquo;s the leave overview for ${esc(data.orgName)}.
       </p>
 
       ${pendingNote}
@@ -122,7 +122,7 @@ export function weeklyDigestEmail(data: {
 
       <p style="margin:24px 0 0;padding-top:16px;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af;line-height:1.5;">
         You&rsquo;re receiving this because you&rsquo;re an admin or manager
-        at ${data.orgName}.
+        at ${esc(data.orgName)}.
         <a href="${data.unsubscribeUrl}" style="color:#9ca3af;text-decoration:underline;">Unsubscribe from the weekly digest</a>${preferencesLink}.
       </p>
     `),
@@ -194,7 +194,7 @@ export function monthlyComplianceReportEmail(
         ? `<ul style="margin:4px 0 0;padding-left:20px;">${data.parentalReturningSoon
             .map(
               (p) =>
-                `<li style="margin:0 0 2px;font-size:13px;color:#374151;"><strong>${p.name}</strong> &mdash; ${p.leaveTypeName}, returning ${fmt.format(p.endDate)}</li>`
+                `<li style="margin:0 0 2px;font-size:13px;color:#374151;"><strong>${esc(p.name)}</strong> &mdash; ${esc(p.leaveTypeName)}, returning ${fmt.format(p.endDate)}</li>`
             )
             .join("")}</ul>`
         : "";
@@ -225,7 +225,7 @@ export function monthlyComplianceReportEmail(
         <p style="margin:0;font-size:14px;color:#111827;">
           <strong>${data.rightToWorkUnverifiedCount}</strong>
           ${data.rightToWorkUnverifiedCount === 1 ? "employee" : "employees"} unverified
-          ${sampleNames ? `&mdash; ${sampleNames}` : ""}${overflow > 0 ? ` (+${overflow} more)` : ""}
+          ${sampleNames ? `&mdash; ${esc(sampleNames)}` : ""}${overflow > 0 ? ` (+${overflow} more)` : ""}
         </p>
       </div>
     `);
@@ -247,8 +247,8 @@ export function monthlyComplianceReportEmail(
     html: layout(`
       <h1 style="margin:0 0 8px;font-size:20px;color:#111827;">${data.monthLabel} compliance snapshot</h1>
       <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
-        Hi ${data.recipientName}, here&rsquo;s your monthly view of
-        ${data.orgName}&rsquo;s UK compliance position. Click through for the
+        Hi ${esc(data.recipientName)}, here&rsquo;s your monthly view of
+        ${esc(data.orgName)}&rsquo;s UK compliance position. Click through for the
         full breakdown.
       </p>
       ${sections.join("\n")}
@@ -289,8 +289,8 @@ export function fitNoteAlertEmail(data: {
     .map(
       (i) => `
       <tr style="border-bottom:1px solid #e5e7eb;">
-        <td style="padding:8px 0;font-size:14px;color:#111827;">${i.userName}</td>
-        <td style="padding:8px 0;font-size:13px;color:#6b7280;">${i.leaveTypeName}</td>
+        <td style="padding:8px 0;font-size:14px;color:#111827;">${esc(i.userName)}</td>
+        <td style="padding:8px 0;font-size:13px;color:#6b7280;">${esc(i.leaveTypeName)}</td>
         <td style="padding:8px 0;font-size:13px;color:#6b7280;">${fmt.format(i.startDate)} – ${fmt.format(i.endDate)}</td>
         <td style="padding:8px 0;font-size:13px;color:#b91c1c;font-weight:500;">${i.ended ? `Ended (${i.daysOff} days)` : `Day ${i.daysOff}`}</td>
       </tr>`
@@ -308,10 +308,10 @@ export function fitNoteAlertEmail(data: {
     html: layout(`
       <h1 style="margin:0 0 8px;font-size:20px;color:#111827;">${headline}</h1>
       <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
-        Hi ${data.recipientName}, the following approved sickness absences
+        Hi ${esc(data.recipientName)}, the following approved sickness absences
         have run past 7 calendar days without a fit note recorded in
         Coverboard. UK SSP rules require a Statement of Fitness for Work
-        from day 8 onwards. Without it on file, ${data.orgName} can&rsquo;t
+        from day 8 onwards. Without it on file, ${esc(data.orgName)} can&rsquo;t
         evidence SSP payments to HMRC.
       </p>
       <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin-bottom:20px;">
@@ -347,7 +347,7 @@ export function emailVerificationEmail(data: {
     html: layout(`
       <h1 style="margin:0 0 8px;font-size:20px;color:#111827;">Confirm your email</h1>
       <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
-        Hi ${data.userName}, please confirm that this email belongs to you so
+        Hi ${esc(data.userName)}, please confirm that this email belongs to you so
         we can finish setting up your Coverboard account.
       </p>
       ${button("Verify email", data.verifyUrl)}
@@ -371,7 +371,7 @@ export function passwordResetEmail(data: {
     html: layout(`
       <h1 style="margin:0 0 8px;font-size:20px;color:#111827;">Reset your password</h1>
       <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
-        Hi ${data.userName}, we received a request to reset the password for your Coverboard account.
+        Hi ${esc(data.userName)}, we received a request to reset the password for your Coverboard account.
         Click the button below to choose a new password.
       </p>
       ${button("Reset password", data.resetUrl)}
@@ -396,7 +396,7 @@ export function signupWelcomeEmail(data: {
     html: layout(`
       <h1 style="margin:0 0 8px;font-size:20px;color:#111827;">Welcome to Coverboard</h1>
       <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
-        Hi ${data.userName}, your team <strong>${data.orgName}</strong> is set up and you&rsquo;re the admin.
+        Hi ${esc(data.userName)}, your team <strong>${esc(data.orgName)}</strong> is set up and you&rsquo;re the admin.
         You&rsquo;re on a ${data.trialDays}-day free trial of the <strong>${data.planName}</strong> plan &mdash; no card required.
       </p>
       <div style="background-color:#f9fafb;border-radius:6px;padding:16px;margin-bottom:16px;">
@@ -460,13 +460,13 @@ export function leaveRequestSubmittedEmail(data: {
     html: layout(`
       <h1 style="margin:0 0 8px;font-size:20px;color:#111827;">New leave request</h1>
       <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
-        ${data.requesterName} has submitted a leave request that needs your review.
+        ${esc(data.requesterName)} has submitted a leave request that needs your review.
       </p>
       <div style="background-color:#f9fafb;border-radius:6px;padding:16px;margin-bottom:16px;">
         <table cellpadding="0" cellspacing="0" style="width:100%;font-size:14px;">
           <tr>
             <td style="padding:4px 0;color:#6b7280;width:100px;">Type</td>
-            <td style="padding:4px 0;color:#111827;font-weight:600;">${data.leaveTypeName}</td>
+            <td style="padding:4px 0;color:#111827;font-weight:600;">${esc(data.leaveTypeName)}</td>
           </tr>
           <tr>
             <td style="padding:4px 0;color:#6b7280;">Dates</td>
@@ -476,7 +476,7 @@ export function leaveRequestSubmittedEmail(data: {
             <td style="padding:4px 0;color:#6b7280;">Duration</td>
             <td style="padding:4px 0;color:#111827;">${data.daysRequested} weekday${data.daysRequested !== 1 ? "s" : ""}</td>
           </tr>
-          ${data.note ? `<tr><td style="padding:4px 0;color:#6b7280;">Note</td><td style="padding:4px 0;color:#111827;">${data.note}</td></tr>` : ""}
+          ${data.note ? `<tr><td style="padding:4px 0;color:#6b7280;">Note</td><td style="padding:4px 0;color:#111827;">${esc(data.note)}</td></tr>` : ""}
         </table>
       </div>
       ${button("Review request", data.dashboardUrl)}
@@ -495,25 +495,33 @@ export function leaveRequestStatusEmail(data: {
   daysRequested: number;
   reviewerName: string;
   dashboardUrl: string;
+  /** A manager recorded this leave for them; they didn't request it. */
+  recorded?: boolean;
 }): { subject: string; html: string } {
   const isApproved = data.status === "APPROVED";
   const statusText = isApproved ? "approved" : "rejected";
   const statusColor = isApproved ? "#059669" : "#dc2626";
 
   return {
-    subject: `Your ${data.leaveTypeName} request was ${statusText}`,
+    subject: data.recorded
+      ? `Your ${data.leaveTypeName} has been recorded`
+      : `Your ${data.leaveTypeName} request was ${statusText}`,
     html: layout(`
-      <h1 style="margin:0 0 8px;font-size:20px;color:#111827;">Leave request ${statusText}</h1>
+      <h1 style="margin:0 0 8px;font-size:20px;color:#111827;">${data.recorded ? "Leave recorded" : `Leave request ${statusText}`}</h1>
       <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
-        Hi ${data.requesterName}, your leave request has been
+        ${
+          data.recorded
+            ? `Hi ${esc(data.requesterName)}, ${esc(data.reviewerName)} has recorded this leave for you. It&rsquo;s approved.`
+            : `Hi ${esc(data.requesterName)}, your leave request has been
         <strong style="color:${statusColor};">${statusText}</strong>
-        by ${data.reviewerName}.
+        by ${esc(data.reviewerName)}.`
+        }
       </p>
       <div style="background-color:#f9fafb;border-radius:6px;padding:16px;margin-bottom:16px;">
         <table cellpadding="0" cellspacing="0" style="width:100%;font-size:14px;">
           <tr>
             <td style="padding:4px 0;color:#6b7280;width:100px;">Type</td>
-            <td style="padding:4px 0;color:#111827;font-weight:600;">${data.leaveTypeName}</td>
+            <td style="padding:4px 0;color:#111827;font-weight:600;">${esc(data.leaveTypeName)}</td>
           </tr>
           <tr>
             <td style="padding:4px 0;color:#6b7280;">Dates</td>
@@ -552,7 +560,7 @@ export function sspCapReachedEmail(data: {
     html: layout(`
       <h1 style="margin:0 0 8px;font-size:20px;color:#111827;">SSP 28-week limit reached</h1>
       <p style="margin:0 0 16px;font-size:14px;color:#6b7280;line-height:1.6;">
-        ${data.employeeName} has reached the 28-week Statutory Sick Pay limit.
+        ${esc(data.employeeName)} has reached the 28-week Statutory Sick Pay limit.
         SSP ends <strong style="color:#111827;">${endDateLabel}</strong>.
       </p>
       <div style="background-color:#fef3c7;border-radius:6px;padding:12px 16px;margin-bottom:16px;">
@@ -582,8 +590,8 @@ export function founderOutreachEmail(data: {
 }): { subject: string; html: string } {
   const safeName = data.firstName || "there";
   const body = `
-    <p>Hi ${safeName},</p>
-    <p>I&rsquo;m ${data.founderName}, the founder of Coverboard. Your signup
+    <p>Hi ${esc(safeName)},</p>
+    <p>I&rsquo;m ${esc(data.founderName)}, the founder of Coverboard. Your signup
     came through and I wanted to reach out personally — thank you for
     trying us out.</p>
     <p>A couple of things that tend to help people get going:</p>
@@ -595,18 +603,29 @@ export function founderOutreachEmail(data: {
       this email — it comes straight to me, not a support queue.</li>
     </ul>
     <p>What brought you to Coverboard? I read every reply.</p>
-    <p>Thanks again,<br/>${data.founderName}</p>
+    <p>Thanks again,<br/>${esc(data.founderName)}</p>
   `;
   return {
     subject: `Welcome to Coverboard — quick note from ${data.founderName}`,
-    html: `<!DOCTYPE html><html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:15px;line-height:1.55;color:#111827;max-width:560px;margin:32px auto;padding:0 16px;">${body}<p style="margin-top:24px;font-size:12px;color:#9ca3af;">Replies go to ${data.replyAddress}.</p></body></html>`,
+    html: `<!DOCTYPE html><html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:15px;line-height:1.55;color:#111827;max-width:560px;margin:32px auto;padding:0 16px;">${body}<p style="margin-top:24px;font-size:12px;color:#9ca3af;">Replies go to ${esc(data.replyAddress)}.</p></body></html>`,
   };
 }
 
 // ─── Cover offers ───────────────────────────────────────────────────
 
+/**
+ * Escapes text for email HTML. Every name, leave type, note and team name is
+ * typed by someone, so it goes through this — otherwise a name like
+ * `<a href=…>` would render as a link in a manager's inbox. Subject lines are
+ * plain text and aren't escaped.
+ */
 function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+}
+
+/** Leave type colours go into a style attribute: only plain hex colours. */
+function safeColor(color: string): string {
+  return /^#[0-9a-fA-F]{3,8}$/.test(color) ? color : "#6b7280";
 }
 
 function shiftLine(data: { shiftName: string; date: Date; startTime: string; endTime: string; locationName: string }) {

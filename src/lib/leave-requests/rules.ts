@@ -48,13 +48,13 @@ export type OnBehalfCheck =
   | { ok: false; status: number; error: string };
 
 /**
- * A manager recording an absence for someone else (the 7am phone call).
- * Limited to sickness: planned leave is the employee's own request to make.
+ * An admin or manager recording leave for someone else: the 7am sick call, or
+ * leave already arranged with them (Chloe's maternity leave, from her MATB1).
+ * Any leave type; it's recorded as approved.
  */
 export function checkOnBehalf(input: {
   actorRole: string;
   subjectFound: boolean;
-  leaveTypeName: string;
 }): OnBehalfCheck {
   if (input.actorRole !== "ADMIN" && input.actorRole !== "MANAGER") {
     return {
@@ -65,13 +65,6 @@ export function checkOnBehalf(input: {
   }
   if (!input.subjectFound) {
     return { ok: false, status: 404, error: "Team member not found" };
-  }
-  if (!isSicknessLeaveTypeName(input.leaveTypeName)) {
-    return {
-      ok: false,
-      status: 400,
-      error: "Only sickness can be logged on a team member's behalf.",
-    };
   }
   return { ok: true };
 }

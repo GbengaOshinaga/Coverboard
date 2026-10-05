@@ -49,45 +49,21 @@ test("isSicknessLeaveTypeName matches SSP and sick leave only", () => {
   assert.equal(isSicknessLeaveTypeName("Compassionate Leave"), false);
 });
 
-test("checkOnBehalf: managers and admins may log sickness for a colleague", () => {
+test("checkOnBehalf: managers and admins may record any leave for a colleague", () => {
   for (const role of ["ADMIN", "MANAGER"]) {
-    assert.deepEqual(
-      checkOnBehalf({
-        actorRole: role,
-        subjectFound: true,
-        leaveTypeName: "Statutory Sick Pay (SSP)",
-      }),
-      { ok: true }
-    );
+    assert.deepEqual(checkOnBehalf({ actorRole: role, subjectFound: true }), { ok: true });
   }
 });
 
 test("checkOnBehalf: members are forbidden", () => {
-  const r = checkOnBehalf({
-    actorRole: "MEMBER",
-    subjectFound: true,
-    leaveTypeName: "Sick Leave",
-  });
+  const r = checkOnBehalf({ actorRole: "MEMBER", subjectFound: true });
   assert.equal(r.ok, false);
   assert.equal(!r.ok && r.status, 403);
 });
 
 test("checkOnBehalf: subject outside the org is not found", () => {
-  const r = checkOnBehalf({
-    actorRole: "MANAGER",
-    subjectFound: false,
-    leaveTypeName: "Sick Leave",
-  });
+  const r = checkOnBehalf({ actorRole: "MANAGER", subjectFound: false });
   assert.equal(!r.ok && r.status, 404);
-});
-
-test("checkOnBehalf: planned leave cannot be booked on someone's behalf", () => {
-  const r = checkOnBehalf({
-    actorRole: "ADMIN",
-    subjectFound: true,
-    leaveTypeName: "Annual Leave",
-  });
-  assert.equal(!r.ok && r.status, 400);
 });
 
 const SICK_CHANGE = {

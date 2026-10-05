@@ -176,10 +176,13 @@ export async function emailRequestStatusChange(data: {
   startDate: Date;
   endDate: Date;
   reviewerName: string;
+  /** A manager recorded the leave for them. */
+  recorded?: boolean;
 }) {
   const daysRequested = countWeekdays(data.startDate, data.endDate);
 
   const { subject, html } = leaveRequestStatusEmail({
+    recorded: data.recorded,
     requesterName: data.requesterName,
     status: data.status,
     leaveTypeName: data.leaveTypeName,

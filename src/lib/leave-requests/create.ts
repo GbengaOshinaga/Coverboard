@@ -4,7 +4,7 @@ import { recomputeBradfordScore } from "./bradford";
 import { getUserLeaveBalance } from "@/lib/leave-balances";
 import { countWeekdays } from "@/lib/utils";
 import { notifyNewRequest } from "@/lib/slack-notifications";
-import { emailNewRequest, emailSspCapReached } from "@/lib/email-notifications";
+import { emailNewRequest, emailRequestStatusChange, emailSspCapReached } from "@/lib/email-notifications";
 import { UK_SSP_WEEKLY_RATE } from "@/lib/uk-compliance";
 import { recordAudit, type AuditContext } from "@/lib/audit";
 import { AnalyticsEvents } from "@/lib/analytics/events";
@@ -33,6 +33,8 @@ import { computeSspForSpell, type SspInfo } from "./ssp-spell";
 export type CreateLeaveActor = {
   id: string;
   email: string | null;
+  /** Shown to the employee when a manager records leave for them. */
+  name?: string | null;
   role: string;
   plan?: string;
 };
@@ -71,6 +73,11 @@ export type CreateLeaveResult =
       request: Awaited<ReturnType<typeof createRequestRow>>;
       balanceWarning: string | null;
       sspInfo: SspInfo | null;
+      /** Maternity: SMP weekly rates, or why not eligible. */
+      smpInfo:
+        | { eligible: true; phase1Weekly: number; phase2Weekly: number }
+        | { eligible: false; reason: string }
+        | null;
       firstRequest: boolean;
       autoApproved: boolean;
       daysRequested: number;
@@ -147,7 +154,6 @@ export async function createLeaveRequest(
     const check = checkOnBehalf({
       actorRole: actor.role,
       subjectFound: !!subject,
-      leaveTypeName: leaveTypeConfig.name,
     });
     if (!check.ok) return check;
     subjectName = subject!.name;
@@ -156,7 +162,10 @@ export async function createLeaveRequest(
   const kitProblem = keepingInTouchError(leaveTypeConfig.name, { kitDaysUsed, splitDaysUsed });
   if (kitProblem) return { ok: false, status: 400, error: kitProblem };
 
-  const noticeProblem = noticeError(leaveTypeConfig, startDate, new Date());
+  // Notice is between the employee and their manager. Leave a manager records
+  // for someone was arranged with them already (often from earlier notice),
+  // so it isn't held to the notice period at the time it's entered.
+  const noticeProblem = onBehalf ? null : noticeError(leaveTypeConfig, startDate, new Date());
   if (noticeProblem) {
     return { ok: false, status: 400, error: noticeProblem };
   }
@@ -283,6 +292,7 @@ export async function createLeaveRequest(
   let smpPhase2WeeklyRate: number | null = null;
   let smpPhase1EndDate: Date | null = null;
   let smpPhase2EndDate: Date | null = null;
+  let smpInfo: Extract<CreateLeaveResult, { ok: true }>["smpInfo"] = null;
   if (isMaternityLeaveType(leaveTypeConfig.name)) {
     try {
       smpAverageWeeklyEarnings = await getAweForUser(userId, startDate);
@@ -302,6 +312,13 @@ export async function createLeaveRequest(
       if (smpEntitlement.eligible) {
         smpPhase1WeeklyRate = smpEntitlement.phase1Weekly;
         smpPhase2WeeklyRate = smpEntitlement.phase2Weekly;
+        smpInfo = {
+          eligible: true,
+          phase1Weekly: smpEntitlement.phase1Weekly,
+          phase2Weekly: smpEntitlement.phase2Weekly,
+        };
+      } else {
+        smpInfo = { eligible: false, reason: smpEntitlement.reason };
       }
       const phases = calculateSMPPhaseDates(startDate);
       smpPhase1EndDate = phases.phase1EndDate;
@@ -409,6 +426,21 @@ export async function createLeaveRequest(
     }).catch((err) => console.error("Email notification error:", err));
   }
 
+  // Planned leave a manager records for someone is news to them in the app:
+  // tell them it's on the system. (Logged sickness isn't — they rang in.)
+  if (onBehalf && !isSicknessType) {
+    emailRequestStatusChange({
+      requesterEmail: leaveRequest.user.email,
+      requesterName: leaveRequest.user.name,
+      status: "APPROVED",
+      leaveTypeName: leaveRequest.leaveType.name,
+      startDate,
+      endDate,
+      reviewerName: actor.name ?? actor.email ?? "Your manager",
+      recorded: true,
+    }).catch((err) => console.error("Recorded leave email error:", err));
+  }
+
   const actorMeta = {
     id: actor.id,
     email: onBehalf ? actor.email : leaveRequest.user.email,
@@ -502,6 +534,7 @@ export async function createLeaveRequest(
     request: leaveRequest,
     balanceWarning,
     sspInfo,
+    smpInfo,
     firstRequest,
     autoApproved: autoApprove,
     daysRequested,
