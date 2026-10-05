@@ -1,5 +1,6 @@
 import type { ExcelSheetSpec, ExportColumn } from "@/lib/export-formats";
 import type { SMPPhase } from "@/lib/smpCalculator";
+import type { RightToWorkStatus } from "@/lib/right-to-work";
 
 /**
  * The UK compliance report, defined once. The API builds these rows, serves
@@ -89,6 +90,13 @@ export type RightToWorkRow = {
   department: string | null;
   employmentType: string;
   rightToWorkVerified: boolean | null;
+  /** YYYY-MM-DD; null when never checked. */
+  checkedOn: string | null;
+  /** Time-limited permission ends (YYYY-MM-DD); null = no time limit. */
+  expiresOn: string | null;
+  status: RightToWorkStatus;
+  /** e.g. "Recheck before 3 Dec 2026" (src/lib/right-to-work.ts). */
+  statusLabel: string;
 };
 
 export type UkComplianceReport = {
@@ -207,10 +215,9 @@ export const UK_COMPLIANCE_TABLES = {
       { key: "email", header: "Email" },
       { key: "department", header: "Department" },
       { key: "employmentType", header: "Employment type" },
-      {
-        key: (r) => (r.rightToWorkVerified === null ? "Unknown" : yesNo(r.rightToWorkVerified)),
-        header: "Right to work checked",
-      },
+      { key: "statusLabel", header: "Right to work" },
+      { key: "checkedOn", header: "Last checked" },
+      { key: (r) => r.expiresOn ?? (r.checkedOn && r.rightToWorkVerified ? "No time limit" : null), header: "Permission until" },
     ],
   }),
 };

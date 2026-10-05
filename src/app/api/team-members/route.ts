@@ -33,6 +33,8 @@ export async function GET() {
       daysWorkedPerWeek: true,
       fteRatio: true,
       rightToWorkVerified: true,
+      rightToWorkCheckedOn: true,
+      rightToWorkExpiresOn: true,
       department: true,
       countryCode: true,
       workCountry: true,

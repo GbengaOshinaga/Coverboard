@@ -783,3 +783,43 @@ export function coverChangedEmail(data: {
     `),
   };
 }
+
+// ─── Right-to-work rechecks (Monday, Growth+) ───────────────────────
+
+export function rightToWorkRecheckEmail(data: {
+  recipientName: string;
+  orgName: string;
+  /** Expired first, then soonest. */
+  items: ReadonlyArray<{ name: string; expiresOn: Date; expired: boolean }>;
+  reportUrl: string;
+}): { subject: string; html: string } {
+  const fmt = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  const expired = data.items.filter((i) => i.expired).length;
+  const rows = data.items
+    .map(
+      (i) => `
+      <tr style="border-bottom:1px solid #e5e7eb;">
+        <td style="padding:8px 0;font-size:14px;color:#111827;">${esc(i.name)}</td>
+        <td style="padding:8px 0;font-size:13px;color:${i.expired ? "#b91c1c" : "#b45309"};font-weight:500;">
+          ${i.expired ? `Permission expired ${fmt(i.expiresOn)}: recheck now` : `Recheck before ${fmt(i.expiresOn)}`}
+        </td>
+      </tr>`
+    )
+    .join("");
+  return {
+    subject:
+      expired > 0
+        ? `${expired} right-to-work check${expired === 1 ? "" : "s"} expired — ${data.orgName}`
+        : `Right-to-work rechecks due soon — ${data.orgName}`,
+    html: layout(`
+      <h1 style="margin:0 0 8px;font-size:20px;color:#111827;">Right-to-work rechecks</h1>
+      <p style="margin:0 0 16px;font-size:14px;color:#6b7280;line-height:1.6;">
+        Hi ${esc(data.recipientName)}, these people at ${esc(data.orgName)} have
+        time-limited permission to work. It has to be checked again before it
+        ends; record the new check on their profile.
+      </p>
+      <table cellpadding="0" cellspacing="0" style="width:100%;margin-bottom:16px;">${rows}</table>
+      ${button("Open right-to-work report", data.reportUrl)}
+    `),
+  };
+}

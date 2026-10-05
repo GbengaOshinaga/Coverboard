@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { rightToWorkAtRisk, rightToWorkStatus } from "@/lib/right-to-work";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/select";
@@ -32,6 +33,8 @@ type Member = {
   daysWorkedPerWeek: number;
   fteRatio: number;
   rightToWorkVerified: boolean | null;
+  rightToWorkExpiresOn?: string | null;
+  rightToWorkCheckedOn?: string | null;
   department?: string | null;
   countryCode: string;
   workCountry: string | null;
@@ -40,6 +43,23 @@ type Member = {
   region?: { id: string; name: string; color: string | null; isActive: boolean } | null;
   _count?: { leaveRequests: number };
 };
+
+/** UK staff with no valid right-to-work check (src/lib/right-to-work.ts). */
+function rtwAtRisk(m: {
+  workCountry: string | null;
+  rightToWorkVerified: boolean | null;
+  rightToWorkExpiresOn?: string | null;
+}): boolean {
+  return (
+    m.workCountry === "GB" &&
+    rightToWorkAtRisk(
+      rightToWorkStatus({
+        verified: m.rightToWorkVerified,
+        expiresOn: m.rightToWorkExpiresOn ? new Date(m.rightToWorkExpiresOn) : null,
+      })
+    )
+  );
+}
 
 export default function TeamPage() {
   const { data: session } = useSession();
@@ -513,24 +533,14 @@ export default function TeamPage() {
         </div>
       )}
 
-      {canManage &&
-        members.some(
-          (m) =>
-            m.workCountry === "GB" &&
-            (m.rightToWorkVerified === false || m.rightToWorkVerified === null)
-        ) && (
+      {canManage && members.some(rtwAtRisk) && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <p>
-            Compliance alert: Some employees do not have right-to-work
-            verification completed.
+            Compliance alert: some employees have no valid right-to-work check
+            on record (not checked, or time-limited permission has expired).
+            Record checks on their profile.
           </p>
-          {members.some(
-            (m) =>
-              m.workCountry === "GB" &&
-              m.employmentType === "ZERO_HOURS" &&
-              (m.rightToWorkVerified === false ||
-                m.rightToWorkVerified === null)
-          ) && (
+          {members.some((m) => rtwAtRisk(m) && m.employmentType === "ZERO_HOURS") && (
             <p className="mt-1 font-medium">
               Right to work verification is especially important for zero-hours
               and bank staff.

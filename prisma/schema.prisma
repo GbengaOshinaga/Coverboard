@@ -130,6 +130,10 @@ model User {
   workCountry               String?
   isActive                  Boolean        @default(true)
   rightToWorkVerified       Boolean?
+  /// Latest right-to-work check, kept in step with RightToWorkCheck
+  /// (src/lib/right-to-work.ts). Expires on: null = no time limit.
+  rightToWorkCheckedOn      DateTime?      @db.Date
+  rightToWorkExpiresOn      DateTime?      @db.Date
   department                String?
   serviceStartDate          DateTime?
   ukParentalLeaveChildCount Int            @default(0)
@@ -151,6 +155,7 @@ model User {
   weeklyHours             UserWeeklyHours[]
   carryOverBalances       LeaveCarryOverBalance[]
   children                Child[]
+  rightToWorkChecks       RightToWorkCheck[]
   weeklyEarnings          WeeklyEarning[]
   regionHistory           UserRegionHistory[]      @relation("UserRegionHistorySubject")
   regionChangesMade       UserRegionHistory[]      @relation("UserRegionHistoryActor")
@@ -622,4 +627,33 @@ model Child {
   leaveRequests LeaveRequest[]
 
   @@index([userId])
+}
+
+/// A right-to-work check as the Home Office requires it recorded: the date,
+/// how it was done and the outcome. Copies of the documents are kept by the
+/// employer (during employment and 2 years after), not uploaded here.
+model RightToWorkCheck {
+  id             String            @id @default(cuid())
+  userId         String
+  checkedOn      DateTime          @db.Date
+  method         RightToWorkMethod
+  /// e.g. "UK passport", "Share code result", "BRP".
+  documentType   String?
+  /// false: the check found no right to work.
+  hasRightToWork Boolean
+  /// Time-limited permission ends; null = no time limit. Recheck before then.
+  expiresOn      DateTime?         @db.Date
+  notes          String?
+  checkedById    String?
+  createdAt      DateTime          @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, checkedOn])
+}
+
+enum RightToWorkMethod {
+  ONLINE_SHARE_CODE
+  MANUAL_DOCUMENTS
+  IDENTITY_SERVICE_PROVIDER
 }

@@ -42,6 +42,9 @@ export type SarPrisma = {
   child: {
     findMany(args: { where: { userId: string }; orderBy?: object }): Promise<ChildRow[]>;
   };
+  rightToWorkCheck: {
+    findMany(args: { where: { userId: string }; orderBy?: object }): Promise<ChildRow[]>;
+  };
 };
 
 type UserRow = {
@@ -114,6 +117,8 @@ export type SarExport = {
   auditLogActivity: AuditRow[];
   /** Children recorded for unpaid parental leave. */
   children: ChildRow[];
+  /** Right-to-work checks recorded for them. */
+  rightToWorkChecks: ChildRow[];
 };
 
 /**
@@ -193,6 +198,7 @@ export async function buildSarExport(params: {
     regionChangesMade,
     auditEntries,
     children,
+    rightToWorkChecks,
   ] = await Promise.all([
     prisma.leaveRequest.findMany({
       where: { userId },
@@ -246,6 +252,10 @@ export async function buildSarExport(params: {
       where: { userId },
       orderBy: { dateOfBirth: "asc" },
     }),
+    prisma.rightToWorkCheck.findMany({
+      where: { userId },
+      orderBy: { checkedOn: "desc" },
+    }),
   ]);
 
   // Strip the password hash and reset-token strings before serialising.
@@ -294,6 +304,7 @@ export async function buildSarExport(params: {
     regionChangesMadeByThisUser: regionChangesMade.map(locationChangeMadeForColleague),
     auditLogActivity: auditEntries.map((e) => redactAuditEntryForSubject(e, userId)),
     children,
+    rightToWorkChecks,
   };
 }
 

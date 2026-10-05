@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email";
-import { fitNoteAlertEmail } from "@/lib/email-templates";
+import { fitNoteAlertEmail, rightToWorkRecheckEmail } from "@/lib/email-templates";
+import { rightToWorkRecheckDueWhere, rightToWorkStatus } from "@/lib/right-to-work";
 import { verifyCronAuth } from "@/lib/cron-auth";
 import { selectOverdueFitNotes } from "@/lib/fit-note-alerts";
 import { hasFeatureForEnum } from "@/lib/planFeatures";
 
 /**
  * Weekly fit-note alerts cron — Growth tier feature.
+ *
+ * Also sends right-to-work recheck reminders: time-limited permission that
+ * has expired or ends within 60 days (Growth+, the right_to_work feature).
  *
  * Runs Monday mornings (after the 08:00 weekly digest). For each
  * Growth-or-higher org, finds approved sickness leaves that have run past
@@ -28,6 +32,7 @@ async function runFitNoteAlerts(now: Date): Promise<{
   organisationsScanned: number;
   emailsSent: number;
   flaggedLeaves: number;
+  rightToWorkRechecks: number;
 }> {
   // Only Growth+ orgs advertise fit-note tracking. Restrict the query so we
   // never email a Free/Starter org about a feature they don't have.
@@ -41,6 +46,7 @@ async function runFitNoteAlerts(now: Date): Promise<{
 
   let emailsSent = 0;
   let flaggedLeaves = 0;
+  let rightToWorkRechecks = 0;
 
   for (const org of orgs) {
     // Belt-and-braces — the WHERE clause above should already filter, but
@@ -72,8 +78,25 @@ async function runFitNoteAlerts(now: Date): Promise<{
     });
 
     const overdue = selectOverdueFitNotes(leaves, now);
-    if (overdue.length === 0) continue;
     flaggedLeaves += overdue.length;
+
+    // Time-limited right to work that has expired or ends within 60 days.
+    const rechecks = hasFeatureForEnum(org.plan, "right_to_work")
+      ? await prisma.user.findMany({
+          where: {
+            organizationId: org.id,
+            isActive: true,
+            workCountry: "GB",
+            rightToWorkVerified: true,
+            rightToWorkExpiresOn: { lte: rightToWorkRecheckDueWhere(now).rightToWorkExpiresOn.lte },
+          },
+          select: { name: true, rightToWorkExpiresOn: true },
+          orderBy: { rightToWorkExpiresOn: "asc" },
+        })
+      : [];
+    rightToWorkRechecks += rechecks.length;
+
+    if (overdue.length === 0 && rechecks.length === 0) continue;
 
     const recipients = await prisma.user.findMany({
       where: {
@@ -84,6 +107,24 @@ async function runFitNoteAlerts(now: Date): Promise<{
     });
 
     for (const recipient of recipients) {
+      if (rechecks.length > 0) {
+        const rtw = rightToWorkRecheckEmail({
+          recipientName: recipient.name,
+          orgName: org.name,
+          items: rechecks.map((r) => ({
+            name: r.name,
+            expiresOn: r.rightToWorkExpiresOn!,
+            expired: rightToWorkStatus({ verified: true, expiresOn: r.rightToWorkExpiresOn }, now) === "expired",
+          })),
+          reportUrl: `${BASE_URL}/reports?tab=right-to-work`,
+        });
+        sendEmail({ to: recipient.email, subject: rtw.subject, html: rtw.html }).catch((err) =>
+          console.error(`Right-to-work recheck email failed for ${recipient.email}:`, err)
+        );
+        emailsSent++;
+      }
+      if (overdue.length === 0) continue;
+
       const { subject, html } = fitNoteAlertEmail({
         recipientName: recipient.name,
         orgName: org.name,
@@ -112,6 +153,7 @@ async function runFitNoteAlerts(now: Date): Promise<{
     organisationsScanned: orgs.length,
     emailsSent,
     flaggedLeaves,
+    rightToWorkRechecks,
   };
 }
 

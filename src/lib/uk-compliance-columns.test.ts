@@ -66,7 +66,18 @@ const report: UkComplianceReport = {
     },
   ],
   rightToWork: [
-    { id: "u1", name: "Brian", email: "b@example.com", department: null, employmentType: "PART_TIME", rightToWorkVerified: null },
+    {
+      id: "u1",
+      name: "Brian",
+      email: "b@example.com",
+      department: null,
+      employmentType: "PART_TIME",
+      rightToWorkVerified: true,
+      checkedOn: "2026-09-01",
+      expiresOn: "2026-11-20",
+      status: "recheck_due",
+      statusLabel: "Recheck before 20 Nov 2026",
+    },
   ],
 };
 
@@ -93,7 +104,10 @@ test("compliance export headers are fixed per table (change them here on purpose
       "KIT or SPLIT days", "KIT/SPLIT days used", "KIT/SPLIT days allowed", "KIT/SPLIT days remaining",
       "SMP phase", "SMP weekly rate (£)",
     ],
-    "right-to-work": ["Employee ID", "Employee", "Email", "Department", "Employment type", "Right to work checked"],
+    "right-to-work": [
+      "Employee ID", "Employee", "Email", "Department", "Employment type", "Right to work", "Last checked",
+      "Permission until",
+    ],
   });
 });
 
@@ -108,8 +122,11 @@ test("holiday usage says whether it's days or hours", () => {
   ]);
 });
 
-test("right to work shows 'Unknown' (as on screen) rather than a blank", () => {
-  assert.equal(csvLines("right-to-work")[1], "u1,Brian,b@example.com,,PART_TIME,Unknown");
+test("right to work shows its status, last check and when permission ends", () => {
+  assert.equal(
+    csvLines("right-to-work")[1],
+    "u1,Brian,b@example.com,,PART_TIME,Recheck before 20 Nov 2026,2026-09-01,2026-11-20"
+  );
 });
 
 test("table ids are validated before use", () => {

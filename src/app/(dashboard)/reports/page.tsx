@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import type { PayrollReport } from "@/lib/payroll-columns";
 import type { Fte } from "@/lib/fte";
+import { rightToWorkAtRisk } from "@/lib/right-to-work";
 import { CARRY_OVER_REASON_LABEL, type CarryOverReason } from "@/lib/carry-over";
 import {
   peopleOnSspToday,
@@ -63,19 +64,22 @@ type VariableHoursUser = {
 
 type UKReport = UkComplianceReport;
 
-type ActiveTab =
-  | "operations"
-  | "analytics"
-  | "bradford"
-  | "absence-trends"
-  | "regional-cover"
-  | "right-to-work"
-  | "weekly-hours"
-  | "holiday-usage"
-  | "ssp"
-  | "parental"
-  | "payroll"
-  | "year-end";
+const REPORT_TABS = [
+  "operations",
+  "analytics",
+  "bradford",
+  "absence-trends",
+  "regional-cover",
+  "right-to-work",
+  "weekly-hours",
+  "holiday-usage",
+  "ssp",
+  "parental",
+  "payroll",
+  "year-end",
+] as const;
+
+type ActiveTab = (typeof REPORT_TABS)[number];
 
 type Analytics = {
   year: number;
@@ -146,6 +150,12 @@ export default function ReportsPage() {
     hasAbsenceAnalytics ? "operations" : "analytics"
   );
   const [threshold, setThreshold] = useState(200);
+
+  // Links from emails open a tab directly, e.g. /reports?tab=right-to-work.
+  useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    if (tab && (REPORT_TABS as readonly string[]).includes(tab)) setActiveTab(tab as ActiveTab);
+  }, []);
 
   const [variableUsers, setVariableUsers] = useState<VariableHoursUser[]>([]);
   // Accepted cover hours per week (Monday YYYY-MM-DD) for the selected person.
@@ -483,9 +493,8 @@ export default function ReportsPage() {
   const flaggedCount = bradfordRows.filter((r) => r.flagged).length;
 
   const rtwRows = report?.rightToWork ?? [];
-  const rtwUnverified = rtwRows.filter(
-    (r) => r.rightToWorkVerified !== true
-  ).length;
+  // No valid check on record: not checked, failed, or permission expired.
+  const rtwUnverified = rtwRows.filter((r) => rightToWorkAtRisk(r.status)).length;
 
   return (
     <div className="space-y-6">
@@ -752,12 +761,12 @@ export default function ReportsPage() {
                   <CardHeaderIntro>
                     <CardTitle>Right to work verification</CardTitle>
                     <CardDescription>
-                      Compliance status for all UK employees. Unverified
-                      employees are flagged.
+                      Every UK employee&apos;s latest check. Time-limited
+                      permission has to be checked again before it expires;
+                      rechecks due within 60 days are flagged. Record checks
+                      on each person&apos;s profile.
                       {rtwRows.some(
-                        (r) =>
-                          r.employmentType === "ZERO_HOURS" &&
-                          r.rightToWorkVerified !== true
+                        (r) => r.employmentType === "ZERO_HOURS" && rightToWorkAtRisk(r.status)
                       )
                         ? " Right to work verification is especially important for zero-hours and bank staff."
                         : ""}
@@ -787,7 +796,7 @@ export default function ReportsPage() {
                         <tr className="border-b border-gray-100 text-left text-xs font-medium uppercase text-gray-500">
                           <th className="pb-2 pr-4">Employee</th>
                           <th className="pb-2 pr-4">Email</th>
-                          <th className="pb-2 pr-4">Department</th>
+                          <th className="pb-2 pr-4">Last checked</th>
                           <th className="pb-2">Status</th>
                         </tr>
                       </thead>
@@ -804,16 +813,24 @@ export default function ReportsPage() {
                               {row.email}
                             </td>
                             <td className="py-2.5 pr-4 text-gray-600">
-                              {row.department ?? "—"}
+                              {row.checkedOn
+                                ? new Date(`${row.checkedOn}T00:00:00Z`).toLocaleDateString("en-GB", { timeZone: "UTC" })
+                                : "—"}
                             </td>
                             <td className="py-2.5">
-                              {row.rightToWorkVerified === true ? (
-                                <Badge variant="success">Verified</Badge>
-                              ) : row.rightToWorkVerified === false ? (
-                                <Badge variant="error">Not verified</Badge>
-                              ) : (
-                                <Badge variant="outline">Unknown</Badge>
-                              )}
+                              <Badge
+                                variant={
+                                  row.status === "checked"
+                                    ? "success"
+                                    : row.status === "recheck_due"
+                                      ? "warning"
+                                      : row.status === "not_checked"
+                                        ? "outline"
+                                        : "error"
+                                }
+                              >
+                                {row.statusLabel}
+                              </Badge>
                             </td>
                           </tr>
                         ))}

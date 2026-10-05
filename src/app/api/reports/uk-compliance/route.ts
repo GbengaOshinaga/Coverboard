@@ -21,6 +21,7 @@ import {
 import { isHoursAveragedEmploymentType } from "@/lib/employment-types";
 import { recordReadAudit, requestAuditContext } from "@/lib/audit";
 import { keepingInTouchRule } from "@/lib/keeping-in-touch";
+import { rightToWorkLabel, rightToWorkStatus } from "@/lib/right-to-work";
 import { isSicknessLeaveTypeName } from "@/lib/leave-requests/rules";
 import { sspRateFor, sspDaysRemainingAfter } from "@/lib/leave-requests/ssp-spell";
 import {
@@ -29,6 +30,7 @@ import {
   type BradfordRow,
   type HolidayUsageRow,
   type ParentalRow,
+  type RightToWorkRow,
   type SspLiabilityRow,
   type UkComplianceReport,
 } from "@/lib/uk-compliance-columns";
@@ -269,7 +271,7 @@ export async function GET(request: Request) {
       })
   );
 
-  const rightToWorkData = await prisma.user.findMany({
+  const rightToWorkUsers = await prisma.user.findMany({
     where: { organizationId: orgId, workCountry: "GB", isActive: true },
     select: {
       id: true,
@@ -278,8 +280,28 @@ export async function GET(request: Request) {
       department: true,
       employmentType: true,
       rightToWorkVerified: true,
+      rightToWorkCheckedOn: true,
+      rightToWorkExpiresOn: true,
     },
     orderBy: { name: "asc" },
+  });
+  const rightToWorkData = rightToWorkUsers.map((u): RightToWorkRow => {
+    const status = rightToWorkStatus({ verified: u.rightToWorkVerified, expiresOn: u.rightToWorkExpiresOn });
+    return {
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      department: u.department,
+      employmentType: u.employmentType,
+      rightToWorkVerified: u.rightToWorkVerified,
+      checkedOn: u.rightToWorkCheckedOn?.toISOString().slice(0, 10) ?? null,
+      expiresOn: u.rightToWorkExpiresOn?.toISOString().slice(0, 10) ?? null,
+      status,
+      statusLabel: rightToWorkLabel(status, {
+        expiresOn: u.rightToWorkExpiresOn,
+        checkedOn: u.rightToWorkCheckedOn,
+      }),
+    };
   });
 
   const workforce = await getUKWorkforceCounts(orgId);

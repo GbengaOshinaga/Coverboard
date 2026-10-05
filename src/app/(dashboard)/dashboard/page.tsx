@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { EmploymentType } from "@prisma/client";
 import { requireActiveSession } from "@/lib/require-active-session";
+import { rightToWorkAtRiskWhere } from "@/lib/right-to-work";
 import { prisma } from "@/lib/prisma";
 import { getUserLeaveBalances } from "@/lib/leave-balances";
 import { WhoIsOut } from "@/components/dashboard/who-is-out";
@@ -92,7 +93,7 @@ export default async function DashboardPage() {
           where: {
             organizationId: orgId,
             workCountry: "GB",
-            OR: [{ rightToWorkVerified: false }, { rightToWorkVerified: null }],
+            ...rightToWorkAtRiskWhere(today),
           },
         })
       : Promise.resolve(0),
@@ -102,7 +103,7 @@ export default async function DashboardPage() {
             organizationId: orgId,
             workCountry: "GB",
             employmentType: EmploymentType.ZERO_HOURS,
-            OR: [{ rightToWorkVerified: false }, { rightToWorkVerified: null }],
+            ...rightToWorkAtRiskWhere(today),
           },
         })
       : Promise.resolve(0),
@@ -325,8 +326,9 @@ export default async function DashboardPage() {
         <Card className="border-amber-200 bg-amber-50">
           <CardContent className="space-y-1 py-3 text-sm text-amber-800">
             <p>
-              UK compliance warning: {rightToWorkRiskCount} team member(s) have
-              missing right-to-work verification.
+              UK compliance warning: {rightToWorkRiskCount} team member(s)
+              have no valid right-to-work check on record (not checked, or
+              time-limited permission has expired).
             </p>
             {zeroHoursRightToWorkRiskCount > 0 && (
               <p className="font-medium">

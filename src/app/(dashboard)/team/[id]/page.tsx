@@ -30,6 +30,7 @@ import { formatEmploymentType } from "@/lib/employment-types";
 import { ActivityLog } from "@/components/team/activity-log";
 import { WorkPatternCard } from "@/components/team/work-pattern-card";
 import { ChildrenCard } from "@/components/team/children";
+import { RightToWorkCard } from "@/components/team/right-to-work-card";
 import { hasAuditTrail, type AnyPlan } from "@/lib/plans";
 import {
   parseEarningsCsv,
@@ -928,6 +929,9 @@ export default function EmployeeProfilePage({
       </Dialog>
 
       <WorkPatternCard memberId={memberId} canManage={canManage} />
+
+      {/* Right-to-work checks (UK, admins and managers) */}
+      {member.workCountry === "GB" && canManage && <RightToWorkCard memberId={memberId} />}
 
       {/* Unpaid parental leave is per child (UK) */}
       {member.workCountry === "GB" && <ChildrenCard memberId={memberId} />}

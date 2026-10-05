@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   leaveRequestStatusEmail,
   leaveRequestSubmittedEmail,
+  rightToWorkRecheckEmail,
   weeklyDigestEmail,
 } from "./email-templates";
 
@@ -62,4 +63,20 @@ test("leave a manager recorded says so, rather than 'your request was approved'"
   });
   assert.equal(email.subject, "Your Statutory Maternity Leave has been recorded");
   assert.ok(email.html.includes("QA Admin has recorded this leave for you"));
+});
+
+test("right-to-work recheck email lists expired first and escapes names", () => {
+  const { subject, html } = rightToWorkRecheckEmail({
+    recipientName: "Sam",
+    orgName: "Care Home",
+    items: [
+      { name: "Eve <b>", expiresOn: new Date("2026-10-01T00:00:00Z"), expired: true },
+      { name: "Tom", expiresOn: new Date("2026-11-20T00:00:00Z"), expired: false },
+    ],
+    reportUrl: "https://app.example/reports?tab=right-to-work",
+  });
+  assert.equal(subject, "1 right-to-work check expired — Care Home");
+  assert.ok(html.includes("Eve &lt;b&gt;"));
+  assert.ok(html.includes("Permission expired 1 Oct 2026: recheck now"));
+  assert.ok(html.includes("Recheck before 20 Nov 2026"));
 });
