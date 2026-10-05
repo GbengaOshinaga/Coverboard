@@ -305,7 +305,7 @@ export function RequestCard({
           </div>
           <p className="mt-1.5 text-xs text-gray-500">
             Off longer, or back early? This keeps it as one absence
-            {request.leaveType.name.includes("SSP") ? ", and SSP is recalculated" : ""}.
+            {isSicknessLeaveTypeName(request.leaveType.name) ? ", and SSP is recalculated" : ""}.
           </p>
           {endError && <p className="mt-1.5 text-xs text-red-700">{endError}</p>}
         </div>

@@ -19,6 +19,7 @@ import {
 import { checkOnBehalf, isSicknessLeaveTypeName, noticeError } from "./rules";
 import { keepingInTouchError } from "@/lib/keeping-in-touch";
 import { uplError } from "@/lib/unpaid-parental";
+import { sicknessOverlapError } from "./sickness-overlap";
 import { computeSspForSpell, type SspInfo } from "./ssp-spell";
 
 /**
@@ -178,6 +179,11 @@ export async function createLeaveRequest(
     return { ok: false, status: 400, error: "End date must be after start date" };
   }
 
+  if (isSicknessType) {
+    const overlap = await sicknessOverlapError({ userId, startDate, endDate });
+    if (overlap) return { ok: false, status: 409, error: overlap };
+  }
+
   // Check leave balance (warn but don't block). For irregular/zero-hours
   // workers the relevant balance is measured in hours, so we resolve the hours
   // this request costs (explicit input, or working-days × their average day)
@@ -306,9 +312,10 @@ export async function createLeaveRequest(
   }
 
   // ── SSP eligibility & 28-week cap ──────────────────────────────────
-  const isSspLeave = leaveTypeConfig.name.includes("SSP");
-  const isSicknessLeave = isSspLeave || leaveTypeConfig.name.includes("Sick");
-  const ssp = isSspLeave
+  // Any sickness absence of a UK worker, whatever the leave type is called
+  // (computeSspForSpell returns null for people who don't work in the UK).
+  const isSicknessLeave = isSicknessType;
+  const ssp = isSicknessLeave
     ? await computeSspForSpell({ userId, startDate, endDate })
     : null;
   const sspInfo: SspInfo | null = ssp?.info ?? null;

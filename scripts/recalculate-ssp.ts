@@ -1,8 +1,10 @@
 import { prisma } from "@/lib/prisma";
+import { SICKNESS_LEAVE_TYPE } from "@/lib/ssp-scope";
 import { computeSspForSpell, recomputeAllSspSpells } from "@/lib/leave-requests/ssp-spell";
 
 /**
- * Recalculates SSP on every live SSP absence: payable days on each person's
+ * Recalculates SSP on every live sickness absence of a UK worker (any
+ * sickness leave type, not only "Statutory Sick Pay (SSP)"): payable days on each person's
  * working week as it was when the absence started, the 28-week cap across
  * linked absences, and the HMRC daily rate (stored from 5 Oct 2026; absences
  * booked before then have none).
@@ -19,7 +21,8 @@ async function main() {
 
   const spells = await prisma.leaveRequest.findMany({
     where: {
-      leaveType: { name: { contains: "SSP" } },
+      leaveType: SICKNESS_LEAVE_TYPE,
+      user: { workCountry: "GB" },
       status: { notIn: ["REJECTED", "CANCELLED"] },
     },
     orderBy: [{ userId: "asc" }, { startDate: "asc" }],

@@ -5,6 +5,7 @@ import { emailSspCapReached } from "@/lib/email-notifications";
 import { UK_SSP_WEEKLY_RATE } from "@/lib/uk-compliance";
 import { countWeekdays } from "@/lib/utils";
 import { checkEndDateChange, isSicknessLeaveTypeName, rescaleHours } from "./rules";
+import { sicknessOverlapError } from "./sickness-overlap";
 import { computeSspForSpell, recomputeLaterSspSpells, sspFields } from "./ssp-spell";
 import { syncFitNoteEvidence } from "./fit-notes";
 
@@ -56,29 +57,17 @@ export async function changeSicknessEndDate(input: {
   });
   if (!check.ok) return check;
 
-  // Overlapping sickness records would double-count SSP days, so an
-  // extension can't run into another live sickness absence.
-  const others = await prisma.leaveRequest.findMany({
-    where: {
-      userId: request.userId,
-      id: { not: requestId },
-      status: { in: ["APPROVED", "PENDING"] },
-      startDate: { lte: newEndDate },
-      endDate: { gte: request.startDate },
-    },
-    select: { startDate: true, leaveType: { select: { name: true } } },
+  // An extension can't run into another live sickness absence.
+  const overlap = await sicknessOverlapError({
+    userId: request.userId,
+    startDate: request.startDate,
+    endDate: newEndDate,
+    excludeId: requestId,
   });
-  const clash = others.find((o) => isSicknessLeaveTypeName(o.leaveType.name));
-  if (clash) {
-    const day = clash.startDate.toISOString().slice(0, 10);
-    return {
-      ok: false,
-      status: 409,
-      error: `That would overlap another sickness absence starting ${day}. Change or cancel that one first.`,
-    };
-  }
+  if (overlap) return { ok: false, status: 409, error: overlap };
 
-  const isSsp = request.leaveType.name.includes("SSP");
+  // Every sickness absence carries SSP for UK workers (null otherwise).
+  const isSsp = isSicknessLeaveTypeName(request.leaveType.name);
   const ssp = isSsp
     ? await computeSspForSpell({
         userId: request.userId,

@@ -21,6 +21,7 @@ import {
 import { isHoursAveragedEmploymentType } from "@/lib/employment-types";
 import { recordReadAudit, requestAuditContext } from "@/lib/audit";
 import { keepingInTouchRule } from "@/lib/keeping-in-touch";
+import { isSicknessLeaveTypeName } from "@/lib/leave-requests/rules";
 import { sspRateFor, sspDaysRemainingAfter } from "@/lib/leave-requests/ssp-spell";
 import {
   UK_COMPLIANCE_TABLES,
@@ -139,7 +140,7 @@ export async function GET(request: Request) {
   // Current and upcoming SSP absences.
   const sspCurrent = await Promise.all(users.flatMap((user) => {
     return user.leaveRequests
-      .filter((r) => r.leaveType.name.includes("SSP") && r.endDate >= new Date())
+      .filter((r) => isSicknessLeaveTypeName(r.leaveType.name) && r.endDate >= new Date())
       .map(async (r): Promise<SspLiabilityRow> => {
         // SSP is payable on the days they normally work, as they were when
         // this absence started — the same week the SSP was worked out on.

@@ -6,6 +6,7 @@ import { countWorkingDays, type WorkingWeek } from "@/lib/working-week";
 import { getWorkingWeek } from "@/lib/working-week-server";
 import { sspDaysInPeriod } from "@/lib/ssp-period";
 import { sspRateFor } from "@/lib/leave-requests/ssp-spell";
+import { isSspAbsence } from "@/lib/ssp-scope";
 import { sspPay } from "@/lib/uk-compliance";
 import {
   getDailyHolidayPayRateForUser,
@@ -295,7 +296,7 @@ export async function GET(request: Request) {
                 };
               })()
             : null,
-        ssp: r.leaveType.name.includes("SSP")
+        ssp: isSspAbsence(r.leaveType.name, r.user.workCountry)
           ? await (async () => {
               const days = sspDaysInPeriod({
                 startDate: r.startDate,
