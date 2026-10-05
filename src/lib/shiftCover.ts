@@ -89,7 +89,16 @@ export type CoverCandidate = {
    * accurate as the pattern.
    */
   weekHours: number;
+  /**
+   * Covering this shift would take their scheduled hours that week past 48
+   * (only set when it would). A warning, not a bar: the Working Time
+   * Regulations limit is an average over 17 weeks, and people can opt out.
+   */
+  hoursIfCovered?: number;
 };
+
+/** Working Time Regulations: 48 hours a week on average (reg. 4). */
+export const WEEKLY_HOURS_LIMIT = 48;
 
 /**
  * Someone not on the short shift who can't cover it, and why. Shown so a
@@ -326,11 +335,14 @@ export function computeShiftCover(input: EngineInput): EngineDay[] {
           ...(coverClash ? { coverClash: true } : {}),
         });
       } else {
+        const hours = weekHours(m.id, date);
+        const withShift = Math.round((hours + (target[1] - target[0]) / 60) * 10) / 10;
         candidates.push({
           id: m.id,
           name: m.name,
           employmentType: m.employmentType ?? null,
-          weekHours: weekHours(m.id, date),
+          weekHours: hours,
+          ...(withShift > WEEKLY_HOURS_LIMIT ? { hoursIfCovered: withShift } : {}),
         });
       }
     }

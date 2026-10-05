@@ -301,6 +301,7 @@ export async function GET(request: Request) {
     totalEstimatedPay: Number(
       rows.reduce((s, r) => s + (r.estimatedPay ?? 0), 0).toFixed(2)
     ),
+    totalSspPay: Number(rows.reduce((s, r) => s + (r.ssp?.pay ?? 0), 0).toFixed(2)),
   };
 
   const format = parseExportFormat(searchParams.get("format"));

@@ -2,10 +2,9 @@ import Link from "next/link";
 import { FileWarning } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { hasFeatureForEnum } from "@/lib/planFeatures";
-import { selectOverdueFitNotes } from "@/lib/fit-note-alerts";
+import { fitNoteDueLabel, selectOverdueFitNotes } from "@/lib/fit-note-alerts";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
-const FMT = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
 
 /**
  * Sickness absences past day 7 without fit notes recorded. Same rule (and
@@ -57,7 +56,7 @@ export async function FitNotesDue({ organizationId }: { organizationId: string }
             <li key={o.leaveId} className="flex items-center justify-between gap-3 py-2">
               <span className="font-medium text-gray-900">{o.userName}</span>
               <span className="text-xs text-gray-500">
-                Off since {FMT.format(o.startDate)} · day {o.daysElapsed + 1}
+                {fitNoteDueLabel(o)}
               </span>
             </li>
           ))}

@@ -47,6 +47,7 @@ const report: UkComplianceReport = {
       leaveType: "Statutory Paternity Leave",
       startDate: "2026-10-05T00:00:00.000Z",
       expectedReturnDate: "2026-10-16T00:00:00.000Z",
+      leaveDays: 10,
       keepingInTouch: null,
       smp: null,
     },
@@ -57,6 +58,7 @@ const report: UkComplianceReport = {
       leaveType: "Shared Parental Leave (SPL)",
       startDate: "2026-09-01T00:00:00.000Z",
       expectedReturnDate: "2027-03-01T00:00:00.000Z",
+      leaveDays: 130,
       keepingInTouch: { kind: "SPLIT", used: 4, allowed: 20, remaining: 16 },
       smp: null,
     },
@@ -84,8 +86,8 @@ test("compliance export headers are fixed per table (change them here on purpose
       "Cost to date (£)", "Cost, whole absence (£)",
     ],
     parental: [
-      "Employee ID", "Employee", "Leave type", "Start date", "Expected return",
-      "KIT or SPLIT days", "Days used", "Days allowed", "Days remaining",
+      "Employee ID", "Employee", "Leave type", "Start date", "Expected return", "Leave (working days)",
+      "KIT or SPLIT days", "KIT/SPLIT days used", "KIT/SPLIT days allowed", "KIT/SPLIT days remaining",
       "SMP phase", "SMP weekly rate (£)",
     ],
     "right-to-work": ["Employee ID", "Employee", "Email", "Department", "Employment type", "Right to work checked"],
@@ -126,8 +128,8 @@ test("the Excel pack has one sheet per table with the same headers", async () =>
 
 test("parental rows say KIT, SPLIT or Not applicable (never blank)", () => {
   assert.deepEqual(csvLines("parental").slice(1), [
-    "u3,Tom,Statutory Paternity Leave,2026-10-05,2026-10-16,Not applicable,Not applicable,Not applicable,Not applicable,,",
-    "u4,Sara,Shared Parental Leave (SPL),2026-09-01,2027-03-01,SPLIT,4,20,16,,",
+    "u3,Tom,Statutory Paternity Leave,2026-10-05,2026-10-16,10,Not applicable,Not applicable,Not applicable,Not applicable,,",
+    "u4,Sara,Shared Parental Leave (SPL),2026-09-01,2027-03-01,130,SPLIT,4,20,16,,",
   ]);
 });
 

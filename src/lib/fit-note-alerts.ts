@@ -54,9 +54,25 @@ export type OverdueFitNote = {
   leaveTypeName: string;
   startDate: Date;
   endDate: Date;
-  /** Calendar days elapsed since the leave started (capped at "today"). */
+  /** Calendar days elapsed since the leave started (to today). */
   daysElapsed: number;
+  /** Days off counting the first day, up to today or the day it ended. */
+  daysOff: number;
+  /** The absence is over (still listed: the fit note is still owed). */
+  ended: boolean;
 };
+
+const DAY_MONTH = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+
+/**
+ * One wording for an overdue fit note, used by the dashboard, the leave
+ * operations report and the Monday email: "Off since 14 Sept · day 22", or
+ * for an absence that's over, "Off 14–25 Sept (12 days) · ended".
+ */
+export function fitNoteDueLabel(o: Pick<OverdueFitNote, "startDate" | "endDate" | "daysOff" | "ended">): string {
+  if (!o.ended) return `Off since ${DAY_MONTH.format(o.startDate)} · day ${o.daysOff}`;
+  return `Off ${DAY_MONTH.format(o.startDate)}–${DAY_MONTH.format(o.endDate)} (${o.daysOff} days) · ended`;
+}
 
 /** Statutory sickness leaves — SSP, Sick leave variants, etc. */
 export function isSicknessLeaveType(name: string): boolean {
@@ -87,8 +103,8 @@ function calendarDaysBetween(start: Date, end: Date): number {
  *   2. The leave type is a statutory sickness type.
  *   3. `evidenceProvided` is false.
  *   4. The leave started more than 7 calendar days ago.
- *   5. The leave is still active, OR it ended within the last 7 days
- *      (so admins can still chase the employee).
+ *   5. The leave is still active, OR it ended within the last 90 days
+ *      (the fit note is still owed, so admins can still chase it).
  */
 export function selectOverdueFitNotes(
   leaves: ReadonlyArray<SicknessLeaveRow>,
@@ -118,6 +134,8 @@ export function selectOverdueFitNotes(
       startDate: leave.startDate,
       endDate: leave.endDate,
       daysElapsed: daysSinceStart,
+      daysOff: calendarDaysBetween(leave.startDate, stillActive ? now : leave.endDate) + 1,
+      ended: !stillActive,
     });
   }
   return overdue;

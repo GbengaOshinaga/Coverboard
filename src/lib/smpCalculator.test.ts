@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   SMP_FLAT_RATE,
+  aweFromEarningRows,
   calculateAWE,
   calculateSMPPhaseDates,
   calculateSMPPhaseRates,
@@ -244,4 +245,27 @@ test("SMP_FLAT_RATE default is 194.32 (2026/27)", () => {
   if (!process.env.SMP_FLAT_RATE && !process.env.SMP_WEEKLY_RATE) {
     assert.equal(SMP_FLAT_RATE, 194.32);
   }
+});
+
+test("AWE: a week with hours but no pay entered is missing data, not £0", () => {
+  // Frank: 40 hours logged in the week of 28 Sept, but no pay entered.
+  assert.equal(aweFromEarningRows([{ grossEarnings: 0, hoursWorked: 40, isZeroPayWeek: false }]), null);
+  // Alongside a paid week, only the paid week counts.
+  assert.equal(
+    aweFromEarningRows([
+      { grossEarnings: 0, hoursWorked: 40, isZeroPayWeek: false },
+      { grossEarnings: 480, hoursWorked: 40, isZeroPayWeek: false },
+    ]),
+    480
+  );
+});
+
+test("AWE: weeks marked as no-pay weeks still count as £0", () => {
+  assert.equal(
+    aweFromEarningRows([
+      { grossEarnings: 0, hoursWorked: 0, isZeroPayWeek: true },
+      { grossEarnings: 480, hoursWorked: 40, isZeroPayWeek: false },
+    ]),
+    240
+  );
 });

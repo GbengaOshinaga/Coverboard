@@ -231,6 +231,12 @@ export async function GET(request: Request) {
           leaveType: r.leaveType.name,
           startDate: r.startDate.toISOString(),
           expectedReturnDate: r.endDate.toISOString(),
+          leaveDays: countWorkingDays(
+            r.startDate,
+            r.endDate,
+            weekdaysFromPatterns(user.workPatterns, r.startDate) ??
+              resolveWorkingWeek(null, user.daysWorkedPerWeek).weekdays
+          ),
           keepingInTouch: kit
             ? { kind: kit.kind, used, allowed: kit.allowed, remaining: Math.max(0, kit.allowed - used) }
             : null,

@@ -92,7 +92,8 @@ async function runFitNoteAlerts(now: Date): Promise<{
           leaveTypeName: o.leaveTypeName,
           startDate: o.startDate,
           endDate: o.endDate,
-          daysElapsed: o.daysElapsed,
+          daysOff: o.daysOff,
+          ended: o.ended,
         })),
         dashboardUrl: `${BASE_URL}/dashboard`,
       });

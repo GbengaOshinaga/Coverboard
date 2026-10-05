@@ -268,7 +268,9 @@ export type FitNoteAlertItem = {
   leaveTypeName: string;
   startDate: Date;
   endDate: Date;
-  daysElapsed: number;
+  /** Days off so far, or in total when the absence has ended. */
+  daysOff: number;
+  ended: boolean;
 };
 
 export function fitNoteAlertEmail(data: {
@@ -290,7 +292,7 @@ export function fitNoteAlertEmail(data: {
         <td style="padding:8px 0;font-size:14px;color:#111827;">${i.userName}</td>
         <td style="padding:8px 0;font-size:13px;color:#6b7280;">${i.leaveTypeName}</td>
         <td style="padding:8px 0;font-size:13px;color:#6b7280;">${fmt.format(i.startDate)} – ${fmt.format(i.endDate)}</td>
-        <td style="padding:8px 0;font-size:13px;color:#b91c1c;font-weight:500;">Day ${i.daysElapsed}</td>
+        <td style="padding:8px 0;font-size:13px;color:#b91c1c;font-weight:500;">${i.ended ? `Ended (${i.daysOff} days)` : `Day ${i.daysOff}`}</td>
       </tr>`
     )
     .join("");

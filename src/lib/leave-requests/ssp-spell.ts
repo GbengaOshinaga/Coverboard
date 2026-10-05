@@ -6,7 +6,7 @@ import {
   calculateSspEntitlement,
   sspPay,
 } from "@/lib/uk-compliance";
-import { resolveAverageWeeklyEarnings } from "@/lib/smpCalculator";
+import { getAweForUser } from "@/lib/smpCalculator";
 import { linkedPriorChain } from "@/lib/sickness-spells";
 
 export type SspInfo = {
@@ -104,7 +104,6 @@ export async function computeSspForSpell(input: {
     select: {
       name: true,
       organizationId: true,
-      averageWeeklyEarnings: true,
     },
   });
   if (!employee) return null;
@@ -112,11 +111,11 @@ export async function computeSspForSpell(input: {
   const chain = await priorLinkedSsp(userId, startDate);
   const cumulativePrior = chain.daysPaid;
 
-  const averageWeeklyEarnings = await resolveAverageWeeklyEarnings(
-    userId,
-    startDate,
-    employee.averageWeeklyEarnings === null ? null : Number(employee.averageWeeklyEarnings)
-  );
+  // Earnings in the 8 weeks before this absence, read-only: reports call this
+  // for absences booked before rates were stored, and a different date's
+  // figure (or one cached on the person) would give the wrong rate. With no
+  // earnings recorded, SSP is the flat rate (never under-paid).
+  const averageWeeklyEarnings = await getAweForUser(userId, startDate);
 
   // SSP is payable on qualifying days — the days they normally work. Their
   // working pattern says which; without one, the stored count (Mon–Fri days).

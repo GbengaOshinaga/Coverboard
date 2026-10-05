@@ -12,6 +12,14 @@ const CONTRACT_LABELS: Record<string, string> = {
 
 const MAX_RULED_OUT = 3;
 
+/**
+ * Covering would take them past 48 hours that week. The legal limit is a
+ * 17-week average and people can opt out, so it's a check, not a bar.
+ */
+export function over48Label(hoursIfCovered: number): string {
+  return `Would be ${hoursIfCovered}h this week (over 48) — check their average and any opt-out`;
+}
+
 /** Scheduled (from their working pattern) in the week of the short shift. */
 function weekHoursLabel(hours: number): string {
   if (hours === 0) return "No shifts this week";
@@ -165,6 +173,11 @@ export function CoverOptions({
                   .filter(Boolean)
                   .join(" · ")}
               </p>
+              {c.hoursIfCovered !== undefined && (
+                <p className="text-xs font-medium text-amber-700">
+                  {over48Label(c.hoursIfCovered)}
+                </p>
+              )}
             </div>
             {candidateAction(c.id)}
           </li>

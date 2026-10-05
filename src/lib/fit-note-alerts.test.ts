@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  fitNoteDueLabel,
   selectOverdueFitNotes,
   isSicknessLeaveType,
   type SicknessLeaveRow,
@@ -205,4 +206,27 @@ test("output carries the leave + user fields needed to render the email", () => 
   assert.equal(first.userEmail, "casey@example.com");
   assert.equal(first.leaveTypeName, "Statutory Sick Pay (SSP)");
   assert.equal(first.daysElapsed, 10);
+});
+
+test("an absence that's over counts its own days and says it ended", () => {
+  // Frank: off Mon 14 – Fri 25 Sept, checked on 5 Oct. Not "day 22".
+  const now = new Date("2026-10-05T09:00:00Z");
+  const [frank] = selectOverdueFitNotes(
+    [leave({ startDate: new Date("2026-09-14T00:00:00Z"), endDate: new Date("2026-09-25T00:00:00Z") })],
+    now
+  );
+  assert.equal(frank.ended, true);
+  assert.equal(frank.daysOff, 12);
+  assert.equal(fitNoteDueLabel(frank), "Off 14 Sept–25 Sept (12 days) · ended");
+});
+
+test("an absence still going counts to today", () => {
+  const now = new Date("2026-10-05T09:00:00Z");
+  const [amy] = selectOverdueFitNotes(
+    [leave({ startDate: new Date("2026-09-25T00:00:00Z"), endDate: new Date("2026-10-20T00:00:00Z") })],
+    now
+  );
+  assert.equal(amy.ended, false);
+  assert.equal(amy.daysOff, 11);
+  assert.equal(fitNoteDueLabel(amy), "Off since 25 Sept · day 11");
 });

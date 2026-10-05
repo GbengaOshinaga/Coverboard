@@ -273,15 +273,30 @@ export async function getAweForUser(
     where: { userId, weekStartDate: { gte: windowStart, lt: beforeDate } },
     orderBy: { weekStartDate: "asc" },
   });
-  if (rows.length === 0) return null;
+  return aweFromEarningRows(rows);
+}
 
-  // Average over the weeks actually recorded in that period. Weeks with no
-  // pay are recorded as zero rows (isZeroPayWeek) and still count; weeks with
-  // no record are missing data, not £0 — dividing them in understated AWE
-  // (e.g. two weeks of £360 and £420 came out as £97.50 instead of £390).
-  // This also covers new starters with fewer than 8 weeks of employment.
-  const earnings = rows.map((r) => Number(r.grossEarnings));
-  return calculateAWE(earnings, rows.length);
+/**
+ * Average weekly earnings from the weeks recorded in the relevant period.
+ *
+ * Weeks deliberately marked as no-pay weeks (isZeroPayWeek) count as £0.
+ * Weeks with no record are missing data, not £0 — dividing them in understated
+ * AWE (two weeks of £360 and £420 came out as £97.50 instead of £390). A week
+ * with hours worked but £0 pay and not marked as a no-pay week is the same:
+ * the pay hasn't been entered, so counting it as £0 would make SSP £0.
+ * Also covers new starters with fewer than 8 weeks of employment.
+ */
+export function aweFromEarningRows(
+  rows: ReadonlyArray<{ grossEarnings: unknown; hoursWorked: unknown; isZeroPayWeek: boolean }>
+): number | null {
+  const counted = rows.filter(
+    (r) => r.isZeroPayWeek || Number(r.grossEarnings) > 0 || Number(r.hoursWorked) <= 0
+  );
+  if (counted.length === 0) return null;
+  return calculateAWE(
+    counted.map((r) => (r.isZeroPayWeek ? 0 : Number(r.grossEarnings))),
+    counted.length
+  );
 }
 
 /**

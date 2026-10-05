@@ -67,7 +67,9 @@ export type PayrollReport = {
     rowCount: number;
     totalDays: number;
     totalHours: number;
+    /** Estimated holiday pay. */
     totalEstimatedPay: number;
+    totalSspPay: number;
   };
 };
 

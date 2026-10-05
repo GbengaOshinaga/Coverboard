@@ -1044,7 +1044,13 @@ export default function ReportsPage() {
                           <th className="pb-2 pr-4 text-right">SSP days</th>
                           <th className="pb-2 pr-4 text-right">Daily rate</th>
                           <th className="pb-2 pr-4 text-right">Cost to date</th>
-                          <th className="pb-2 text-right">Whole absence</th>
+                          <th className="pb-2 pr-4 text-right">Whole absence</th>
+                          <th
+                            className="pb-2 text-right"
+                            title="SSP days left in the 28-week limit, counting earlier linked absences"
+                          >
+                            Days left
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1078,8 +1084,14 @@ export default function ReportsPage() {
                             <td className="py-2.5 pr-4 text-right font-mono text-gray-600">
                               &pound;{row.estimatedCostToDate.toFixed(2)}
                             </td>
-                            <td className="py-2.5 text-right font-mono font-medium">
+                            <td className="py-2.5 pr-4 text-right font-mono font-medium">
                               &pound;{row.estimatedTotalCost.toFixed(2)}
+                            </td>
+                            <td
+                              className="py-2.5 text-right font-mono text-gray-600"
+                              title={`Of ${row.maxDays} (28 weeks of the ${row.qualifyingDaysPerWeek} days a week they work)`}
+                            >
+                              {row.remainingDays}
                             </td>
                           </tr>
                         ))}
@@ -1128,6 +1140,7 @@ export default function ReportsPage() {
                           <th className="pb-2 pr-4">Employee</th>
                           <th className="pb-2 pr-4">Leave type</th>
                           <th className="pb-2 pr-4">Expected return</th>
+                          <th className="pb-2 pr-4 text-right">Leave (working days)</th>
                           <th className="pb-2 text-right">KIT/SPLIT used</th>
                           <th className="pb-2 text-right">Remaining</th>
                           <th className="pb-2 text-right">Allowed</th>
@@ -1149,6 +1162,9 @@ export default function ReportsPage() {
                               {new Date(
                                 row.expectedReturnDate
                               ).toLocaleDateString("en-GB")}
+                            </td>
+                            <td className="py-2.5 pr-4 text-right font-mono text-gray-600">
+                              {row.leaveDays}
                             </td>
                             {row.keepingInTouch ? (
                               <>
@@ -1492,7 +1508,9 @@ export default function ReportsPage() {
                       <code>captured_at_booking</code> when the rate was
                       stored on the leave request or{" "}
                       <code>recalculated</code> when computed now for
-                      annual leave requests lacking a stored rate.
+                      annual leave requests lacking a stored rate. SSP
+                      absences show the SSP days in these dates, the daily
+                      rate and SSP pay.
                     </CardDescription>
                   </CardHeaderIntro>
                   {/* Only offered when there's leave in the period; an empty
@@ -1541,7 +1559,7 @@ export default function ReportsPage() {
                 </div>
 
                 {payrollReport && (
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
                     <div className="rounded-md border border-gray-100 bg-gray-50 p-3">
                       <p className="text-xs text-gray-500">Rows</p>
                       <p className="text-lg font-semibold text-gray-900">
@@ -1562,13 +1580,22 @@ export default function ReportsPage() {
                     </div>
                     <div className="rounded-md border border-gray-100 bg-gray-50 p-3">
                       <p className="text-xs text-gray-500">
-                        Estimated pay (£)
+                        Holiday pay (£)
                       </p>
                       <p className="text-lg font-semibold text-gray-900">
                         {payrollReport.totals.totalEstimatedPay.toLocaleString(
                           "en-GB",
                           { minimumFractionDigits: 2, maximumFractionDigits: 2 }
                         )}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-gray-100 bg-gray-50 p-3">
+                      <p className="text-xs text-gray-500">SSP (£)</p>
+                      <p className="text-lg font-semibold text-gray-900">
+                        {payrollReport.totals.totalSspPay.toLocaleString("en-GB", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
                       </p>
                     </div>
                   </div>
@@ -1632,18 +1659,31 @@ export default function ReportsPage() {
                                 : row.daysTaken}
                             </td>
                             <td className="py-2 pr-4 text-right text-gray-700">
-                              {row.hoursTaken != null
-                                ? row.hourlyRate == null
+                              {row.ssp
+                                ? row.ssp.dailyRate == null
                                   ? "—"
-                                  : `£${row.hourlyRate.toFixed(2)}/hr`
-                                : row.dailyHolidayPayRate == null
-                                  ? "—"
-                                  : `£${row.dailyHolidayPayRate.toFixed(2)}`}
+                                  : `£${row.ssp.dailyRate.toFixed(2)} SSP`
+                                : row.hoursTaken != null
+                                  ? row.hourlyRate == null
+                                    ? "—"
+                                    : `£${row.hourlyRate.toFixed(2)}/hr`
+                                  : row.dailyHolidayPayRate == null
+                                    ? "—"
+                                    : `£${row.dailyHolidayPayRate.toFixed(2)}`}
                             </td>
                             <td className="py-2 pr-4 text-right font-medium text-gray-900">
-                              {row.estimatedPay == null
-                                ? "—"
-                                : `£${row.estimatedPay.toFixed(2)}`}
+                              {row.ssp
+                                ? row.ssp.pay == null
+                                  ? "—"
+                                  : `£${row.ssp.pay.toFixed(2)}`
+                                : row.estimatedPay == null
+                                  ? "—"
+                                  : `£${row.estimatedPay.toFixed(2)}`}
+                              {row.ssp && (
+                                <div className="text-[11px] font-normal text-gray-500">
+                                  {row.ssp.daysInPeriod} SSP day{row.ssp.daysInPeriod === 1 ? "" : "s"}
+                                </div>
+                              )}
                             </td>
                             <td className="py-2">
                               <Badge

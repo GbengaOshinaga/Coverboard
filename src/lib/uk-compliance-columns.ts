@@ -54,6 +54,8 @@ export type ParentalRow = {
   /** ISO timestamps. */
   startDate: string;
   expectedReturnDate: string;
+  /** Length of the leave in their working days (2 weeks' paternity = 10 on 5 days). */
+  leaveDays: number;
   /**
    * KIT days (maternity/adoption, up to 10) or SPLIT days (shared parental,
    * up to 20); null for leave with neither, e.g. paternity.
@@ -178,12 +180,13 @@ export const UK_COMPLIANCE_TABLES = {
       { key: "leaveType", header: "Leave type" },
       { key: (r) => day(r.startDate), header: "Start date" },
       { key: (r) => day(r.expectedReturnDate), header: "Expected return" },
+      { key: "leaveDays", header: "Leave (working days)" },
       // Paternity and other leave have no KIT/SPLIT days: say so, rather than
       // leaving cells blank that read as missing data.
       { key: (r) => r.keepingInTouch?.kind ?? NOT_APPLICABLE, header: "KIT or SPLIT days" },
-      { key: (r) => r.keepingInTouch?.used ?? NOT_APPLICABLE, header: "Days used" },
-      { key: (r) => r.keepingInTouch?.allowed ?? NOT_APPLICABLE, header: "Days allowed" },
-      { key: (r) => r.keepingInTouch?.remaining ?? NOT_APPLICABLE, header: "Days remaining" },
+      { key: (r) => r.keepingInTouch?.used ?? NOT_APPLICABLE, header: "KIT/SPLIT days used" },
+      { key: (r) => r.keepingInTouch?.allowed ?? NOT_APPLICABLE, header: "KIT/SPLIT days allowed" },
+      { key: (r) => r.keepingInTouch?.remaining ?? NOT_APPLICABLE, header: "KIT/SPLIT days remaining" },
       { key: (r) => r.smp?.label ?? null, header: "SMP phase" },
       { key: (r) => r.smp?.weeklyRate ?? null, header: "SMP weekly rate (£)", format: "money" },
     ],
