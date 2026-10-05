@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { allowanceLabel } from "@/lib/leave-type-labels";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -360,7 +361,7 @@ export default function OnboardingPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-500">
-                      Default: {lt.defaultDays} days
+                      Default: {allowanceLabel(lt)}
                     </span>
                     <Badge variant={lt.isPaid ? "success" : "outline"}>
                       {lt.isPaid ? "Paid" : "Unpaid"}
@@ -402,7 +403,11 @@ export default function OnboardingPage() {
                             {rule.leaveType.replace(" Leave", "")}
                           </p>
                           <p className="text-sm font-semibold">
-                            {rule.annualAllowance} days
+                            {allowanceLabel({
+                              name: rule.leaveType,
+                              defaultDays: rule.annualAllowance,
+                              allowanceUnit: rule.allowanceUnit,
+                            })}
                           </p>
                         </div>
                       ))}

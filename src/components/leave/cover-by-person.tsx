@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { groupCoverByPerson, type ShortShift } from "@/lib/cover-grouping";
 import type { CoverOfferSummary } from "@/lib/shiftCover";
+import { over48Label } from "@/components/leave/cover-options";
 
 const CONTRACT_LABELS: Record<string, string> = {
   FULL_TIME: "Full-time",
@@ -239,6 +240,11 @@ export function CoverByPerson({
                             {" · "}
                             {o.weekHours === 0 ? "no shifts that week" : `${o.weekHours}h that week`}
                           </span>
+                          {o.hoursIfCovered !== undefined && (
+                            <span className="block font-medium text-amber-700">
+                              {over48Label(o.hoursIfCovered)}
+                            </span>
+                          )}
                         </span>
                         {action(o.shiftId, o.date, p.id)}
                       </li>

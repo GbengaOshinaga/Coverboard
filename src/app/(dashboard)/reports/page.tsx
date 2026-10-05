@@ -29,7 +29,14 @@ import {
   TrendingUp,
   CalendarClock,
 } from "lucide-react";
-import { toCsv, downloadCsv } from "@/lib/csv-export";
+import type { PayrollReport } from "@/lib/payroll-columns";
+import type { Fte } from "@/lib/fte";
+import {
+  peopleOnSspToday,
+  sspStarted,
+  type UkComplianceReport,
+  type UkComplianceTableId,
+} from "@/lib/uk-compliance-columns";
 import { AbsenceTrendsSection } from "@/components/reports/absence-trends-section";
 import { RegionalCoverSection } from "@/components/reports/regional-cover-section";
 import { LeaveOperationsSection } from "@/components/reports/leave-operations-section";
@@ -37,24 +44,6 @@ import {
   formatEmploymentType,
   isHoursAveragedEmploymentType,
 } from "@/lib/employment-types";
-
-type BradfordRow = {
-  userId: string;
-  name: string;
-  spells: number;
-  days: number;
-  score: number;
-  flagged: boolean;
-};
-
-type RightToWorkRow = {
-  id: string;
-  name: string;
-  email: string;
-  department: string | null;
-  employmentType: string;
-  rightToWorkVerified: boolean | null;
-};
 
 type WeeklyHoursEntry = {
   id: string;
@@ -67,42 +56,11 @@ type VariableHoursUser = {
   name: string;
   email: string;
   employmentType: string;
+  /** Calculated by the API from logged hours (src/lib/fte.ts). */
+  fte?: Fte;
 };
 
-type UKReport = {
-  workforce?: {
-    uk: number;
-    total: number;
-  };
-  holidayUsage: Array<{
-    userId: string;
-    name: string;
-    taken: number;
-    department: string | null;
-    contractType: string;
-    unit?: "days" | "hours";
-  }>;
-  absenceTrigger: { threshold: number; rows: BradfordRow[] };
-  sspLiability: Array<{
-    userId: string;
-    name: string;
-    daysElapsed: number;
-    estimatedCostToDate: number;
-    startDate: string;
-    endDate: string;
-  }>;
-  parentalTracker: Array<{
-    requestId: string;
-    userId: string;
-    name: string;
-    leaveType: string;
-    expectedReturnDate: string;
-    kitDaysUsed: number;
-    kitDaysCap: number;
-    kitDaysRemaining: number;
-  }>;
-  rightToWork: RightToWorkRow[];
-};
+type UKReport = UkComplianceReport;
 
 type ActiveTab =
   | "operations"
@@ -117,64 +75,6 @@ type ActiveTab =
   | "parental"
   | "payroll"
   | "year-end";
-
-type PayrollRow = {
-  leaveRequestId: string;
-  userId: string;
-  name: string;
-  email: string;
-  department: string | null;
-  countryCode: string;
-  employmentType: string;
-  leaveType: string;
-  leaveCategory: string;
-  isPaid: boolean;
-  startDate: string;
-  endDate: string;
-  daysTaken: number;
-  hoursTaken?: number | null;
-  dailyHolidayPayRate?: number | null;
-  hourlyRate?: number | null;
-  estimatedPay?: number | null;
-  rateSource?:
-    | "captured_at_booking"
-    | "recalculated"
-    | "not_applicable";
-};
-
-type PayrollReport = {
-  from: string;
-  to: string;
-  rows: PayrollRow[];
-  totals: {
-    rowCount: number;
-    totalDays: number;
-    totalHours: number;
-    totalEstimatedPay: number;
-  };
-};
-
-type PayrollCsvBaseRow = {
-  name: string;
-  email: string;
-  department: string;
-  countryCode: string;
-  employmentType: string;
-  leaveType: string;
-  leaveCategory: string;
-  isPaid: string;
-  startDate: string;
-  endDate: string;
-  daysTaken: number;
-  hoursTaken: string;
-};
-
-type PayrollCsvFullRow = PayrollCsvBaseRow & {
-  dailyHolidayPayRate: string;
-  hourlyRate: string;
-  estimatedPay: string;
-  rateSource: string;
-};
 
 type Analytics = {
   year: number;
@@ -199,6 +99,7 @@ type RolloverPreviewRow = {
   leaveTypeName: string;
   unusedDays: number;
   daysCarried: number;
+  unit?: "days" | "hours";
 };
 
 /** Monday (YYYY-MM-DD) of the week containing a YYYY-MM-DD date. */
@@ -341,89 +242,17 @@ export default function ReportsPage() {
     }
   }, [activeTab, payrollReport, fetchPayroll]);
 
-  function exportPayrollCsv() {
-    if (!payrollReport) return;
-    const includeHolidayRateColumns = payrollReport.rows.some(
-      (r) => r.dailyHolidayPayRate !== undefined || r.hourlyRate != null
-    );
-    const payrollCsvBaseColumns: { key: keyof PayrollCsvBaseRow; label: string }[] =
-      [
-        { key: "name", label: "Employee" },
-        { key: "email", label: "Email" },
-        { key: "department", label: "Department" },
-        { key: "countryCode", label: "Country" },
-        { key: "employmentType", label: "Employment type" },
-        { key: "leaveType", label: "Leave type" },
-        { key: "leaveCategory", label: "Category" },
-        { key: "isPaid", label: "Paid" },
-        { key: "startDate", label: "Start" },
-        { key: "endDate", label: "End" },
-        { key: "daysTaken", label: "Days taken" },
-        { key: "hoursTaken", label: "Hours taken" },
-      ];
-    const payrollCsvHolidayColumns: {
-      key: keyof Pick<
-        PayrollCsvFullRow,
-        "dailyHolidayPayRate" | "hourlyRate" | "estimatedPay" | "rateSource"
-      >;
-      label: string;
-    }[] = [
-      { key: "dailyHolidayPayRate", label: "Daily holiday pay rate (\u00a3)" },
-      { key: "hourlyRate", label: "Hourly holiday pay rate (\u00a3)" },
-      { key: "estimatedPay", label: "Estimated pay (\u00a3)" },
-      { key: "rateSource", label: "Rate source" },
-    ];
-
-    const toBaseRow = (r: PayrollRow): PayrollCsvBaseRow => ({
-      name: r.name,
-      email: r.email,
-      department: r.department ?? "",
-      countryCode: r.countryCode,
-      employmentType: r.employmentType,
-      leaveType: r.leaveType,
-      leaveCategory: r.leaveCategory,
-      isPaid: r.isPaid ? "Yes" : "No",
-      startDate: r.startDate.slice(0, 10),
-      endDate: r.endDate.slice(0, 10),
-      daysTaken: r.daysTaken,
-      hoursTaken: r.hoursTaken == null ? "" : String(r.hoursTaken),
+  // The file comes from the API, which owns the columns (payroll-columns.ts),
+  // so the download always matches the server's rows.
+  // Uses the loaded report's dates, so the file matches the table on screen
+  // even if the date inputs were changed without pressing Refresh.
+  function payrollExportHref(report: PayrollReport, format: "csv" | "excel") {
+    const qs = new URLSearchParams({
+      format,
+      from: report.from.slice(0, 10),
+      to: report.to.slice(0, 10),
     });
-
-    if (includeHolidayRateColumns) {
-      const rows: PayrollCsvFullRow[] = payrollReport.rows.map((r) => {
-        const base = toBaseRow(r);
-        if (r.dailyHolidayPayRate === undefined && r.hourlyRate == null) {
-          return {
-            ...base,
-            dailyHolidayPayRate: "",
-            hourlyRate: "",
-            estimatedPay: "",
-            rateSource: "",
-          };
-        }
-        return {
-          ...base,
-          dailyHolidayPayRate:
-            r.dailyHolidayPayRate == null
-              ? ""
-              : r.dailyHolidayPayRate.toFixed(2),
-          hourlyRate: r.hourlyRate == null ? "" : r.hourlyRate.toFixed(2),
-          estimatedPay: r.estimatedPay == null ? "" : r.estimatedPay.toFixed(2),
-          rateSource: r.rateSource ?? "",
-        };
-      });
-      downloadCsv(
-        `payroll-export-${payrollFrom}-to-${payrollTo}`,
-        toCsv(rows, [...payrollCsvBaseColumns, ...payrollCsvHolidayColumns])
-      );
-      return;
-    }
-
-    const rows: PayrollCsvBaseRow[] = payrollReport.rows.map(toBaseRow);
-    downloadCsv(
-      `payroll-export-${payrollFrom}-to-${payrollTo}`,
-      toCsv(rows, payrollCsvBaseColumns)
-    );
+    return `/api/reports/payroll?${qs.toString()}`;
   }
 
   async function runRollover(dryRun: boolean) {
@@ -452,93 +281,66 @@ export default function ReportsPage() {
     setRolloverProcessing(false);
   }
 
-  function exportCsv(tab: ActiveTab) {
-    if (tab === "bradford" && report) {
-      downloadCsv(
-        `bradford-factor-${new Date().toISOString().slice(0, 10)}`,
-        toCsv(report.absenceTrigger.rows, [
-          { key: "name", label: "Employee" },
-          { key: "spells", label: "Sickness spells" },
-          { key: "days", label: "Sick days" },
-          { key: "score", label: "Bradford score" },
-          { key: "flagged", label: "Above threshold" },
-        ])
+  // Each tab's CSV comes from the API, which owns the columns
+  // (uk-compliance-columns.ts), using the threshold of the report on screen.
+  function complianceCsvHref(table: UkComplianceTableId) {
+    const qs = new URLSearchParams({
+      format: "csv",
+      table,
+      bradfordThreshold: String(report?.absenceTrigger.threshold ?? threshold),
+    });
+    return `/api/reports/uk-compliance?${qs.toString()}`;
+  }
+
+  const [packExporting, setPackExporting] = useState(false);
+
+  // One Excel workbook with a sheet per report. Browsers block a burst of
+  // separate downloads, so five CSVs on timers never reliably arrived.
+  async function exportFullPack() {
+    setPackExporting(true);
+    try {
+      const res = await fetch(
+        `/api/reports/uk-compliance?format=excel&bradfordThreshold=${threshold}`
       );
-    } else if (tab === "right-to-work" && report) {
-      downloadCsv(
-        `right-to-work-${new Date().toISOString().slice(0, 10)}`,
-        toCsv(report.rightToWork, [
-          { key: "name", label: "Employee" },
-          { key: "email", label: "Email" },
-          { key: "department", label: "Department" },
-          { key: "rightToWorkVerified", label: "Verified" },
-        ])
-      );
-    } else if (tab === "holiday-usage" && report) {
-      downloadCsv(
-        `holiday-usage-${new Date().toISOString().slice(0, 10)}`,
-        toCsv(report.holidayUsage, [
-          { key: "name", label: "Employee" },
-          { key: "department", label: "Department" },
-          { key: "contractType", label: "Contract" },
-          { key: "taken", label: "Days taken" },
-        ])
-      );
-    } else if (tab === "ssp" && report) {
-      downloadCsv(
-        `ssp-liability-${new Date().toISOString().slice(0, 10)}`,
-        toCsv(report.sspLiability, [
-          { key: "name", label: "Employee" },
-          { key: "startDate", label: "Start date" },
-          { key: "daysElapsed", label: "Days elapsed" },
-          { key: "estimatedCostToDate", label: "Estimated cost (GBP)" },
-        ])
-      );
-    } else if (tab === "parental" && report) {
-      downloadCsv(
-        `parental-leave-${new Date().toISOString().slice(0, 10)}`,
-        toCsv(report.parentalTracker, [
-          { key: "name", label: "Employee" },
-          { key: "leaveType", label: "Leave type" },
-          { key: "expectedReturnDate", label: "Expected return" },
-          { key: "kitDaysUsed", label: "KIT days used" },
-          { key: "kitDaysRemaining", label: "KIT days remaining" },
-          { key: "kitDaysCap", label: "KIT days cap" },
-        ])
-      );
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      const date = new Date().toISOString().slice(0, 10);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `coverboard-uk-compliance-pack-${date}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast("Compliance pack downloaded (Excel, one sheet per report)", "success");
+    } catch {
+      toast("Couldn't export the compliance pack. Please try again.", "error");
+    } finally {
+      setPackExporting(false);
     }
   }
 
-  function exportFullPack() {
-    if (!report) return;
-    const date = new Date().toISOString().slice(0, 10);
-    exportCsv("bradford");
-    setTimeout(() => exportCsv("right-to-work"), 250);
-    setTimeout(() => exportCsv("holiday-usage"), 500);
-    setTimeout(() => exportCsv("ssp"), 750);
-    setTimeout(() => exportCsv("parental"), 1000);
-    toast(`UK compliance report pack exported (${date})`, "success");
-  }
+  const fetchVariableUsers = useCallback(async () => {
+    try {
+      const res = await fetch("/api/team-members");
+      if (res.ok) {
+        const all = await res.json();
+        setVariableUsers(
+          all.filter(
+            (u: VariableHoursUser) =>
+              isHoursAveragedEmploymentType(u.employmentType)
+          )
+        );
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   useEffect(() => {
-    async function fetchVariableUsers() {
-      try {
-        const res = await fetch("/api/team-members");
-        if (res.ok) {
-          const all = await res.json();
-          setVariableUsers(
-            all.filter(
-              (u: VariableHoursUser) =>
-                isHoursAveragedEmploymentType(u.employmentType)
-            )
-          );
-        }
-      } catch {
-        // ignore
-      }
-    }
     void fetchVariableUsers();
-  }, []);
+  }, [fetchVariableUsers]);
 
   useEffect(() => {
     async function loadHours() {
@@ -592,6 +394,8 @@ export default function ReportsPage() {
           `/api/weekly-hours?userId=${selectedUser}`
         );
         if (refresh.ok) setWeeklyHours(await refresh.json());
+        // Their FTE is worked out from these hours; refresh it too.
+        void fetchVariableUsers();
       } else {
         const err = await res.json();
         toast(err.error || "Failed to save hours", "error");
@@ -682,9 +486,14 @@ export default function ReportsPage() {
           </p>
         </div>
         {hasUkWorkforce && (
-          <Button size="sm" variant="outline" onClick={exportFullPack}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={exportFullPack}
+            disabled={packExporting}
+          >
             <Download className="mr-1.5 h-3.5 w-3.5" />
-            Export compliance pack
+            {packExporting ? "Preparing…" : "Export compliance pack"}
           </Button>
         )}
       </div>
@@ -737,9 +546,9 @@ export default function ReportsPage() {
                 <Clock className="h-5 w-5 text-blue-500" />
                 <div>
                   <p className="text-2xl font-bold">
-                    {report.sspLiability.length}
+                    {peopleOnSspToday(report.sspLiability)}
                   </p>
-                  <p className="text-xs text-gray-500">On SSP currently</p>
+                  <p className="text-xs text-gray-500">On SSP today</p>
                 </div>
               </div>
             </CardContent>
@@ -815,15 +624,13 @@ export default function ReportsPage() {
                     <Button size="sm" onClick={fetchReport}>
                       Apply
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => exportCsv("bradford")}
-                      title="Export CSV"
-                      aria-label="Export CSV"
+                    <a
+                      href={complianceCsvHref("bradford")}
+                      className="inline-flex shrink-0 items-center whitespace-nowrap rounded-md border border-gray-300 px-2.5 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50"
                     >
-                      <Download className="h-3.5 w-3.5" />
-                    </Button>
+                      <Download className="mr-1.5 h-3.5 w-3.5" />
+                      CSV
+                    </a>
                   </div>
                 </div>
               </CardHeader>
@@ -943,15 +750,13 @@ export default function ReportsPage() {
                       <p className="text-xs text-gray-500">{ukOnlyNote}</p>
                     )}
                   </CardHeaderIntro>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => exportCsv("right-to-work")}
-                    title="Export CSV"
-                    aria-label="Export CSV"
+                  <a
+                    href={complianceCsvHref("right-to-work")}
+                    className="inline-flex shrink-0 items-center whitespace-nowrap rounded-md border border-gray-300 px-2.5 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
-                    <Download className="h-3.5 w-3.5" />
-                  </Button>
+                    <Download className="mr-1.5 h-3.5 w-3.5" />
+                    CSV
+                  </a>
                 </div>
               </CardHeader>
               <CardContent>
@@ -1119,15 +924,11 @@ export default function ReportsPage() {
                         ).toFixed(1)}
                         h/week
                       </strong>{" "}
-                      &rarr; FTE ratio:{" "}
+                      &rarr; FTE:{" "}
                       <strong>
-                        {Math.min(
-                          1,
-                          weeklyHours.reduce((s, e) => s + e.hoursWorked, 0) /
-                            weeklyHours.length /
-                            37.5
-                        ).toFixed(3)}
-                      </strong>
+                        {variableUsers.find((u) => u.id === selectedUser)?.fte?.value ?? "—"}
+                      </strong>{" "}
+                      (shown on their profile too)
                     </p>
                   </div>
                 )}
@@ -1149,15 +950,13 @@ export default function ReportsPage() {
                       <p className="text-xs text-gray-500">{ukOnlyNote}</p>
                     )}
                   </CardHeaderIntro>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => exportCsv("holiday-usage")}
-                    title="Export CSV"
-                    aria-label="Export CSV"
+                  <a
+                    href={complianceCsvHref("holiday-usage")}
+                    className="inline-flex shrink-0 items-center whitespace-nowrap rounded-md border border-gray-300 px-2.5 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
-                    <Download className="h-3.5 w-3.5" />
-                  </Button>
+                    <Download className="mr-1.5 h-3.5 w-3.5" />
+                    CSV
+                  </a>
                 </div>
               </CardHeader>
               <CardContent>
@@ -1214,28 +1013,28 @@ export default function ReportsPage() {
                   <CardHeaderIntro>
                     <CardTitle>SSP liability</CardTitle>
                     <CardDescription>
-                      Employees currently on Statutory Sick Pay with estimated
-                      costs.
+                      Current and upcoming Statutory Sick Pay absences with
+                      estimated costs. Past absences aren&apos;t listed, but
+                      still count towards days left when they link (8 weeks or
+                      less between absences).
                     </CardDescription>
                     {ukOnlyNote && (
                       <p className="text-xs text-gray-500">{ukOnlyNote}</p>
                     )}
                   </CardHeaderIntro>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => exportCsv("ssp")}
-                    title="Export CSV"
-                    aria-label="Export CSV"
+                  <a
+                    href={complianceCsvHref("ssp")}
+                    className="inline-flex shrink-0 items-center whitespace-nowrap rounded-md border border-gray-300 px-2.5 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
-                    <Download className="h-3.5 w-3.5" />
-                  </Button>
+                    <Download className="mr-1.5 h-3.5 w-3.5" />
+                    CSV
+                  </a>
                 </div>
               </CardHeader>
               <CardContent>
                 {(report?.sspLiability.length ?? 0) === 0 ? (
                   <p className="py-4 text-center text-sm text-gray-400">
-                    No employees currently on SSP.
+                    No current or upcoming SSP absences.
                   </p>
                 ) : (
                   <div className="overflow-x-auto">
@@ -1243,11 +1042,17 @@ export default function ReportsPage() {
                       <thead>
                         <tr className="border-b border-gray-100 text-left text-xs font-medium uppercase text-gray-500">
                           <th className="pb-2 pr-4">Employee</th>
-                          <th className="pb-2 pr-4">Start date</th>
-                          <th className="pb-2 pr-4 text-right">
-                            Days elapsed
+                          <th className="pb-2 pr-4">Dates</th>
+                          <th className="pb-2 pr-4 text-right">SSP days</th>
+                          <th className="pb-2 pr-4 text-right">Daily rate</th>
+                          <th className="pb-2 pr-4 text-right">Cost to date</th>
+                          <th className="pb-2 pr-4 text-right">Whole absence</th>
+                          <th
+                            className="pb-2 text-right"
+                            title="SSP days left in the 28-week limit, counting earlier linked absences"
+                          >
+                            Days left
                           </th>
-                          <th className="pb-2 text-right">Estimated cost</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1260,15 +1065,40 @@ export default function ReportsPage() {
                               {row.name}
                             </td>
                             <td className="py-2.5 pr-4 text-gray-600">
-                              {new Date(row.startDate).toLocaleDateString(
-                                "en-GB"
+                              {new Date(row.startDate).toLocaleDateString("en-GB")}
+                              {" – "}
+                              {new Date(row.endDate).toLocaleDateString("en-GB")}
+                              {!sspStarted(row) && (
+                                <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                                  Upcoming
+                                </span>
                               )}
                             </td>
-                            <td className="py-2.5 pr-4 text-right text-gray-600">
-                              {row.daysElapsed}
+                            <td
+                              className="py-2.5 pr-4 text-right text-gray-600"
+                              title={`Counted on the ${row.qualifyingDaysPerWeek} days a week they work`}
+                            >
+                              {row.sspDaysPaid}
                             </td>
-                            <td className="py-2.5 text-right font-mono font-medium">
+                            <td className="py-2.5 pr-4 text-right font-mono text-gray-600">
+                              <span title={row.rateBasis}>&pound;{row.dailyRate.toFixed(2)}</span>
+                              {(row.averageWeeklyEarnings === null || row.dailyRate === 0) && (
+                                <span className="block max-w-56 text-[11px] font-sans text-amber-700">
+                                  {row.rateBasis}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2.5 pr-4 text-right font-mono text-gray-600">
                               &pound;{row.estimatedCostToDate.toFixed(2)}
+                            </td>
+                            <td className="py-2.5 pr-4 text-right font-mono font-medium">
+                              &pound;{row.estimatedTotalCost.toFixed(2)}
+                            </td>
+                            <td
+                              className="py-2.5 text-right font-mono text-gray-600"
+                              title={`Of ${row.maxDays} (28 weeks of the ${row.qualifyingDaysPerWeek} days a week they work)`}
+                            >
+                              {row.remainingDays}
                             </td>
                           </tr>
                         ))}
@@ -1295,15 +1125,13 @@ export default function ReportsPage() {
                       <p className="text-xs text-gray-500">{ukOnlyNote}</p>
                     )}
                   </CardHeaderIntro>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => exportCsv("parental")}
-                    title="Export CSV"
-                    aria-label="Export CSV"
+                  <a
+                    href={complianceCsvHref("parental")}
+                    className="inline-flex shrink-0 items-center whitespace-nowrap rounded-md border border-gray-300 px-2.5 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
-                    <Download className="h-3.5 w-3.5" />
-                  </Button>
+                    <Download className="mr-1.5 h-3.5 w-3.5" />
+                    CSV
+                  </a>
                 </div>
               </CardHeader>
               <CardContent>
@@ -1319,9 +1147,10 @@ export default function ReportsPage() {
                           <th className="pb-2 pr-4">Employee</th>
                           <th className="pb-2 pr-4">Leave type</th>
                           <th className="pb-2 pr-4">Expected return</th>
-                          <th className="pb-2 text-right">KIT used</th>
-                          <th className="pb-2 text-right">KIT remaining</th>
-                          <th className="pb-2 text-right">KIT cap</th>
+                          <th className="pb-2 pr-4 text-right">Leave (working days)</th>
+                          <th className="pb-2 text-right">KIT/SPLIT used</th>
+                          <th className="pb-2 text-right">Remaining</th>
+                          <th className="pb-2 text-right">Allowed</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1341,49 +1170,70 @@ export default function ReportsPage() {
                                 row.expectedReturnDate
                               ).toLocaleDateString("en-GB")}
                             </td>
-                            <td className="py-2.5 pr-4 text-right">
-                              <input
-                                type="number"
-                                min="0"
-                                max={row.kitDaysCap}
-                                defaultValue={row.kitDaysUsed}
-                                onBlur={async (e) => {
-                                  const next = parseInt(e.target.value, 10);
-                                  if (
-                                    isNaN(next) ||
-                                    next === row.kitDaysUsed ||
-                                    next < 0 ||
-                                    next > row.kitDaysCap
-                                  )
-                                    return;
-                                  const res = await fetch(
-                                    `/api/leave-requests/${row.requestId}`,
-                                    {
-                                      method: "PATCH",
-                                      headers: {
-                                        "Content-Type": "application/json",
-                                      },
-                                      body: JSON.stringify({
-                                        kitDaysUsed: next,
-                                      }),
-                                    }
-                                  );
-                                  if (res.ok) {
-                                    toast("KIT days updated", "success");
-                                    fetchReport();
-                                  } else {
-                                    toast("Failed to update", "error");
-                                  }
-                                }}
-                                className="w-16 rounded border border-gray-200 px-2 py-1 text-right font-mono text-sm focus:border-brand-500 focus:outline-none"
-                              />
+                            <td className="py-2.5 pr-4 text-right font-mono text-gray-600">
+                              {row.leaveDays}
                             </td>
-                            <td className="py-2.5 pr-4 text-right font-mono">
-                              {row.kitDaysRemaining}
-                            </td>
-                            <td className="py-2.5 text-right font-mono text-gray-500">
-                              {row.kitDaysCap}
-                            </td>
+                            {row.keepingInTouch ? (
+                              <>
+                                <td className="py-2.5 pr-4 text-right">
+                                  <span className="mr-1.5 text-[10px] font-medium text-gray-500">
+                                    {row.keepingInTouch.kind}
+                                  </span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max={row.keepingInTouch.allowed}
+                                    defaultValue={row.keepingInTouch.used}
+                                    aria-label={`${row.keepingInTouch.kind} days used`}
+                                    onBlur={async (e) => {
+                                      const kit = row.keepingInTouch!;
+                                      const next = parseInt(e.target.value, 10);
+                                      if (
+                                        isNaN(next) ||
+                                        next === kit.used ||
+                                        next < 0 ||
+                                        next > kit.allowed
+                                      )
+                                        return;
+                                      // KIT days and SPLIT days are stored separately.
+                                      const field =
+                                        kit.kind === "SPLIT" ? "splitDaysUsed" : "kitDaysUsed";
+                                      const res = await fetch(
+                                        `/api/leave-requests/${row.requestId}`,
+                                        {
+                                          method: "PATCH",
+                                          headers: {
+                                            "Content-Type": "application/json",
+                                          },
+                                          body: JSON.stringify({ [field]: next }),
+                                        }
+                                      );
+                                      if (res.ok) {
+                                        toast(`${kit.kind} days updated`, "success");
+                                        fetchReport();
+                                      } else {
+                                        const data = await res.json().catch(() => null);
+                                        toast(data?.error ?? "Failed to update", "error");
+                                      }
+                                    }}
+                                    className="w-16 rounded border border-gray-200 px-2 py-1 text-right font-mono text-sm focus:border-brand-500 focus:outline-none"
+                                  />
+                                </td>
+                                <td className="py-2.5 pr-4 text-right font-mono">
+                                  {row.keepingInTouch.remaining}
+                                </td>
+                                <td className="py-2.5 text-right font-mono text-gray-500">
+                                  {row.keepingInTouch.allowed}
+                                </td>
+                              </>
+                            ) : (
+                              <td
+                                colSpan={3}
+                                className="py-2.5 text-right text-xs text-gray-400"
+                              >
+                                No KIT or SPLIT days for this leave
+                              </td>
+                            )}
                           </tr>
                         ))}
                       </tbody>
@@ -1665,21 +1515,28 @@ export default function ReportsPage() {
                       <code>captured_at_booking</code> when the rate was
                       stored on the leave request or{" "}
                       <code>recalculated</code> when computed now for
-                      annual leave requests lacking a stored rate.
+                      annual leave requests lacking a stored rate. SSP
+                      absences show the SSP days in these dates, the daily
+                      rate and SSP pay; paternity leave shows Statutory
+                      Paternity Pay (SPP).
                     </CardDescription>
                   </CardHeaderIntro>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={
-                      !payrollReport || payrollReport.rows.length === 0
-                    }
-                    onClick={exportPayrollCsv}
-                    title="Export CSV"
-                    aria-label="Export CSV"
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                  </Button>
+                  {/* Only offered when there's leave in the period; an empty
+                      period says so below instead of greyed-out buttons. */}
+                  {payrollReport && payrollReport.rows.length > 0 && (
+                    <div className="flex shrink-0 gap-2 text-sm">
+                      {(["csv", "excel"] as const).map((f) => (
+                        <a
+                          key={f}
+                          href={payrollExportHref(payrollReport, f)}
+                          className="inline-flex items-center whitespace-nowrap rounded-md border border-gray-300 px-2.5 py-1 font-medium text-gray-700 hover:bg-gray-50"
+                        >
+                          <Download className="mr-1.5 h-3.5 w-3.5" />
+                          {f === "csv" ? "CSV" : "Excel"}
+                        </a>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -1710,7 +1567,7 @@ export default function ReportsPage() {
                 </div>
 
                 {payrollReport && (
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
                     <div className="rounded-md border border-gray-100 bg-gray-50 p-3">
                       <p className="text-xs text-gray-500">Rows</p>
                       <p className="text-lg font-semibold text-gray-900">
@@ -1731,13 +1588,25 @@ export default function ReportsPage() {
                     </div>
                     <div className="rounded-md border border-gray-100 bg-gray-50 p-3">
                       <p className="text-xs text-gray-500">
-                        Estimated pay (£)
+                        Holiday pay (£)
                       </p>
                       <p className="text-lg font-semibold text-gray-900">
                         {payrollReport.totals.totalEstimatedPay.toLocaleString(
                           "en-GB",
                           { minimumFractionDigits: 2, maximumFractionDigits: 2 }
                         )}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-gray-100 bg-gray-50 p-3">
+                      <p className="text-xs text-gray-500">Statutory pay (£)</p>
+                      <p className="text-lg font-semibold text-gray-900">
+                        {(payrollReport.totals.totalSspPay + payrollReport.totals.totalSppPay).toLocaleString("en-GB", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </p>
+                      <p className="text-[11px] text-gray-500">
+                        SSP £{payrollReport.totals.totalSspPay.toFixed(2)} · SPP £{payrollReport.totals.totalSppPay.toFixed(2)}
                       </p>
                     </div>
                   </div>
@@ -1747,7 +1616,8 @@ export default function ReportsPage() {
                   <TableSkeleton rows={5} />
                 ) : payrollReport && payrollReport.rows.length === 0 ? (
                   <p className="py-4 text-center text-sm text-gray-400">
-                    No approved leave in this range.
+                    No approved leave in these dates, so there&apos;s
+                    nothing to export. Change the dates and press Refresh.
                   </p>
                 ) : payrollReport ? (
                   <div className="overflow-x-auto">
@@ -1800,18 +1670,49 @@ export default function ReportsPage() {
                                 : row.daysTaken}
                             </td>
                             <td className="py-2 pr-4 text-right text-gray-700">
-                              {row.hoursTaken != null
-                                ? row.hourlyRate == null
+                              {row.spp
+                                ? row.spp.weeklyRate == null
                                   ? "—"
-                                  : `£${row.hourlyRate.toFixed(2)}/hr`
-                                : row.dailyHolidayPayRate == null
+                                  : `£${row.spp.weeklyRate.toFixed(2)}/wk SPP`
+                                : row.ssp
+                                ? row.ssp.dailyRate == null
                                   ? "—"
-                                  : `£${row.dailyHolidayPayRate.toFixed(2)}`}
+                                  : `£${row.ssp.dailyRate.toFixed(2)} SSP`
+                                : row.hoursTaken != null
+                                  ? row.hourlyRate == null
+                                    ? "—"
+                                    : `£${row.hourlyRate.toFixed(2)}/hr`
+                                  : row.dailyHolidayPayRate == null
+                                    ? "—"
+                                    : `£${row.dailyHolidayPayRate.toFixed(2)}`}
                             </td>
                             <td className="py-2 pr-4 text-right font-medium text-gray-900">
-                              {row.estimatedPay == null
-                                ? "—"
-                                : `£${row.estimatedPay.toFixed(2)}`}
+                              {row.spp
+                                ? row.spp.pay == null
+                                  ? "—"
+                                  : `£${row.spp.pay.toFixed(2)}`
+                                : row.ssp
+                                ? row.ssp.pay == null
+                                  ? "—"
+                                  : `£${row.ssp.pay.toFixed(2)}`
+                                : row.estimatedPay == null
+                                  ? "—"
+                                  : `£${row.estimatedPay.toFixed(2)}`}
+                              {row.spp && (
+                                <div className="max-w-56 text-[11px] font-normal text-gray-500">
+                                  {row.spp.weeklyRate == null
+                                    ? row.spp.basis
+                                    : `${row.spp.calendarDays} days of SPP`}
+                                </div>
+                              )}
+                              {row.ssp && (
+                                <div className="max-w-56 text-[11px] font-normal text-gray-500">
+                                  {row.ssp.daysInPeriod} SSP day{row.ssp.daysInPeriod === 1 ? "" : "s"}
+                                  {row.ssp.averageWeeklyEarnings === null || row.ssp.dailyRate === 0
+                                    ? ` · ${row.ssp.basis}`
+                                    : ""}
+                                </div>
+                              )}
                             </td>
                             <td className="py-2">
                               <Badge
@@ -1912,9 +1813,11 @@ export default function ReportsPage() {
                             </td>
                             <td className="py-2.5 pr-4 text-right font-mono text-gray-600">
                               {row.unusedDays}
+                              {row.unit === "hours" ? "h" : " days"}
                             </td>
                             <td className="py-2.5 text-right font-mono font-medium">
                               {row.daysCarried}
+                              {row.unit === "hours" ? "h" : " days"}
                             </td>
                           </tr>
                         ))}

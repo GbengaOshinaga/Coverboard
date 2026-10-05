@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { getWorkingWeek } from "@/lib/working-week-server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { calculateHolidayPayRate } from "@/lib/holidayPay";
 import { syncUserAverageWeeklyEarnings } from "@/lib/smpCalculator";
+import { recomputeSspAfterEarningsChange } from "@/lib/leave-requests/ssp-spell";
 import {
   holidayPayNotApplicablePayload,
   isUkHolidayPayApplicable,
@@ -22,7 +24,7 @@ async function getEarningsStats(userId: string) {
     hours_worked: Number(e.hoursWorked),
     is_zero_pay_week: e.isZeroPayWeek,
   }));
-  const averageDailyRate = entries.length > 0 ? calculateHolidayPayRate(weeks) : null;
+  const averageDailyRate = entries.length > 0 ? calculateHolidayPayRate(weeks, (await getWorkingWeek(userId)).daysPerWeek) : null;
   const paidWeeksCount = weeks.filter((w) => !w.is_zero_pay_week).length;
   return { entries, averageDailyRate, weeksOnRecord: entries.length, paidWeeksCount };
 }
@@ -89,6 +91,9 @@ export async function PUT(
   await syncUserAverageWeeklyEarnings(memberId).catch((err) =>
     console.error("Failed to sync average weekly earnings:", err)
   );
+  await recomputeSspAfterEarningsChange(memberId, entry.weekStartDate).catch((err) =>
+    console.error("Failed to recalculate SSP after an earnings change:", err)
+  );
 
   const stats = await getEarningsStats(memberId);
   return NextResponse.json(stats);
@@ -120,7 +125,7 @@ export async function DELETE(
 
   const entry = await prisma.weeklyEarning.findFirst({
     where: { id: weekId, userId: memberId },
-    select: { id: true },
+    select: { id: true, weekStartDate: true },
   });
   if (!entry) return NextResponse.json({ error: "Earnings entry not found" }, { status: 404 });
 
@@ -128,6 +133,9 @@ export async function DELETE(
 
   await syncUserAverageWeeklyEarnings(memberId).catch((err) =>
     console.error("Failed to sync average weekly earnings:", err)
+  );
+  await recomputeSspAfterEarningsChange(memberId, entry.weekStartDate).catch((err) =>
+    console.error("Failed to recalculate SSP after an earnings change:", err)
   );
 
   const stats = await getEarningsStats(memberId);

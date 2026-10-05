@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { allowanceLabel } from "@/lib/leave-type-labels";
+import { peopleOnSspToday, type UkComplianceReport } from "@/lib/uk-compliance-columns";
 import { useSession } from "next-auth/react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -24,6 +26,7 @@ type LeaveType = {
   color: string;
   isPaid: boolean;
   defaultDays: number;
+  allowanceUnit?: "DAYS" | "WEEKS";
   category: LeaveCategory;
   requiresEvidence: boolean;
   minNoticeDays: number;
@@ -91,12 +94,7 @@ type EarningsCoverage = {
   hasAnyHistory: boolean;
 };
 
-type UKComplianceReport = {
-  holidayUsage: Array<{ name: string; taken: number; department: string | null; contractType: string }>;
-  absenceTrigger: { threshold: number; rows: Array<{ name: string; score: number; flagged: boolean }> };
-  sspLiability: Array<{ name: string; daysElapsed: number; estimatedCostToDate: number }>;
-  parentalTracker: Array<{ name: string; leaveType: string; expectedReturnDate: string; kitDaysUsed: number; kitDaysCap: number }>;
-};
+type UKComplianceReport = UkComplianceReport;
 
 export default function SettingsPage() {
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
@@ -899,7 +897,7 @@ export default function SettingsPage() {
                   Bradford triggers above {ukReport.absenceTrigger.threshold}:{" "}
                   <strong>{ukReport.absenceTrigger.rows.filter((r) => r.flagged).length}</strong>
                 </p>
-                <p>Employees currently on SSP: <strong>{ukReport.sspLiability.length}</strong></p>
+                <p>Employees on SSP today: <strong>{peopleOnSspToday(ukReport.sspLiability)}</strong></p>
                 <p>Active parental leave cases: <strong>{ukReport.parentalTracker.length}</strong></p>
               </>
             ) : null}
@@ -1027,7 +1025,7 @@ export default function SettingsPage() {
                   </div>
                   <div className="flex items-center gap-2 sm:gap-3">
                     <span className="text-xs text-gray-500">
-                      {lt.defaultDays} days
+                      {allowanceLabel(lt)}
                     </span>
                     <Badge variant={lt.isPaid ? "success" : "outline"}>
                       {lt.isPaid ? "Paid" : "Unpaid"}

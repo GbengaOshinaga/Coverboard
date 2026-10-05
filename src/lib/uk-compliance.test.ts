@@ -16,6 +16,8 @@ import {
   calculateSspPayableDays,
   calculateSspPayableDaysForSpell,
   calculateSspDailyRate,
+  sspPay,
+  sspRateBasis,
   calculateSspWeeklyRate,
   calculateSspEntitlement,
   easterSunday,
@@ -215,14 +217,14 @@ test("SSP daily rate uses qualifying days — 5-day week", () => {
 
 test("SSP daily rate uses qualifying days — 4-day week", () => {
   const rate = calculateSspDailyRate(4, 123.25);
-  // 123.25 / 4 = 30.8125 → rounded to 30.81
-  assert.equal(rate, 30.81);
+  // 123.25 / 4 = 30.8125 (HMRC daily rate table, 4 decimal places)
+  assert.equal(rate, 30.8125);
 });
 
 test("SSP daily rate uses qualifying days — 3-day week", () => {
   const rate = calculateSspDailyRate(3, 123.25);
-  // 123.25 / 3 = 41.0833… → rounded to 41.08
-  assert.equal(rate, 41.08);
+  // 123.25 / 3 = 41.08333… → truncated to 41.0833 (HMRC daily rate table)
+  assert.equal(rate, 41.0833);
 });
 
 test("SSP daily rate defaults to 5-day week when qualifyingDays missing/invalid", () => {
@@ -380,7 +382,7 @@ test("SSP entitlement returns the correct daily rate for the employee's qualifyi
   });
   assert.equal(result.eligible, true);
   if (result.eligible) {
-    assert.equal(result.dailyRate, 30.81);
+    assert.equal(result.dailyRate, 30.8125);
   }
 });
 
@@ -422,4 +424,64 @@ test("linked spell pays 3 more days than the unlinked equivalent", () => {
     linkedToPriorPiw: true,
   });
   assert.equal(linked - unlinked, 3);
+});
+
+test("SSP payable days count only qualifying (working) days", () => {
+  const d = (iso: string) => new Date(`${iso}T00:00:00Z`);
+  // Brian works Mon/Wed/Fri; off sick 19–30 Oct 2026 (post-reform: no waiting days).
+  assert.equal(calculateSspPayableDays(d("2026-10-19"), d("2026-10-30"), [0, 2, 4]), 6);
+  // Without known weekdays: Mon–Fri, as before.
+  assert.equal(calculateSspPayableDays(d("2026-10-19"), d("2026-10-30")), 10);
+  // Pre-reform: the 3 waiting days are the first 3 *qualifying* days.
+  assert.equal(calculateSspPayableDays(d("2026-01-05"), d("2026-01-16"), [0, 2, 4]), 3);
+  // Linked spells pay every qualifying day.
+  assert.equal(
+    calculateSspPayableDaysForSpell(d("2026-01-05"), d("2026-01-16"), { linkedToPriorPiw: true, qualifyingWeekdays: [0, 2, 4] }),
+    6
+  );
+});
+
+// HMRC SSP daily rate table for 2026/27 (£123.25 a week): unrounded daily
+// rate, and the amount for 1..n days, each rounded up to the penny.
+const HMRC_SSP_TABLE_2026: Array<[number, number, number[]]> = [
+  [7, 17.6071, [17.61, 35.22, 52.83, 70.43, 88.04, 105.65, 123.25]],
+  [6, 20.5416, [20.55, 41.09, 61.63, 82.17, 102.71, 123.25]],
+  [5, 24.65, [24.65, 49.3, 73.95, 98.6, 123.25]],
+  [4, 30.8125, [30.82, 61.63, 92.44, 123.25]],
+  [3, 41.0833, [41.09, 82.17, 123.25]],
+];
+
+test("SSP daily rates and amounts match HMRC's 2026/27 table", () => {
+  for (const [qDays, rate, amounts] of HMRC_SSP_TABLE_2026) {
+    assert.equal(calculateSspDailyRate(qDays, 123.25), rate, `${qDays} qualifying days`);
+    amounts.forEach((amount, i) => {
+      assert.equal(sspPay(i + 1, rate, qDays), amount, `${qDays} qualifying days, ${i + 1} paid`);
+    });
+  }
+});
+
+test("Brian: 3-day week, 6 SSP days = 2 full weeks = £246.50 (not 6 × £41.08 = £246.48)", () => {
+  const rate = calculateSspDailyRate(3, 123.25);
+  assert.equal(sspPay(6, rate, 3), 246.5);
+  assert.equal(sspPay(7, rate, 3), 287.59); // 2 weeks + 1 day (£41.09)
+});
+
+test("sspPay: 28 weeks always pays exactly 28 × the weekly rate", () => {
+  for (const [qDays, rate] of HMRC_SSP_TABLE_2026) {
+    assert.equal(sspPay(28 * qDays, rate, qDays), 3451, `${qDays} qualifying days`);
+  }
+  assert.equal(sspPay(0, 41.0833, 3), 0);
+});
+
+test("sspRateBasis explains every SSP rate", () => {
+  const after = new Date("2026-11-02T00:00:00Z");
+  // Frank with no pay recorded: flat rate, and says so.
+  assert.match(sspRateBasis({ startDate: after, averageWeeklyEarnings: null, flatRate: 123.25 }), /No pay recorded .* flat £123\.25/);
+  assert.match(sspRateBasis({ startDate: after, averageWeeklyEarnings: 0, flatRate: 123.25 }), /^£0: every week recorded .* no-pay week/);
+  assert.equal(
+    sspRateBasis({ startDate: after, averageWeeklyEarnings: 120, flatRate: 123.25 }),
+    "80% of £120.00 average weekly earnings = £96.00 a week"
+  );
+  assert.match(sspRateBasis({ startDate: after, averageWeeklyEarnings: 480, flatRate: 123.25 }), /^Flat rate of £123\.25 a week \(80% of £480\.00/);
+  assert.match(sspRateBasis({ startDate: new Date("2026-03-02T00:00:00Z"), averageWeeklyEarnings: 120, flatRate: 118.75 }), /before 6 April 2026/);
 });

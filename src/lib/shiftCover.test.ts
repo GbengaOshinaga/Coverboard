@@ -410,3 +410,33 @@ test("ruled out: a clash with accepted cover says so", () => {
   assert.equal(dev.coverClash, true);
   assert.equal(dev.note, "Covering Day shift until 20:00");
 });
+
+test("cover candidates: flagged when the shift would take them past 48 hours that week", () => {
+  // Thu day (12h) is short. Chloe works Mon, Tue, Wed and Sat days: 48h.
+  // Covering would make 60h. Zoe works one day: 12h → 24h, no flag.
+  const [day] = computeShiftCover(
+    input({
+      shifts: [DAY],
+      patterns: [
+        pattern("a", "day", 3),
+        pattern("c", "day", 0),
+        pattern("c", "day", 1),
+        pattern("c", "day", 2),
+        pattern("c", "day", 5),
+        pattern("z", "day", 0),
+      ],
+      members: [
+        { id: "a", name: "Amara" },
+        { id: "c", name: "Chloe" },
+        { id: "z", name: "Zoe" },
+      ],
+    })
+  );
+  const candidates = day.shifts[0].coverCandidates;
+  const chloe = candidates.find((c) => c.id === "c")!;
+  const zoe = candidates.find((c) => c.id === "z")!;
+  // Still a candidate: the legal limit is a 17-week average, so it's a warning.
+  assert.equal(chloe.weekHours, 48);
+  assert.equal(chloe.hoursIfCovered, 60);
+  assert.equal("hoursIfCovered" in zoe, false);
+});

@@ -1,4 +1,4 @@
-import { countWeekdays } from "@/lib/utils";
+import { countWorkingDays } from "@/lib/working-week";
 import {
   isHoursAveragedEmploymentType,
   type EmploymentType as EmploymentTypeValue,
@@ -130,14 +130,16 @@ export function calculateIrregularHoursAccrual(loggedHours: number): number {
  */
 export function calculateUkProRatedAnnualLeave(input: UKContractInput): number | null {
   const fteHours = input.fullTimeHoursPerWeek ?? FTE_STANDARD_HOURS_PER_WEEK;
-  if (input.employmentType === EmploymentType.PART_TIME) {
-    return Math.ceil((input.daysWorkedPerWeek / 5) * 28);
-  }
   if (isHoursAveragedEmploymentType(input.employmentType)) {
     if (input.weeklyHours.length === 0) return null;
     return Math.ceil(calculateVariableHoursFte(input.weeklyHours, fteHours) * 28);
   }
-  return 28;
+  // 5.6 weeks of their working week, capped at 28 days. Applies whatever the
+  // contract label: a "full-time" record that only works 3 days is part-time
+  // for holiday purposes. A 5-day week gives exactly 28.
+  const days = input.daysWorkedPerWeek;
+  if (!(days > 0)) return 28;
+  return Math.min(28, Math.ceil((days / 5) * 28));
 }
 
 export function calculateBradfordFactor(absenceSpells: number, absenceDays: number): number {
@@ -151,8 +153,16 @@ export function calculateBradfordFactor(absenceSpells: number, absenceDays: numb
  * payable from day 1, so every qualifying weekday counts. Spells that started
  * before the reform still serve the 3 unpaid waiting days (transition handling).
  */
-export function calculateSspPayableDays(startDate: Date, endDate: Date): number {
-  const consecutiveDays = countWeekdays(startDate, endDate);
+export function calculateSspPayableDays(
+  startDate: Date,
+  endDate: Date,
+  /**
+   * Qualifying weekdays (Monday-first) — the days they normally work. SSP is
+   * only payable on these. Omitted: Mon–Fri.
+   */
+  qualifyingWeekdays: number[] | null = null
+): number {
+  const consecutiveDays = countWorkingDays(startDate, endDate, qualifyingWeekdays);
   if (startDate >= SSP_REFORM_DATE) {
     return consecutiveDays;
   }
@@ -178,11 +188,12 @@ export function calculateSspPayableDays(startDate: Date, endDate: Date): number 
 export function calculateSspPayableDaysForSpell(
   startDate: Date,
   endDate: Date,
-  opts: { linkedToPriorPiw: boolean }
+  opts: { linkedToPriorPiw: boolean; qualifyingWeekdays?: number[] | null }
 ): number {
+  const weekdays = opts.qualifyingWeekdays ?? null;
   return opts.linkedToPriorPiw
-    ? countWeekdays(startDate, endDate)
-    : calculateSspPayableDays(startDate, endDate);
+    ? countWorkingDays(startDate, endDate, weekdays)
+    : calculateSspPayableDays(startDate, endDate, weekdays);
 }
 
 /**
@@ -201,7 +212,62 @@ export function calculateSspDailyRate(
   const qDays = Number(qualifyingDaysPerWeek);
   const safeQDays =
     Number.isFinite(qDays) && qDays >= 1 && qDays <= 7 ? qDays : 5;
-  return Number((weeklyRate / safeQDays).toFixed(2));
+  // HMRC's daily rate tables truncate to 4 decimal places (£123.25 ÷ 3 =
+  // £41.0833); the amount paid is then rounded up to the penny — see sspPay.
+  return Math.floor(Number(((weeklyRate / safeQDays) * 10000).toFixed(6))) / 10000;
+}
+
+/**
+ * Why an SSP rate is what it is, in words, so a £0 or a flat rate is never a
+ * mystery on screen. From 6 April 2026 the weekly rate is the lower of the
+ * flat rate and 80% of average weekly earnings in the 8 weeks before.
+ */
+export function sspRateBasis(input: {
+  startDate: Date;
+  /** null: no pay recorded in the 8 weeks before. */
+  averageWeeklyEarnings: number | null;
+  flatRate?: number;
+}): string {
+  const flat = input.flatRate ?? UK_SSP_WEEKLY_RATE;
+  const money = (n: number) => `£${n.toFixed(2)}`;
+  if (input.startDate < SSP_REFORM_DATE) return `Flat rate of ${money(flat)} a week (before 6 April 2026)`;
+  const awe = input.averageWeeklyEarnings;
+  if (awe === null) {
+    return `No pay recorded in the 8 weeks before this absence, so the flat ${money(flat)} a week is used. Add their earnings to apply the 80% rule.`;
+  }
+  if (awe === 0) {
+    return "£0: every week recorded in the 8 weeks before was a no-pay week (SSP is 80% of average earnings).";
+  }
+  const eighty = Number((awe * SSP_LOW_EARNER_FRACTION).toFixed(2));
+  return eighty < flat
+    ? `80% of ${money(awe)} average weekly earnings = ${money(eighty)} a week`
+    : `Flat rate of ${money(flat)} a week (80% of ${money(awe)} average weekly earnings is more)`;
+}
+
+/** Rounds a fraction of a penny up to the next whole penny. */
+function ceilPenny(amount: number): number {
+  return Math.ceil(Number((amount * 100).toFixed(6))) / 100;
+}
+
+/**
+ * SSP payable for a number of qualifying days, the way HMRC's daily rate
+ * tables work: each full week of qualifying days pays the weekly amount
+ * (days × daily rate, rounded up to the penny — exactly the weekly rate), and
+ * the days left over are days × daily rate, rounded up to the penny.
+ * A 3-day worker off for 6 qualifying days: 2 × £123.25 = £246.50.
+ * https://www.gov.uk/employers-sick-pay/what-you-need-to-pay
+ */
+export function sspPay(
+  days: number,
+  dailyRate: number,
+  qualifyingDaysPerWeek: number
+): number {
+  if (days <= 0 || dailyRate <= 0) return 0;
+  const q = qualifyingDaysPerWeek >= 1 && qualifyingDaysPerWeek <= 7 ? Math.round(qualifyingDaysPerWeek) : 5;
+  const fullWeeks = Math.floor(days / q);
+  const rest = days - fullWeeks * q;
+  const weekPay = ceilPenny(q * dailyRate);
+  return Number((fullWeeks * weekPay + ceilPenny(rest * dailyRate)).toFixed(2));
 }
 
 /**
@@ -324,7 +390,7 @@ export function calculateEstimatedSspCost(
 ): number {
   const payableDays = calculateSspPayableDays(startDate, endDate);
   const daily = calculateSspDailyRate(qualifyingDaysPerWeek, weeklyRate);
-  return Number((daily * payableDays).toFixed(2));
+  return sspPay(payableDays, daily, qualifyingDaysPerWeek);
 }
 
 // ─── Easter & Bank Holiday Algorithm ─────────────────────────────────────────

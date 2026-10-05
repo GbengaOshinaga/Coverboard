@@ -8,6 +8,8 @@ export type CountryLeaveRule = {
   color: string;
   isPaid: boolean;
   annualAllowance: number;
+  /** Unit of annualAllowance. "WEEKS" = weeks of the person's working week. */
+  allowanceUnit?: "DAYS" | "WEEKS";
   carryOverMax: number;
   category?: "PAID" | "UNPAID" | "STATUTORY";
   requiresEvidence?: boolean;
@@ -71,7 +73,8 @@ export const COUNTRY_POLICIES: CountryPolicy[] = [
         leaveType: "Statutory Maternity Leave",
         color: "#8b5cf6",
         isPaid: true,
-        annualAllowance: 365,
+        annualAllowance: 52,
+        allowanceUnit: "WEEKS",
         carryOverMax: 0,
         category: "STATUTORY",
         requiresEvidence: true,
@@ -83,7 +86,8 @@ export const COUNTRY_POLICIES: CountryPolicy[] = [
         leaveType: "Statutory Paternity Leave",
         color: "#06b6d4",
         isPaid: true,
-        annualAllowance: 14,
+        annualAllowance: 2,
+        allowanceUnit: "WEEKS",
         carryOverMax: 0,
         category: "STATUTORY",
         requiresEvidence: true,
@@ -95,7 +99,8 @@ export const COUNTRY_POLICIES: CountryPolicy[] = [
         leaveType: "Shared Parental Leave (SPL)",
         color: "#7c3aed",
         isPaid: true,
-        annualAllowance: 350,
+        annualAllowance: 50,
+        allowanceUnit: "WEEKS",
         carryOverMax: 0,
         category: "STATUTORY",
         requiresEvidence: true,
@@ -107,7 +112,8 @@ export const COUNTRY_POLICIES: CountryPolicy[] = [
         leaveType: "Adoption Leave",
         color: "#14b8a6",
         isPaid: true,
-        annualAllowance: 365,
+        annualAllowance: 52,
+        allowanceUnit: "WEEKS",
         carryOverMax: 0,
         category: "STATUTORY",
         requiresEvidence: true,
@@ -119,7 +125,8 @@ export const COUNTRY_POLICIES: CountryPolicy[] = [
         leaveType: "Parental Bereavement Leave",
         color: "#f59e0b",
         isPaid: true,
-        annualAllowance: 14,
+        annualAllowance: 2,
+        allowanceUnit: "WEEKS",
         carryOverMax: 0,
         category: "STATUTORY",
         requiresEvidence: true,
@@ -131,19 +138,21 @@ export const COUNTRY_POLICIES: CountryPolicy[] = [
         leaveType: "Unpaid Parental Leave",
         color: "#6b7280",
         isPaid: false,
-        annualAllowance: 18,
+        annualAllowance: 4,
+        allowanceUnit: "WEEKS",
         carryOverMax: 0,
         category: "UNPAID",
         requiresEvidence: false,
         minNoticeDays: 21,
-        durationLogic: "18 weeks per child, max 4 weeks per year; day-one right from 6 April 2026",
+        durationLogic: "18 weeks per child (until they turn 18), max 4 weeks per child per year; day-one right from 6 April 2026",
         note: "Day-one right since 6 April 2026 (previously required one year's service)",
       },
       {
         leaveType: "Carer's Leave",
         color: "#84cc16",
         isPaid: false,
-        annualAllowance: 5,
+        annualAllowance: 1,
+        allowanceUnit: "WEEKS",
         carryOverMax: 0,
         category: "UNPAID",
         requiresEvidence: false,
@@ -155,7 +164,8 @@ export const COUNTRY_POLICIES: CountryPolicy[] = [
         leaveType: "Neonatal Care Leave",
         color: "#ec4899",
         isPaid: true,
-        annualAllowance: 60,
+        annualAllowance: 12,
+        allowanceUnit: "WEEKS",
         carryOverMax: 0,
         category: "STATUTORY",
         requiresEvidence: true,
@@ -361,6 +371,16 @@ export const BASE_LEAVE_TYPES: {
   { name: "Unpaid Leave", color: "#6b7280", isPaid: false, defaultDays: 0 },
 ];
 
+/**
+ * The generic baseline for a team. A UK-only team doesn't get the generic
+ * "Sick Leave" (10 paid days): its sickness type is Statutory Sick Pay, and a
+ * second sickness type would let people book sickness that skips SSP.
+ */
+export function baseLeaveTypesFor(countryCodes: string[]) {
+  const ukOnly = countryCodes.length > 0 && countryCodes.every((c) => c === "GB");
+  return ukOnly ? BASE_LEAVE_TYPES.filter((t) => t.name !== "Sick Leave") : BASE_LEAVE_TYPES;
+}
+
 export function getDefaultLeaveTypes(countryCodes: string[]) {
   const policies = COUNTRY_POLICIES.filter((p) =>
     countryCodes.includes(p.code)
@@ -369,16 +389,17 @@ export function getDefaultLeaveTypes(countryCodes: string[]) {
   // Merge leave types by name, keeping the most generous allowance as the org default
   const leaveTypeMap = new Map<
     string,
-    { color: string; isPaid: boolean; defaultDays: number }
+    { color: string; isPaid: boolean; defaultDays: number; allowanceUnit: "DAYS" | "WEEKS" }
   >();
 
   // Seed the generic baseline (Annual / Sick / Unpaid Leave) so the preview
   // matches what onboarding actually creates; country policies override below.
-  for (const base of BASE_LEAVE_TYPES) {
+  for (const base of baseLeaveTypesFor(countryCodes)) {
     leaveTypeMap.set(base.name, {
       color: base.color,
       isPaid: base.isPaid,
       defaultDays: base.defaultDays,
+      allowanceUnit: "DAYS",
     });
   }
 
@@ -390,6 +411,7 @@ export function getDefaultLeaveTypes(countryCodes: string[]) {
           color: rule.color,
           isPaid: rule.isPaid,
           defaultDays: rule.annualAllowance,
+          allowanceUnit: rule.allowanceUnit ?? "DAYS",
         });
       }
     }
@@ -419,6 +441,7 @@ export function getCountryPolicies(countryCodes: string[]) {
     minNoticeDays: number;
     durationLogic: string | null;
     applyProRata: boolean;
+    allowanceUnit: "DAYS" | "WEEKS";
   }[] = [];
 
   for (const policy of policies) {
@@ -433,6 +456,7 @@ export function getCountryPolicies(countryCodes: string[]) {
         minNoticeDays: rule.minNoticeDays ?? 0,
         durationLogic: rule.durationLogic ?? null,
         applyProRata: rule.applyProRata ?? false,
+        allowanceUnit: rule.allowanceUnit ?? "DAYS",
       });
     }
   }

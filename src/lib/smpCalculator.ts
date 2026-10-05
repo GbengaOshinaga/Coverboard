@@ -147,6 +147,59 @@ export function calculateSmpEntitlement(
   };
 }
 
+/**
+ * Statutory Paternity Pay: the lower of the flat rate (the same as SMP's,
+ * £194.32 a week for 2026/27) and 90% of average weekly earnings, for the 1
+ * or 2 weeks of paternity leave. Same earnings and service tests as SMP.
+ * https://www.gov.uk/employers-paternity-pay-leave
+ */
+export const SPP_FLAT_RATE = SMP_FLAT_RATE;
+
+export type PaternityPay =
+  | { eligible: true; weeklyRate: number; basis: string }
+  | { eligible: false; weeklyRate: null; basis: string };
+
+export function calculatePaternityPay(
+  averageWeeklyEarnings: number | null | undefined,
+  opts: SmpEntitlementOpts = {}
+): PaternityPay {
+  const flat = opts.flatRate ?? SPP_FLAT_RATE;
+  const lel = opts.lelWeekly ?? UK_LEL_WEEKLY;
+  const money = (n: number) => `£${n.toFixed(2)}`;
+  const e = calculateSmpEntitlement(averageWeeklyEarnings, { ...opts, flatRate: flat });
+  if (!e.eligible) {
+    const basis =
+      e.reason === "Missing average weekly earnings"
+        ? "No pay recorded in the 8 weeks before, so paternity pay can't be worked out. Add their earnings."
+        : e.reason === "Below Lower Earnings Limit"
+          ? `Not eligible: average weekly earnings of ${money(Number(averageWeeklyEarnings))} are below the ${money(lel)} Lower Earnings Limit.`
+          : "Not eligible: less than 26 weeks' continuous service by the qualifying week.";
+    return { eligible: false, weeklyRate: null, basis };
+  }
+  const weeklyRate = e.phase2Weekly;
+  return {
+    eligible: true,
+    weeklyRate,
+    basis:
+      weeklyRate < flat
+        ? `90% of ${money(Number(averageWeeklyEarnings))} average weekly earnings = ${money(weeklyRate)} a week`
+        : `Flat rate of ${money(flat)} a week (90% of earnings is more)`,
+  };
+}
+
+/**
+ * Weekly statutory pay (SPP, SMP) is for 7 calendar days a week: full weeks
+ * pay the weekly rate, part weeks a seventh of it per day, rounded up to the
+ * penny.
+ */
+export function weeklyStatutoryPayFor(weeklyRate: number, calendarDays: number): number {
+  if (weeklyRate <= 0 || calendarDays <= 0) return 0;
+  const fullWeeks = Math.floor(calendarDays / 7);
+  const rest = calendarDays - fullWeeks * 7;
+  const part = Math.ceil(Number(((rest * weeklyRate) / 7 * 100).toFixed(6))) / 100;
+  return Number((fullWeeks * weeklyRate + part).toFixed(2));
+}
+
 export type SMPPhaseDates = {
   startDate: Date;
   phase1EndDate: Date;
@@ -253,20 +306,11 @@ export function isMaternityLeaveType(
 }
 
 /**
- * Pull the 8-week relevant period of earnings ending at `beforeDate`
- * (exclusive) and compute AWE for statutory payments (SMP/SAP/ShPP/SPP/SNCP and
- * SSP). Returns `null` when no earnings history exists — the caller should
- * surface a warning so payroll knows to request the figure manually.
- *
- * IMPORTANT: statutory AWE is NOT the holiday-pay average. Per HMRC, all weeks
- * in the relevant period are included and **blank weeks count as zero pay** —
- * the divisor stays at 8 (the number of weeks in the period). We therefore do
- * NOT drop `isZeroPayWeek` rows here (that exclusion is the Working Time
- * Regulations holiday-pay rule, handled separately in `holidayPay.ts`).
- *
- * Known limitation: for employees with fewer than 8 weeks of history (new
- * starters) HMRC uses a smaller divisor; `calculateAWE` still divides by 8, so
- * AWE is understated in that edge case until an employment-start date is tracked.
+ * Average weekly earnings for SSP / SMP: the earnings recorded in the 8 weeks
+ * before `beforeDate` (the relevant period), averaged over the weeks recorded.
+ * Zero-pay weeks recorded as rows count (they pull the average down, as HMRC
+ * expects); unrecorded weeks are treated as missing data, not £0. Returns null
+ * when nothing is recorded in the period.
  */
 export async function getAweForUser(
   userId: string,
@@ -275,33 +319,37 @@ export async function getAweForUser(
   // Deferred require to keep smpCalculator testable without pulling the
   // Prisma client into node:test suites that stub the DB.
   const { prisma } = await import("@/lib/prisma");
-  const [rows, user] = await Promise.all([
-    prisma.weeklyEarning.findMany({
-      where: { userId, weekStartDate: { lt: beforeDate } },
-      orderBy: { weekStartDate: "desc" },
-      take: 8,
-    }),
-    prisma.user.findUnique({
-      where: { id: userId },
-      select: { serviceStartDate: true },
-    }),
-  ]);
-  if (rows.length === 0) return null;
+  // The relevant period is the 8 weeks before the date — not "the last 8
+  // records", which could be months old.
+  const windowStart = new Date(beforeDate.getTime() - 8 * 7 * 24 * 60 * 60 * 1000);
+  const rows = await prisma.weeklyEarning.findMany({
+    where: { userId, weekStartDate: { gte: windowStart, lt: beforeDate } },
+    orderBy: { weekStartDate: "asc" },
+  });
+  return aweFromEarningRows(rows);
+}
 
-  // New starters with <8 weeks of employment use a smaller divisor (the number
-  // of weeks employed) rather than the standard 8 — otherwise the average is
-  // understated (HMRC SPM170600). Established employees keep ÷8.
-  let periodWeeks = 8;
-  if (user?.serviceStartDate) {
-    const weeksEmployed = Math.floor(
-      (beforeDate.getTime() - user.serviceStartDate.getTime()) /
-        (7 * 24 * 60 * 60 * 1000)
-    );
-    if (weeksEmployed < 8) periodWeeks = Math.max(1, weeksEmployed);
-  }
-
-  const earnings = rows.map((r) => Number(r.grossEarnings)).reverse();
-  return calculateAWE(earnings, periodWeeks);
+/**
+ * Average weekly earnings from the weeks recorded in the relevant period.
+ *
+ * Weeks deliberately marked as no-pay weeks (isZeroPayWeek) count as £0.
+ * Weeks with no record are missing data, not £0 — dividing them in understated
+ * AWE (two weeks of £360 and £420 came out as £97.50 instead of £390). A week
+ * with hours worked but £0 pay and not marked as a no-pay week is the same:
+ * the pay hasn't been entered, so counting it as £0 would make SSP £0.
+ * Also covers new starters with fewer than 8 weeks of employment.
+ */
+export function aweFromEarningRows(
+  rows: ReadonlyArray<{ grossEarnings: unknown; hoursWorked: unknown; isZeroPayWeek: boolean }>
+): number | null {
+  const counted = rows.filter(
+    (r) => r.isZeroPayWeek || Number(r.grossEarnings) > 0 || Number(r.hoursWorked) <= 0
+  );
+  if (counted.length === 0) return null;
+  return calculateAWE(
+    counted.map((r) => (r.isZeroPayWeek ? 0 : Number(r.grossEarnings))),
+    counted.length
+  );
 }
 
 /**

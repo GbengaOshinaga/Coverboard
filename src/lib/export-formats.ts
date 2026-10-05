@@ -33,11 +33,24 @@ export type ExportColumn<T> = {
   key: keyof T | ((row: T) => unknown);
   /** Column header in CSV/Excel. */
   header: string;
+  /**
+   * "money": two decimal places (a number cell formatted 0.00 in Excel).
+   * "rate": four decimal places, for HMRC's SSP daily rates (0.0000).
+   */
+  format?: "money" | "rate";
 };
 
 function cellValueOf<T>(row: T, column: ExportColumn<T>): unknown {
   if (typeof column.key === "function") return column.key(row);
   return (row as Record<string, unknown>)[column.key as string];
+}
+
+function csvValueOf<T>(row: T, column: ExportColumn<T>): unknown {
+  const value = cellValueOf(row, column);
+  if (typeof value !== "number") return value;
+  if (column.format === "money") return value.toFixed(2);
+  if (column.format === "rate") return value.toFixed(4);
+  return value;
 }
 
 /** RFC 4180 CSV cell escaping. Wraps in quotes only when necessary. */
@@ -66,7 +79,7 @@ export function toCsv<T>(
   const header = columns.map((c) => escapeCsvCell(c.header)).join(",");
   const body = rows
     .map((row) =>
-      columns.map((c) => escapeCsvCell(cellValueOf(row, c))).join(",")
+      columns.map((c) => escapeCsvCell(csvValueOf(row, c))).join(",")
     )
     .join("\r\n");
   // \r\n line endings per RFC 4180 — Excel cares.
@@ -104,6 +117,8 @@ export async function toExcel(
       header: c.header,
       key: typeof c.key === "function" ? c.header : (c.key as string),
       width: Math.min(Math.max(c.header.length + 4, 12), 40),
+      ...(c.format === "money" ? { style: { numFmt: "0.00" } } : {}),
+      ...(c.format === "rate" ? { style: { numFmt: "0.0000" } } : {}),
     }));
     for (const row of sheet.rows) {
       const cells = sheet.columns.map((c) => cellValueOf(row, c));

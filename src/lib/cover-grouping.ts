@@ -17,6 +17,8 @@ export type PersonOption = {
   shiftId: string | null;
   shiftName: string | null;
   weekHours: number;
+  /** Set when covering would take them past 48 hours that week. */
+  hoursIfCovered?: number;
   offer: CoverOfferSummary | null;
 };
 
@@ -68,6 +70,7 @@ export function groupCoverByPerson(conflicts: ReadonlyArray<ShortShift>): Groupe
         shiftId: c.shiftId ?? null,
         shiftName: c.shiftName ?? null,
         weekHours: cand.weekHours,
+        ...(cand.hoursIfCovered !== undefined ? { hoursIfCovered: cand.hoursIfCovered } : {}),
         offer,
       });
       people.set(cand.id, p);

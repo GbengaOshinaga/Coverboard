@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getServerSession } from "next-auth";
 import { Plus, CalendarHeart, CalendarDays } from "lucide-react";
-import { authOptions } from "@/lib/auth";
+import { requireActiveSession } from "@/lib/require-active-session";
 import { prisma } from "@/lib/prisma";
 import { getUserLeaveBalances } from "@/lib/leave-balances";
 import { LeaveBalances } from "@/components/dashboard/leave-balances";
@@ -14,9 +13,9 @@ import { formatDateRange } from "@/lib/utils";
 export const metadata: Metadata = { title: "My time off" };
 
 export default async function MyTimeOffPage() {
-  const session = await getServerSession(authOptions);
-  const userId = (session!.user as Record<string, unknown>).id as string;
-  const orgId = (session!.user as Record<string, unknown>)
+  const { session } = await requireActiveSession();
+  const userId = (session.user as Record<string, unknown>).id as string;
+  const orgId = (session.user as Record<string, unknown>)
     .organizationId as string;
 
   const startOfToday = new Date();

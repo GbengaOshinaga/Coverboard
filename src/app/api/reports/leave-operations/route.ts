@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { hasFeatureForEnum } from "@/lib/planFeatures";
 import {
+  fitNoteDueLabel,
   selectOverdueFitNotes,
   type SicknessLeaveRow,
 } from "@/lib/fit-note-alerts";
@@ -279,7 +280,7 @@ export async function GET(request: Request) {
     overdueFitNotes: overdueFitNotes.slice(0, 5).map((f) => ({
       leaveId: f.leaveId,
       userName: f.userName,
-      daysElapsed: f.daysElapsed,
+      label: fitNoteDueLabel(f),
     })),
     regionsUnderCoverThisWeek,
     topBradford: bradfordTop.map((u) => ({

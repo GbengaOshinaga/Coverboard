@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildSarExport, sarExportFilename, type SarPrisma } from "./sar-export";
+import { buildSarExport, redactAuditEntryForSubject, sarExportFilename, type SarPrisma } from "./sar-export";
 
 const ORG = "org_1";
 const USER = "user_1";
@@ -17,6 +17,7 @@ type FakeData = {
   carryOverBalances?: unknown[];
   weeklyEarnings?: unknown[];
   regionHistory?: unknown[];
+  children?: unknown[];
   regionChangesMade?: unknown[];
   auditEntries?: unknown[];
 };
@@ -116,6 +117,11 @@ function makePrisma(data: FakeData): {
       async findMany(args) {
         captured.current = args.where;
         return (data.auditEntries ?? []) as never;
+      },
+    },
+    child: {
+      async findMany() {
+        return (data.children ?? []) as never;
       },
     },
   };
@@ -293,4 +299,71 @@ test("sarExportFilename sanitises the email and stamps the date", () => {
     new Date("2026-05-11T08:00:00Z")
   );
   assert.match(name, /^sar-export-alice_gdpr_example.com-2026-05-11\.json$/);
+});
+
+test("audit entries about the employee drop the other person's identity, IP and browser", () => {
+  const out = redactAuditEntryForSubject(
+    {
+      id: "a1",
+      actorId: "admin_1",
+      actorEmail: "admin@example.com",
+      actorRole: "ADMIN",
+      action: "team_member.updated",
+      resource: "team_member",
+      resourceId: USER,
+      metadata: { field: "department" },
+      ipAddress: "203.0.113.7",
+      userAgent: "Mozilla/5.0",
+    },
+    USER
+  );
+  assert.equal(out.actorRole, "ADMIN");
+  assert.equal(out.action, "team_member.updated");
+  assert.deepEqual(out.metadata, { field: "department" });
+  for (const k of ["actorId", "actorEmail", "ipAddress", "userAgent"]) {
+    assert.equal(k in out, false, `${k} should be removed`);
+  }
+});
+
+test("audit entries by the employee keep their own IP but not details about colleagues", () => {
+  const out = redactAuditEntryForSubject(
+    {
+      id: "a2",
+      actorId: USER,
+      action: "leave_request.approved",
+      resource: "leave_request",
+      resourceId: "lr_9",
+      metadata: { employeeName: "Chloe" },
+      ipAddress: "198.51.100.4",
+    },
+    USER
+  );
+  assert.equal(out.ipAddress, "198.51.100.4");
+  assert.equal("metadata" in out, false);
+  assert.equal("resourceId" in out, false);
+});
+
+test("leave reviewed by the employee keeps only their decision, not the colleague's leave", async () => {
+  const { prisma } = makePrisma({
+    user: fakeUser(),
+    reviewedLeaves: [
+      { id: "lr_3", userId: "colleague", status: "APPROVED", reviewedAt: NOW, note: "Migraine", sspDaysPaid: 3 },
+    ],
+    coverOverrides: [{ id: "lr_4", userId: "colleague", coverOverrideAt: NOW, note: "Flu" }],
+    regionChangesMade: [{ id: "rh_2", userId: "colleague", regionId: "r1", changedAt: NOW, notes: "moved" }],
+  });
+  const out = await buildSarExport({ prisma, organizationId: ORG, userId: USER, now: NOW });
+  assert.deepEqual(out!.leavesReviewedByThisUser, [{ id: "lr_3", status: "APPROVED", reviewedAt: NOW }]);
+  assert.deepEqual(out!.leavesCoverOverriddenByThisUser, [{ id: "lr_4", coverOverrideAt: NOW }]);
+  assert.deepEqual(out!.regionChangesMadeByThisUser, [{ id: "rh_2", regionId: "r1", changedAt: NOW }]);
+});
+
+test("children recorded for unpaid parental leave are included", async () => {
+  const { prisma } = makePrisma({
+    user: fakeUser(),
+    children: [{ id: "c1", label: "Ada", dateOfBirth: new Date("2020-03-01"), weeksTakenElsewhere: 0 }],
+  });
+  const out = await buildSarExport({ prisma, organizationId: ORG, userId: USER, now: NOW });
+  assert.equal(out!.children.length, 1);
+  assert.equal(out!.children[0].label, "Ada");
 });

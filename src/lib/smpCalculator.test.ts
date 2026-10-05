@@ -2,6 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   SMP_FLAT_RATE,
+  aweFromEarningRows,
+  calculatePaternityPay,
+  weeklyStatutoryPayFor,
   calculateAWE,
   calculateSMPPhaseDates,
   calculateSMPPhaseRates,
@@ -244,4 +247,53 @@ test("SMP_FLAT_RATE default is 194.32 (2026/27)", () => {
   if (!process.env.SMP_FLAT_RATE && !process.env.SMP_WEEKLY_RATE) {
     assert.equal(SMP_FLAT_RATE, 194.32);
   }
+});
+
+test("AWE: a week with hours but no pay entered is missing data, not £0", () => {
+  // Frank: 40 hours logged in the week of 28 Sept, but no pay entered.
+  assert.equal(aweFromEarningRows([{ grossEarnings: 0, hoursWorked: 40, isZeroPayWeek: false }]), null);
+  // Alongside a paid week, only the paid week counts.
+  assert.equal(
+    aweFromEarningRows([
+      { grossEarnings: 0, hoursWorked: 40, isZeroPayWeek: false },
+      { grossEarnings: 480, hoursWorked: 40, isZeroPayWeek: false },
+    ]),
+    480
+  );
+});
+
+test("AWE: weeks marked as no-pay weeks still count as £0", () => {
+  assert.equal(
+    aweFromEarningRows([
+      { grossEarnings: 0, hoursWorked: 0, isZeroPayWeek: true },
+      { grossEarnings: 480, hoursWorked: 40, isZeroPayWeek: false },
+    ]),
+    240
+  );
+});
+
+test("SPP: the lower of £194.32 and 90% of average weekly earnings", () => {
+  // Well paid: flat rate.
+  const high = calculatePaternityPay(600, { flatRate: 194.32, lelWeekly: 129 });
+  assert.equal(high.weeklyRate, 194.32);
+  assert.match(high.basis, /Flat rate of £194\.32/);
+  // £200 a week: 90% = £180.
+  const low = calculatePaternityPay(200, { flatRate: 194.32, lelWeekly: 129 });
+  assert.equal(low.weeklyRate, 180);
+  assert.match(low.basis, /90% of £200\.00 .* = £180\.00 a week/);
+});
+
+test("SPP: says why when there's nothing to pay", () => {
+  assert.match(calculatePaternityPay(100, { lelWeekly: 129 }).basis, /below the £129\.00 Lower Earnings Limit/);
+  const none = calculatePaternityPay(null);
+  assert.equal(none.weeklyRate, null);
+  assert.match(none.basis, /No pay recorded/);
+});
+
+test("weekly statutory pay: 2 weeks' paternity = 2 × the weekly rate; part weeks by the day", () => {
+  assert.equal(weeklyStatutoryPayFor(194.32, 14), 388.64);
+  assert.equal(weeklyStatutoryPayFor(194.32, 7), 194.32);
+  // 3 days = 3/7 of £194.32 = £83.2799… → rounded up to £83.28.
+  assert.equal(weeklyStatutoryPayFor(194.32, 3), 83.28);
+  assert.equal(weeklyStatutoryPayFor(194.32, 0), 0);
 });

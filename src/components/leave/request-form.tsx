@@ -12,6 +12,7 @@ import { BalanceIndicator } from "./balance-indicator";
 import { CoverageWarning } from "./coverage-warning";
 import { RegionalCoverWarning } from "./regional-cover-warning";
 import { countWeekdays } from "@/lib/utils";
+import { AddChildForm, childName, usageLine, useChildren } from "@/components/team/children";
 
 type LeaveType = {
   id: string;
@@ -110,8 +111,15 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
     [balances, leaveTypeId]
   );
 
-  const isSspLeave = selectedLeaveType?.name.includes("SSP") ?? false;
+  const isSickness = /SSP|Sick/i.test(selectedLeaveType?.name ?? "");
   const isMaternityLeave = /maternity/i.test(selectedLeaveType?.name ?? "");
+  // Unpaid parental leave is per child, so the booking names the child.
+  const isUnpaidParental = /unpaid parental/i.test(selectedLeaveType?.name ?? "");
+  const { children, reload: reloadChildren } = useChildren(
+    isUnpaidParental ? currentUserId : undefined
+  );
+  const [childId, setChildId] = useState("");
+  const [addingChild, setAddingChild] = useState(false);
 
   const requestedDays = useMemo(() => {
     if (!startDate || !endDate) return 0;
@@ -171,16 +179,11 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
     e.preventDefault();
     setError("");
 
-    const needsEvidence = selectedLeaveType?.requiresEvidence ?? false;
+    // Sickness is self-certified for the first 7 days: no evidence is needed
+    // to report it. Fit notes are recorded later by a manager.
+    const needsEvidence = (selectedLeaveType?.requiresEvidence ?? false) && !isSickness;
 
-    if (needsEvidence && isSspLeave && !sicknessNote.trim()) {
-      setError("Please add sickness note (fit note) details for this absence.");
-      return;
-    }
-
-    const hasEvidence =
-      (isSspLeave && sicknessNote.trim().length > 0) ||
-      (!isSspLeave && evidenceProvided);
+    const hasEvidence = !isSickness && evidenceProvided;
 
     if (needsEvidence && !hasEvidence) {
       setError(
@@ -207,6 +210,7 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
             isMaternityLeave && expectedDueDate
               ? new Date(expectedDueDate).toISOString()
               : undefined,
+          childId: isUnpaidParental ? childId || undefined : undefined,
         }),
       });
 
@@ -286,6 +290,54 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
         required
       />
 
+      {/* Unpaid parental leave: which child (limits are per child) */}
+      {isUnpaidParental && currentUserId && (
+        <div className="space-y-2">
+          {children && children.length > 0 && (
+            <Select
+              id="childId"
+              label="Which child is this leave for?"
+              options={[
+                { value: "", label: "Choose a child" },
+                ...children.map((c) => ({ value: c.id, label: childName(c) })),
+              ]}
+              value={childId}
+              onChange={(e) => setChildId(e.target.value)}
+            />
+          )}
+          {children?.find((c) => c.id === childId) && (
+            <p className="text-xs text-gray-500">
+              {usageLine(children.find((c) => c.id === childId)!)}
+            </p>
+          )}
+          {children && children.length === 0 && !addingChild && (
+            <p className="text-sm text-gray-600">
+              Unpaid parental leave is per child (up to 18 weeks each, at most 4 a year). Add
+              the child it&apos;s for.
+            </p>
+          )}
+          {addingChild ? (
+            <AddChildForm
+              memberId={currentUserId}
+              onAdded={async (id) => {
+                setAddingChild(false);
+                await reloadChildren();
+                setChildId(id);
+              }}
+              onCancel={() => setAddingChild(false)}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAddingChild(true)}
+              className="text-sm font-medium text-brand-700 hover:underline"
+            >
+              + Add a child
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Expected due date — maternity, for SMP eligibility (qualifying week) */}
       {isMaternityLeave && (
         <div className="space-y-1">
@@ -362,51 +414,46 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
         />
       </div>
 
-      {selectedLeaveType?.requiresEvidence && (
+      {isSickness && (
+        <div className="space-y-1">
+          <label htmlFor="sicknessNote" className="block text-sm font-medium text-gray-700">
+            Note for your manager (optional)
+          </label>
+          <textarea
+            id="sicknessNote"
+            rows={2}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-base sm:text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+            placeholder="e.g. Expect to be back Thursday"
+            value={sicknessNote}
+            onChange={(e) => setSicknessNote(e.target.value)}
+          />
+          <p className="text-xs text-gray-500">
+            You don&apos;t need a fit note for the first 7 days, or to give a
+            diagnosis. If you&apos;re off longer, your manager will ask for one.
+            Only you and your admin can see this note.
+          </p>
+        </div>
+      )}
+
+      {selectedLeaveType?.requiresEvidence && !isSickness && (
         <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
           <p className="text-sm font-medium text-amber-900">
             Evidence required
           </p>
           <p className="text-xs text-amber-800">
-            {isSspLeave
-              ? "Statutory sick pay requires a fit note (or other medical evidence) for this absence."
-              : "This leave type requires supporting documentation (e.g. medical or statutory evidence)."}
+            This leave type requires supporting documentation (e.g. medical or statutory evidence).
           </p>
-          {isSspLeave ? (
-            <div className="space-y-1">
-              <label
-                htmlFor="sicknessNote"
-                className="block text-sm font-medium text-gray-700"
-              >
-                Sickness note (fit note) details
-              </label>
-              <textarea
-                id="sicknessNote"
-                rows={3}
-                required
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-base sm:text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-                placeholder="e.g. fit note reference and the dates it covers"
-                value={sicknessNote}
-                onChange={(e) => setSicknessNote(e.target.value)}
-              />
-              <p className="text-xs text-gray-500">
-                Required for SSP. Visible only to you and your admin — you
-                don&apos;t need to include a diagnosis.
-              </p>
-            </div>
-          ) : (
-            <label className="flex items-start gap-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
-                checked={evidenceProvided}
-                onChange={(e) => setEvidenceProvided(e.target.checked)}
-              />
-              <span>
-                I confirm supporting evidence is available for this leave
-              </span>
-            </label>
-          )}
+          <label className="flex items-start gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+              checked={evidenceProvided}
+              onChange={(e) => setEvidenceProvided(e.target.checked)}
+            />
+            <span>
+              I confirm supporting evidence is available for this leave
+            </span>
+          </label>
         </div>
       )}
 

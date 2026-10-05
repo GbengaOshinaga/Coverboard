@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { getWorkingWeek } from "@/lib/working-week-server";
 
 /**
  * UK holiday pay rate calculator.
@@ -33,13 +34,12 @@ function isUkWorkCountry(workCountry: string | null | undefined): boolean {
 }
 
 /**
- * Working days per week used to convert a weekly average into a daily rate.
- *
- * Hard-coded to 5 per the task specification. Callers with part-time workers
- * should either pass a pre-scaled weekly figure or compute the daily rate
- * themselves using {@link calculateWeeklyHolidayPayRate}.
+ * Default working days per week when the caller doesn't know better. A day's
+ * holiday pay is a week's pay divided by the days the person actually works:
+ * someone on 3 days a week must be paid a third of their week per day, not a
+ * fifth (dividing by 5 underpaid part-timers by 40%).
  */
-const WORKING_DAYS_PER_WEEK = 5;
+const DEFAULT_WORKING_DAYS_PER_WEEK = 5;
 
 /**
  * Statutory holiday-pay reference period: up to 52 *paid* weeks, looking back a
@@ -70,8 +70,11 @@ function referencePaidWeeks(weeklyEarnings: WeeklyEarning[]): WeeklyEarning[] {
  *   fall back to basic salary and surface a warning).
  */
 export function calculateHolidayPayRate(
-  weeklyEarnings: WeeklyEarning[]
+  weeklyEarnings: WeeklyEarning[],
+  /** Days they work in a week (from their working pattern). */
+  daysPerWeek: number = DEFAULT_WORKING_DAYS_PER_WEEK
 ): number {
+  const days = daysPerWeek >= 1 && daysPerWeek <= 7 ? daysPerWeek : DEFAULT_WORKING_DAYS_PER_WEEK;
   const paidWeeks = referencePaidWeeks(weeklyEarnings);
 
   if (paidWeeks.length === 0) return 0;
@@ -82,7 +85,7 @@ export function calculateHolidayPayRate(
   );
 
   return Number(
-    (totalEarnings / paidWeeks.length / WORKING_DAYS_PER_WEEK).toFixed(2)
+    (totalEarnings / paidWeeks.length / days).toFixed(2)
   );
 }
 
@@ -182,7 +185,9 @@ export async function getDailyHolidayPayRateForUser(
   userId: string
 ): Promise<number | null> {
   const weeks = await loadUserWeeks(userId);
-  return weeks === null ? null : calculateHolidayPayRate(weeks);
+  if (weeks === null) return null;
+  const { daysPerWeek } = await getWorkingWeek(userId);
+  return calculateHolidayPayRate(weeks, daysPerWeek);
 }
 
 /**

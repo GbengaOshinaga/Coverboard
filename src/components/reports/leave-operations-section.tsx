@@ -49,7 +49,7 @@ type PendingItem = {
 type FitNoteItem = {
   leaveId: string;
   userName: string;
-  daysElapsed: number;
+  label: string;
 };
 
 type RegionUnderCover = {
@@ -380,7 +380,7 @@ export function LeaveOperationsSection() {
                       <span className="font-medium text-gray-900">
                         {f.userName}
                       </span>
-                      <Badge variant="error">Day {f.daysElapsed}</Badge>
+                      <span className="text-xs text-red-700">{f.label}</span>
                     </li>
                   ))}
                 </ul>

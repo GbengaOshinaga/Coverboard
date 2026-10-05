@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import {
   getCountryPolicies,
   getHolidaysForYear,
-  BASE_LEAVE_TYPES,
+  baseLeaveTypesFor,
 } from "@/lib/country-policies";
 import { enableUkStatutoryLeaveTypes } from "@/lib/uk-statutory";
 import { AnalyticsEvents } from "@/lib/analytics/events";
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
       data: { countryCode: countries[0], workCountry: countries[0] },
     });
 
-    const defaultLeaveTypes = BASE_LEAVE_TYPES;
+    const defaultLeaveTypes = baseLeaveTypesFor(countries);
 
     const createdLeaveTypes = await Promise.all(
       defaultLeaveTypes.map((lt) =>

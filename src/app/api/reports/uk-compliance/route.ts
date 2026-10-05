@@ -1,15 +1,13 @@
 import { NextResponse } from "next/server";
+import { countWorkingDays, resolveWorkingWeek, weekdaysFromPatterns } from "@/lib/working-week";
 import { bradfordForSickness } from "@/lib/sickness-spells";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
-  SSP_MAX_WEEKS,
   UK_LEL_WEEKLY,
-  calculateEstimatedSspCost,
   calculateSspPayableDays,
-  calculateSspDailyRate,
-  calculateSspWeeklyRate,
+  sspPay,
 } from "@/lib/uk-compliance";
 import {
   getCurrentSMPPhase,
@@ -20,9 +18,19 @@ import {
   hasUKEmployees,
   ukComplianceUnavailablePayload,
 } from "@/lib/uk-workforce";
-import { countWeekdays } from "@/lib/utils";
 import { isHoursAveragedEmploymentType } from "@/lib/employment-types";
 import { recordReadAudit, requestAuditContext } from "@/lib/audit";
+import { keepingInTouchRule } from "@/lib/keeping-in-touch";
+import { sspRateFor, sspDaysRemainingAfter } from "@/lib/leave-requests/ssp-spell";
+import {
+  UK_COMPLIANCE_TABLES,
+  isUkComplianceTableId,
+  type BradfordRow,
+  type HolidayUsageRow,
+  type ParentalRow,
+  type SspLiabilityRow,
+  type UkComplianceReport,
+} from "@/lib/uk-compliance-columns";
 import type { AnyPlan } from "@/lib/plans";
 import {
   parseExportFormat,
@@ -30,7 +38,6 @@ import {
   toExcel,
   EXPORT_CONTENT_TYPE,
   exportFilename,
-  type ExportColumn,
 } from "@/lib/export-formats";
 
 export async function GET(request: Request) {
@@ -71,8 +78,9 @@ export async function GET(request: Request) {
       name: true,
       department: true,
       employmentType: true,
-      qualifyingDaysPerWeek: true,
+      daysWorkedPerWeek: true,
       averageWeeklyEarnings: true,
+      workPatterns: { select: { weekday: true, effectiveFrom: true, effectiveTo: true } },
       leaveRequests: {
         where: {
           status: "APPROVED",
@@ -84,7 +92,7 @@ export async function GET(request: Request) {
   });
 
   const holidayUsage = await Promise.all(
-    users.map(async (user) => {
+    users.map(async (user): Promise<HolidayUsageRow> => {
       const balances = await prisma.leaveRequest.findMany({
         where: {
           userId: user.id,
@@ -98,11 +106,12 @@ export async function GET(request: Request) {
       // Irregular/zero-hours workers take holiday in hours (every user here is
       // already workCountry=GB), so report their usage in hours.
       const isHours = isHoursAveragedEmploymentType(user.employmentType);
+      const weekdays = weekdaysFromPatterns(user.workPatterns, new Date());
       const taken = isHours
         ? Number(
             balances.reduce((sum, r) => sum + (r.hoursBooked ?? 0), 0).toFixed(1)
           )
-        : balances.reduce((sum, r) => sum + countWeekdays(r.startDate, r.endDate), 0);
+        : balances.reduce((sum, r) => sum + countWorkingDays(r.startDate, r.endDate, weekdays), 0);
       return {
         userId: user.id,
         name: user.name,
@@ -114,7 +123,7 @@ export async function GET(request: Request) {
     })
   );
 
-  const bradfordReport = users.map((user) => {
+  const bradfordReport = users.map((user): BradfordRow => {
     const sickness = user.leaveRequests.filter((r) => r.leaveType.name.includes("Sick") || r.leaveType.name.includes("SSP"));
     const { spells, days, score } = bradfordForSickness(sickness);
     return {
@@ -127,41 +136,56 @@ export async function GET(request: Request) {
     };
   });
 
-  const sspCurrent = users.flatMap((user) => {
-    const qDays = user.qualifyingDaysPerWeek ?? 5;
-    // Post-reform SSP rate is capped at 80% of AWE; fall back to the flat rate
-    // when earnings are unknown.
-    const weeklyRate = calculateSspWeeklyRate(
-      user.averageWeeklyEarnings === null
-        ? null
-        : Number(user.averageWeeklyEarnings)
-    );
-    const dailyRate = calculateSspDailyRate(qDays, weeklyRate);
-    const maxDays = SSP_MAX_WEEKS * qDays;
+  // Current and upcoming SSP absences.
+  const sspCurrent = await Promise.all(users.flatMap((user) => {
     return user.leaveRequests
       .filter((r) => r.leaveType.name.includes("SSP") && r.endDate >= new Date())
-      .map((r) => {
-        const daysElapsed = countWeekdays(r.startDate, new Date());
-        const payableToDate = calculateSspPayableDays(r.startDate, new Date());
+      .map(async (r): Promise<SspLiabilityRow> => {
+        // SSP is payable on the days they normally work, as they were when
+        // this absence started — the same week the SSP was worked out on.
+        const workingWeek = resolveWorkingWeek(
+          weekdaysFromPatterns(user.workPatterns, r.startDate),
+          user.daysWorkedPerWeek
+        );
+        const qDays = workingWeek.daysPerWeek;
+        // Stored at booking; worked out now for absences booked before rates
+        // were stored. Same function as payroll, so the two always agree.
+        const rate = await sspRateFor({ ...r, userId: user.id });
+        const dailyRate = rate?.dailyRate ?? 0;
+        // The 28-week limit covers the whole linked period, not just this absence.
+        const { maxDays, remainingDays } = await sspDaysRemainingAfter({
+          userId: user.id,
+          startDate: r.startDate,
+          sspDaysPaid: r.sspDaysPaid ?? 0,
+          daysPerWeek: qDays,
+        });
+        const now = new Date();
+        const toDate = r.endDate < now ? r.endDate : now;
+        const started = r.startDate <= now;
+        const daysElapsed = started ? countWorkingDays(r.startDate, toDate, workingWeek.weekdays) : 0;
+        const payableToDate = started
+          ? calculateSspPayableDays(r.startDate, toDate, workingWeek.weekdays)
+          : 0;
+        // The stored SSP days already reflect linked spells and the 28-week
+        // cap, so the whole-absence figure uses them.
+        const sspDays = r.sspDaysPaid ?? 0;
         return {
           userId: user.id,
           name: user.name,
-          startDate: r.startDate,
-          endDate: r.endDate,
+          startDate: r.startDate.toISOString(),
+          endDate: r.endDate.toISOString(),
           qualifyingDaysPerWeek: qDays,
           dailyRate,
+          averageWeeklyEarnings: rate?.averageWeeklyEarnings ?? null,
+          rateBasis: rate?.basis ?? "",
           daysElapsed,
           payableDaysToDate: payableToDate,
-          estimatedCostToDate: calculateEstimatedSspCost(
-            r.startDate,
-            new Date(),
-            weeklyRate,
-            qDays
-          ),
-          sspDaysPaid: r.sspDaysPaid ?? 0,
+          estimatedCostToDate: sspPay(Math.min(payableToDate, sspDays), dailyRate, qDays),
+          estimatedTotalCost: sspPay(sspDays, dailyRate, qDays),
+          sspDaysPaid: sspDays,
           sspLimitReached: r.sspLimitReached ?? false,
           maxDays,
-          remainingDays: Math.max(0, maxDays - (r.sspDaysPaid ?? 0)),
+          remainingDays,
           belowLel:
             user.averageWeeklyEarnings === null ||
             user.averageWeeklyEarnings === undefined
@@ -169,7 +193,7 @@ export async function GET(request: Request) {
               : Number(user.averageWeeklyEarnings) < UK_LEL_WEEKLY,
         };
       });
-  });
+  }));
 
   const today = new Date();
   const parental = users.flatMap((user) =>
@@ -183,8 +207,9 @@ export async function GET(request: Request) {
             "Adoption Leave",
           ].includes(r.leaveType.name) && r.endDate >= today
       )
-      .map((r) => {
-        const cap = r.leaveType.name === "Shared Parental Leave (SPL)" ? 20 : 10;
+      .map((r): ParentalRow => {
+        const kit = keepingInTouchRule(r.leaveType.name);
+        const used = kit ? r[kit.field] : 0;
         const isMaternity = isMaternityLeaveType(r.leaveType.name);
         const smp = isMaternity
           ? getCurrentSMPPhase({
@@ -207,18 +232,24 @@ export async function GET(request: Request) {
           userId: user.id,
           name: user.name,
           leaveType: r.leaveType.name,
-          startDate: r.startDate,
-          expectedReturnDate: r.endDate,
-          kitDaysUsed: r.kitDaysUsed,
-          kitDaysCap: cap,
-          kitDaysRemaining: Math.max(0, cap - r.kitDaysUsed),
+          startDate: r.startDate.toISOString(),
+          expectedReturnDate: r.endDate.toISOString(),
+          leaveDays: countWorkingDays(
+            r.startDate,
+            r.endDate,
+            weekdaysFromPatterns(user.workPatterns, r.startDate) ??
+              resolveWorkingWeek(null, user.daysWorkedPerWeek).weekdays
+          ),
+          keepingInTouch: kit
+            ? { kind: kit.kind, used, allowed: kit.allowed, remaining: Math.max(0, kit.allowed - used) }
+            : null,
           smp: smp
             ? {
                 phase: smp.phase,
                 label: smp.label,
                 weeklyRate: smp.weeklyRate,
-                phase1EndDate: smp.phase1EndDate,
-                phase2EndDate: smp.phase2EndDate,
+                phase1EndDate: smp.phase1EndDate.toISOString(),
+                phase2EndDate: smp.phase2EndDate.toISOString(),
                 averageWeeklyEarnings:
                   r.smpAverageWeeklyEarnings === null
                     ? null
@@ -275,141 +306,48 @@ export async function GET(request: Request) {
     context: requestAuditContext(request),
   });
 
+  const report: UkComplianceReport = {
+    workforce,
+    holidayUsage,
+    absenceTrigger: { threshold, rows: bradfordReport },
+    sspLiability: sspCurrent,
+    parentalTracker: parental,
+    rightToWork: rightToWorkData,
+  };
+
   const format = parseExportFormat(searchParams.get("format"));
   if (format === "json") {
-    return NextResponse.json({
-      workforce,
-      holidayUsage,
-      absenceTrigger: {
-        threshold,
-        rows: bradfordReport,
-      },
-      sspLiability: sspCurrent,
-      parentalTracker: parental,
-      rightToWork: rightToWorkData,
-    });
+    return NextResponse.json(report);
   }
 
-  // Tabular exports: the compliance report has 5 distinct tables. CSV
-  // serialises the Bradford table only (the most-requested by HR for
-  // tribunal evidence); Excel writes every table to its own sheet.
-  const bradfordColumns: ExportColumn<(typeof bradfordReport)[number]>[] = [
-    { key: "userId", header: "Employee ID" },
-    { key: "name", header: "Name" },
-    { key: "spells", header: "Absence spells" },
-    { key: "days", header: "Absence days" },
-    { key: "score", header: "Bradford score" },
-    { key: "flagged", header: "Flagged" },
-  ];
-
-  const filename = exportFilename(
-    "coverboard-uk-compliance",
-    format,
-    new Date()
-  );
-
+  // Tables and their columns live in uk-compliance-columns so the API, the
+  // Reports page and the compliance pack can't drift apart.
   if (format === "csv") {
-    const body = toCsv(bradfordReport, bradfordColumns);
+    // One table per CSV (?table=ssp etc.); Bradford when none is named.
+    const tableParam = searchParams.get("table");
+    const id = isUkComplianceTableId(tableParam) ? tableParam : "bradford";
+    const t = UK_COMPLIANCE_TABLES[id];
+    const sheet = t.sheet(report);
+    const body = toCsv(sheet.rows, sheet.columns);
     return new NextResponse(body, {
       status: 200,
       headers: {
         "Content-Type": EXPORT_CONTENT_TYPE.csv,
-        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Disposition": `attachment; filename="${exportFilename(t.file, "csv", new Date())}"`,
         "Cache-Control": "no-store",
       },
     });
   }
 
-  // Excel — multi-sheet
-  const buffer = await toExcel([
-    {
-      name: "Bradford Factor",
-      columns: bradfordColumns,
-      rows: bradfordReport,
-    },
-    {
-      name: "Holiday usage",
-      columns: [
-        { key: "userId", header: "Employee ID" },
-        { key: "name", header: "Name" },
-        { key: "department", header: "Department" },
-        { key: "contractType", header: "Contract type" },
-        { key: "taken", header: "Days taken (YTD)" },
-      ],
-      rows: holidayUsage,
-    },
-    {
-      name: "SSP liability",
-      columns: [
-        { key: "userId", header: "Employee ID" },
-        { key: "name", header: "Name" },
-        {
-          key: (r) => {
-            const sd = (r as { startDate: Date }).startDate;
-            return sd instanceof Date ? sd.toISOString() : sd;
-          },
-          header: "Spell start",
-        },
-        {
-          key: (r) => {
-            const ed = (r as { endDate: Date }).endDate;
-            return ed instanceof Date ? ed.toISOString() : ed;
-          },
-          header: "Spell end",
-        },
-        { key: "qualifyingDaysPerWeek", header: "Qualifying days/wk" },
-        { key: "dailyRate", header: "Daily SSP rate (£)" },
-        { key: "sspDaysPaid", header: "Days paid" },
-        { key: "remainingDays", header: "Days remaining" },
-        { key: "sspLimitReached", header: "Limit reached" },
-        { key: "estimatedCostToDate", header: "Estimated cost to date (£)" },
-      ],
-      rows: sspCurrent,
-    },
-    {
-      name: "Parental leave",
-      columns: [
-        { key: "userId", header: "Employee ID" },
-        { key: "name", header: "Name" },
-        { key: "leaveType", header: "Leave type" },
-        {
-          key: (r) => {
-            const sd = (r as { startDate: Date }).startDate;
-            return sd instanceof Date ? sd.toISOString() : sd;
-          },
-          header: "Start date",
-        },
-        {
-          key: (r) => {
-            const ed = (r as { expectedReturnDate: Date }).expectedReturnDate;
-            return ed instanceof Date ? ed.toISOString() : ed;
-          },
-          header: "Expected return",
-        },
-        { key: "kitDaysUsed", header: "KIT days used" },
-        { key: "kitDaysCap", header: "KIT cap" },
-        { key: "kitDaysRemaining", header: "KIT remaining" },
-      ],
-      rows: parental,
-    },
-    {
-      name: "Right to work",
-      columns: [
-        { key: "id", header: "Employee ID" },
-        { key: "name", header: "Name" },
-        { key: "email", header: "Email" },
-        { key: "department", header: "Department" },
-        { key: "employmentType", header: "Employment type" },
-        { key: "rightToWorkVerified", header: "Verified" },
-      ],
-      rows: rightToWorkData,
-    },
-  ]);
+  // Excel: the compliance pack, one sheet per table.
+  const buffer = await toExcel(
+    Object.values(UK_COMPLIANCE_TABLES).map((t) => t.sheet(report))
+  );
   return new NextResponse(new Uint8Array(buffer), {
     status: 200,
     headers: {
       "Content-Type": EXPORT_CONTENT_TYPE.excel,
-      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Disposition": `attachment; filename="${exportFilename("coverboard-uk-compliance-pack", "excel", new Date())}"`,
       "Cache-Control": "no-store",
     },
   });

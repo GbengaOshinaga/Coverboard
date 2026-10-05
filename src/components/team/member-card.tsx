@@ -1,5 +1,7 @@
 "use client";
 
+import { fteLabel, type Fte } from "@/lib/fte";
+
 import Link from "next/link";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +17,8 @@ type Member = {
   employmentType: string;
   daysWorkedPerWeek: number;
   fteRatio: number;
+  /** Calculated by the API: logged hours for irregular-hours staff. */
+  fte?: Fte;
   rightToWorkVerified: boolean | null;
   department?: string | null;
   countryCode: string;
@@ -93,7 +97,8 @@ export function MemberCard({
             : "Not set"}
         </p>
         <p className="text-xs text-gray-400 mt-0.5">
-          {formatEmploymentType(member.employmentType)} • FTE {member.fteRatio}
+          {formatEmploymentType(member.employmentType)} •{" "}
+          {member.fte ? fteLabel(member.fte) : `FTE ${member.fteRatio}`}
         </p>
         {showRightToWorkAlerts && needsRightToWork && (
           <div

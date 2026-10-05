@@ -102,11 +102,11 @@ model Organization {
   leaveTypes       LeaveType[]
   publicHolidays   PublicHoliday[]
   bankHolidays     BankHoliday[]
-  jiraIntegration   JiraIntegration?
-  jiraUserMappings  JiraUserMapping[]
-  slackIntegration  SlackIntegration?
-  regions           Region[]
-  coverOffers       CoverOffer[]
+  jiraIntegration  JiraIntegration?
+  jiraUserMappings JiraUserMapping[]
+  slackIntegration SlackIntegration?
+  regions          Region[]
+  coverOffers      CoverOffer[]
 
   @@index([deletionScheduledFor])
   @@index([trialExpiredGraceEndsAt])
@@ -139,25 +139,26 @@ model User {
   createdAt                 DateTime       @default(now())
   updatedAt                 DateTime       @updatedAt
 
-  organization        Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  region              Region?                 @relation(fields: [regionId], references: [id], onDelete: SetNull)
-  leaveRequests       LeaveRequest[]          @relation("UserLeaveRequests")
-  reviewedLeaves      LeaveRequest[]          @relation("ReviewerLeaveRequests")
-  passwordResetTokens PasswordResetToken[]
+  organization            Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  region                  Region?                  @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  leaveRequests           LeaveRequest[]           @relation("UserLeaveRequests")
+  reviewedLeaves          LeaveRequest[]           @relation("ReviewerLeaveRequests")
+  passwordResetTokens     PasswordResetToken[]
   emailVerificationTokens EmailVerificationToken[]
-  jiraUserMapping      JiraUserMapping?
-  jiraConnections      JiraIntegration[]       @relation("JiraConnectedBy")
-  slackConnections     SlackIntegration[]      @relation("SlackConnectedBy")
-  weeklyHours         UserWeeklyHours[]
-  carryOverBalances   LeaveCarryOverBalance[]
-  weeklyEarnings      WeeklyEarning[]
-  regionHistory       UserRegionHistory[]     @relation("UserRegionHistorySubject")
-  regionChangesMade   UserRegionHistory[]     @relation("UserRegionHistoryActor")
-  coverOverrides      LeaveRequest[]          @relation("CoverOverrideBy")
-  workPatterns        WorkPattern[]
-  fitNotesRecorded    FitNote[]               @relation("FitNoteRecordedBy")
-  coverOffersReceived CoverOffer[]            @relation("CoverOfferTo")
-  coverOffersSent     CoverOffer[]            @relation("CoverOfferBy")
+  jiraUserMapping         JiraUserMapping?
+  jiraConnections         JiraIntegration[]        @relation("JiraConnectedBy")
+  slackConnections        SlackIntegration[]       @relation("SlackConnectedBy")
+  weeklyHours             UserWeeklyHours[]
+  carryOverBalances       LeaveCarryOverBalance[]
+  children                Child[]
+  weeklyEarnings          WeeklyEarning[]
+  regionHistory           UserRegionHistory[]      @relation("UserRegionHistorySubject")
+  regionChangesMade       UserRegionHistory[]      @relation("UserRegionHistoryActor")
+  coverOverrides          LeaveRequest[]           @relation("CoverOverrideBy")
+  workPatterns            WorkPattern[]
+  fitNotesRecorded        FitNote[]                @relation("FitNoteRecordedBy")
+  coverOffersReceived     CoverOffer[]             @relation("CoverOfferTo")
+  coverOffersSent         CoverOffer[]             @relation("CoverOfferBy")
 
   @@index([organizationId, countryCode])
   @@index([organizationId, workCountry, isActive])
@@ -166,20 +167,23 @@ model User {
 }
 
 model LeaveType {
-  id               String        @id @default(cuid())
+  id               String             @id @default(cuid())
   name             String
   color            String
-  isPaid           Boolean       @default(true)
-  category         LeaveCategory @default(PAID)
+  isPaid           Boolean            @default(true)
+  category         LeaveCategory      @default(PAID)
   defaultDays      Int
-  requiresEvidence Boolean       @default(false)
-  minNoticeDays    Int           @default(0)
+  /// What defaultDays / policy allowances count. WEEKS means "weeks of their
+  /// normal working week" (statutory family leave), converted per person.
+  allowanceUnit    LeaveAllowanceUnit @default(DAYS)
+  requiresEvidence Boolean            @default(false)
+  minNoticeDays    Int                @default(0)
   durationLogic    String?
   countryCode      String?
-  applyProRata     Boolean       @default(false)
+  applyProRata     Boolean            @default(false)
   organizationId   String
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
 
   organization      Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   leaveRequests     LeaveRequest[]
@@ -229,6 +233,13 @@ model LeaveRequest {
   dailyHolidayPayRate      Decimal?    @db.Decimal(10, 2)
   sspDaysPaid              Int         @default(0)
   sspLimitReached          Boolean     @default(false)
+  /// SSP per qualifying day (HMRC truncates to 4 decimal places), captured
+  /// when the absence is booked or its dates change.
+  sspDailyRate             Decimal?    @db.Decimal(10, 4)
+  /// Average weekly earnings the SSP rate was worked out from (8 weeks
+  /// before the absence); null when no pay was recorded, so the flat rate
+  /// applied.
+  sspAverageWeeklyEarnings Decimal?    @db.Decimal(10, 2)
   smpAverageWeeklyEarnings Decimal?    @db.Decimal(8, 2)
   smpPhase1EndDate         DateTime?   @db.Date
   smpPhase2EndDate         DateTime?   @db.Date
@@ -244,9 +255,12 @@ model LeaveRequest {
   leaveType       LeaveType @relation(fields: [leaveTypeId], references: [id])
   reviewedBy      User?     @relation("ReviewerLeaveRequests", fields: [reviewedById], references: [id])
   coverOverrideBy User?     @relation("CoverOverrideBy", fields: [coverOverrideById], references: [id])
+  /// Unpaid parental leave is per child: which child this leave is for.
+  childId         String?
+  child           Child?    @relation(fields: [childId], references: [id], onDelete: SetNull)
 
-  fitNotes        FitNote[]
-  coverOffers     CoverOffer[]
+  fitNotes    FitNote[]
+  coverOffers CoverOffer[]
 
   @@index([userId, status])
   @@index([userId, leaveTypeId])
@@ -440,20 +454,20 @@ model AuditLog {
 }
 
 model Region {
-  id             String   @id @default(cuid())
-  organizationId String
-  name           String
-  description    String?
-  minCover       Int      @default(1)
+  id                String   @id @default(cuid())
+  organizationId    String
+  name              String
+  description       String?
+  minCover          Int      @default(1)
   // Whether minCover is enforced on Sat/Sun and on bank holidays. New regions
   // default on (shift teams staff these days); regions that predate the flags
   // were migrated to false to keep their old weekday-only behaviour.
-  coverWeekends     Boolean @default(true)
-  coverBankHolidays Boolean @default(true)
-  color          String?
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  coverWeekends     Boolean  @default(true)
+  coverBankHolidays Boolean  @default(true)
+  color             String?
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   members      User[]
@@ -467,20 +481,20 @@ model Region {
 // A recurring shift within a region/team ("Early", "Night"). When a region has
 // active shift types, cover is checked per shift instead of per day.
 model ShiftType {
-  id        String   @id @default(cuid())
-  regionId  String
-  name      String
+  id                String   @id @default(cuid())
+  regionId          String
+  name              String
   // Local (Europe/London) "HH:MM". endTime <= startTime means the shift ends
   // the next day; a shift always belongs to the date it starts on.
-  startTime String
-  endTime   String
+  startTime         String
+  endTime           String
   // Minimum staff per weekday, Monday first (length 7). 0 = no minimum.
   minCoverByWeekday Int[]
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  sortOrder         Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  region   Region        @relation(fields: [regionId], references: [id], onDelete: Cascade)
+  region      Region        @relation(fields: [regionId], references: [id], onDelete: Cascade)
   patterns    WorkPattern[]
   coverOffers CoverOffer[]
 
@@ -575,4 +589,30 @@ model CoverOffer {
   @@index([organizationId, status])
   @@index([shiftTypeId, date])
   @@index([userId, status])
+}
+
+enum LeaveAllowanceUnit {
+  DAYS
+  WEEKS
+}
+
+/// A child someone can take unpaid parental leave for: up to 18 weeks per
+/// child before their 18th birthday, at most 4 weeks per child a year.
+/// Only what the rules need is stored (data minimisation).
+model Child {
+  id                  String   @id @default(cuid())
+  userId              String
+  /// Optional first name or label so the parent can tell children apart.
+  label               String?
+  dateOfBirth         DateTime @db.Date
+  /// Weeks of unpaid parental leave already taken for this child with
+  /// previous employers (the 18 weeks are per child, not per job).
+  weeksTakenElsewhere Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leaveRequests LeaveRequest[]
+
+  @@index([userId])
 }

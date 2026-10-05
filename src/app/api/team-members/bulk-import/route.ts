@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { qualifyingDaysFor } from "@/lib/working-week-server";
 import { unusablePasswordHash } from "@/lib/invite-links";
 import { getServerSession } from "next-auth";
 import { z } from "zod";
@@ -202,6 +203,7 @@ export async function POST(request: Request) {
           memberType: data.memberType,
           employmentType: data.employmentType,
           daysWorkedPerWeek: data.daysWorkedPerWeek,
+          qualifyingDaysPerWeek: qualifyingDaysFor(data.daysWorkedPerWeek),
           fteRatio: data.fteRatio,
           rightToWorkVerified: data.rightToWorkVerified ?? null,
           department: data.department ?? null,

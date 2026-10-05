@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import type { Session } from "next-auth";
 import { getServerSession } from "next-auth";
@@ -17,8 +18,12 @@ export type ActiveSession = {
  * Requires a signed-in user whose account and organisation still exist.
  * After cron deletion the user row is removed and the org is stubbed — the JWT
  * may still be valid, so we sign out instead of sending people to onboarding.
+ *
+ * Call it in pages as well as the layout: the App Router renders a layout and
+ * its page at the same time, so a page can't rely on the layout's redirect
+ * having happened. Cached per request, so both share one check.
  */
-export async function requireActiveSession(): Promise<ActiveSession> {
+export const requireActiveSession = cache(async function requireActiveSession(): Promise<ActiveSession> {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     redirect("/login");
@@ -41,4 +46,4 @@ export async function requireActiveSession(): Promise<ActiveSession> {
   }
 
   return { session, userId, orgId };
-}
+});
