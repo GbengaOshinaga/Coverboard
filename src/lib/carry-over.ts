@@ -17,7 +17,7 @@
  * https://www.legislation.gov.uk/uksi/1998/1833/regulation/13A
  * https://www.legislation.gov.uk/uksi/1998/1833/regulation/15D
  *
- * Leave years are calendar years for now (a leave year setting is Phase 3).
+ * Leave years follow the team's leave year (src/lib/leave-year.ts).
  */
 
 export type CarryOverReason = "COMPANY_POLICY" | "SICKNESS" | "FAMILY_LEAVE";
@@ -84,6 +84,8 @@ export function carryOverInEffect(
 
 export type YearEndInput = {
   fromYear: number;
+  /** Last moment of the leave year ending (src/lib/leave-year.ts leaveYearBounds). */
+  yearEnd: Date;
   /** "hours" for irregular-hours staff: their whole entitlement can carry. */
   unit: "days" | "hours";
   /** This year's own entitlement, without carry-over. */
@@ -117,16 +119,20 @@ export type YearEndPlan = {
 };
 
 /** 23:59:59.999 UTC on a day. */
-const endOfDay = (y: number, monthIndex: number, d: number) => new Date(Date.UTC(y, monthIndex, d, 23, 59, 59, 999));
-
-export function sicknessCarryExpiry(fromYear: number): Date {
-  // 18 months from the end of the leave year: 30 June, two years on.
-  return endOfDay(fromYear + 2, 5, 30);
+/** The last moment before a date `months` months after the day after `yearEnd`. */
+function monthsAfterYearEnd(yearEnd: Date, months: number): Date {
+  const next = new Date(yearEnd.getTime() + 1); // first moment of the next leave year
+  return new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + months, next.getUTCDate()) - 1);
 }
 
-export function familyLeaveCarryExpiry(fromYear: number): Date {
-  // Taken in the following leave year.
-  return endOfDay(fromYear + 1, 11, 31);
+/** 18 months after the leave year ends (30 June two years on, for a calendar year). */
+export function sicknessCarryExpiry(yearEnd: Date): Date {
+  return monthsAfterYearEnd(yearEnd, 18);
+}
+
+/** The end of the following leave year. */
+export function familyLeaveCarryExpiry(yearEnd: Date): Date {
+  return monthsAfterYearEnd(yearEnd, 12);
 }
 
 /**
@@ -140,7 +146,7 @@ export function familyLeaveCarryExpiry(fromYear: number): Date {
  *  3. The company carry-over from what's left, up to the team's cap.
  */
 export function planYearEndCarryOver(input: YearEndInput): YearEndPlan {
-  const yearEnd = endOfDay(input.fromYear, 11, 31);
+  const yearEnd = input.yearEnd;
   const { parts } = carryOverInEffect(input.carriedIn, input.takenBy, yearEnd);
   const usedFromCarry = parts.reduce((s, p) => s + p.used, 0);
   const usedFromEntitlement = Math.max(0, input.takenBy(null) - usedFromCarry);
@@ -169,7 +175,7 @@ export function planYearEndCarryOver(input: YearEndInput): YearEndPlan {
     rows.push({
       reason,
       carried: owed,
-      expiresAt: reason === "FAMILY_LEAVE" ? familyLeaveCarryExpiry(input.fromYear) : sicknessCarryExpiry(input.fromYear),
+      expiresAt: reason === "FAMILY_LEAVE" ? familyLeaveCarryExpiry(yearEnd) : sicknessCarryExpiry(yearEnd),
       source: "this_year",
     });
     carriedThisYear += owed;

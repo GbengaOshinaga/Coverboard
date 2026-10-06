@@ -1,3 +1,4 @@
+import { firstDateAfterYear, leaveYearBounds } from "@/lib/leave-year";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -66,6 +67,8 @@ export async function POST(request: Request) {
       ukCarryOverMax: true,
       ukCarryOverExpiryMonth: true,
       ukCarryOverExpiryDay: true,
+      leaveYearStartMonth: true,
+      leaveYearStartDay: true,
     },
   });
 
@@ -85,17 +88,17 @@ export async function POST(request: Request) {
     },
   });
 
-  const companyExpiresAt = new Date(
-    fromYear + 1,
-    org.ukCarryOverExpiryMonth - 1,
-    org.ukCarryOverExpiryDay,
-    23,
-    59,
-    59,
-    999
+  // `fromYear` is the leave year ending (the year it starts in): 31 Dec, or
+  // e.g. 31 Mar the next year for an April leave year.
+  const leaveYear = { month: org.leaveYearStartMonth, day: org.leaveYearStartDay };
+  const { start: yearStart, end: yearEnd } = leaveYearBounds(fromYear, leaveYear);
+  // The team's expiry date ("31 March") next falls after that year ends.
+  const companyExpiresAt = firstDateAfterYear(
+    fromYear,
+    leaveYear,
+    org.ukCarryOverExpiryMonth,
+    org.ukCarryOverExpiryDay
   );
-  const yearStart = new Date(fromYear, 0, 1);
-  const yearEnd = new Date(fromYear, 11, 31, 23, 59, 59, 999);
 
   const summary: Array<{
     userId: string;
@@ -185,6 +188,7 @@ export async function POST(request: Request) {
     const entitlement = annualLeave.allowance - annualLeave.carryOver.inAllowance;
     const { unused, rows } = planYearEndCarryOver({
       fromYear,
+      yearEnd,
       unit,
       entitlement,
       carriedIn: carriedIn.map((c) => ({ reason: c.reason, carried: c.daysCarried, expiresAt: c.expiresAt })),

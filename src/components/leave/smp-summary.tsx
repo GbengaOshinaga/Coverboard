@@ -1,10 +1,11 @@
+import { formatGBP } from "@/lib/money";
 import { lastDayBefore, maternityLeaveLatestEnd, qualifyingWeek } from "@/lib/smp-dates";
 import { UK_LEL_WEEKLY } from "@/lib/uk-compliance";
 
 type Stored = string | number | null | undefined;
 const num = (v: Stored) => (v === null || v === undefined ? null : Number(v));
 const fmt = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
-const money = (n: number) => `£${n.toFixed(2)}`;
+const money = formatGBP;
 
 /**
  * Statutory Maternity Pay on a maternity request: the qualifying week, the

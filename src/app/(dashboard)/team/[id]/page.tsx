@@ -1,5 +1,6 @@
 "use client";
 
+import { formatGBP } from "@/lib/money";
 import { fteLabel, type Fte } from "@/lib/fte";
 
 import { useState, useEffect, useCallback, useRef, use } from "react";
@@ -96,7 +97,7 @@ function fmt(date: string | Date) {
 }
 
 function fmtMoney(n: number | string) {
-  return `£${Number(n).toFixed(2)}`;
+  return formatGBP(Number(n));
 }
 
 // Jan 1 2024 is a Monday — use it as the step anchor for the date input.

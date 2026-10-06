@@ -128,7 +128,10 @@ function daysLeft(c: ChildWithUsage) {
 }
 
 export function usageLine(c: ChildWithUsage): string {
-  return `${c.usage.daysThisYear} of ${c.usage.capThisYear} days this year · ${c.usage.daysTotal} of ${c.usage.capTotal} in total · ${daysLeft(c)} days left now`;
+  const f = (d: string) =>
+    new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+  // The child's year runs from their birthday (or a year's service), not January.
+  return `${c.usage.daysThisYear} of ${c.usage.capThisYear} days this year (${f(c.year.start)} – ${f(c.year.end)}) · ${c.usage.daysTotal} of ${c.usage.capTotal} in total · ${daysLeft(c)} days left now`;
 }
 
 /** Profile card: a member's children and their unpaid parental leave so far. */

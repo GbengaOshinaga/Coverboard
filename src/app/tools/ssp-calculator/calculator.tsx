@@ -1,5 +1,6 @@
 "use client";
 
+import { formatGBP } from "@/lib/money";
 import { useState } from "react";
 import {
   UK_SSP_WEEKLY_RATE,
@@ -102,13 +103,13 @@ export function SspCalculator() {
           <div>
             <p className="text-sm font-medium text-gray-600">Weekly SSP</p>
             <p className="mt-1 text-2xl font-bold text-gray-900">
-              £{weeklyRate.toFixed(2)}
+              {formatGBP(weeklyRate)}
             </p>
           </div>
           <div>
             <p className="text-sm font-medium text-gray-600">Daily SSP</p>
             <p className="mt-1 text-2xl font-bold text-gray-900">
-              £{dailyRate.toFixed(2)}
+              {formatGBP(dailyRate)}
             </p>
           </div>
           <div>
@@ -116,32 +117,32 @@ export function SspCalculator() {
               Total ({payableDays} day{payableDays === 1 ? "" : "s"})
             </p>
             <p className="mt-1 text-2xl font-bold text-gray-900">
-              £{total.toFixed(2)}
+              {formatGBP(total)}
             </p>
           </div>
         </div>
         <p className="mt-3 border-t border-brand-100 pt-3 text-xs leading-relaxed text-gray-600">
           {usesPercentage ? (
             <>
-              Weekly rate = 80% of £{aweNum.toLocaleString("en-GB")} = £
-              {weeklyRate.toFixed(2)} (lower than the £
-              {UK_SSP_WEEKLY_RATE.toFixed(2)} flat rate).{" "}
+              Weekly rate = 80% of {formatGBP(aweNum)} ={" "}
+              {formatGBP(weeklyRate)} (lower than the{" "}
+              {formatGBP(UK_SSP_WEEKLY_RATE)} flat rate).{" "}
             </>
           ) : (
             <>
-              Weekly rate = the £{UK_SSP_WEEKLY_RATE.toFixed(2)} flat rate (80% of
+              Weekly rate = the {formatGBP(UK_SSP_WEEKLY_RATE)} flat rate (80% of
               earnings would be higher).{" "}
             </>
           )}
-          Daily = £{weeklyRate.toFixed(2)} ÷ {qDays} qualifying day
-          {qDays === 1 ? "" : "s"} = £{dailyRate.toFixed(2)}. SSP is payable for
+          Daily = {formatGBP(weeklyRate)} ÷ {qDays} qualifying day
+          {qDays === 1 ? "" : "s"} = {formatGBP(dailyRate)}. SSP is payable for
           up to {SSP_MAX_WEEKS} weeks per period of sickness.
         </p>
       </div>
 
       <p className="mt-4 text-xs leading-relaxed text-gray-400">
         General information, not legal advice. Uses the rules in force from 6
-        April 2026 and the 2026/27 flat rate (£{UK_SSP_WEEKLY_RATE.toFixed(2)}).
+        April 2026 and the 2026/27 flat rate ({formatGBP(UK_SSP_WEEKLY_RATE)}).
         Sickness that started before 6 April 2026 still has 3 unpaid waiting days.
       </p>
     </div>

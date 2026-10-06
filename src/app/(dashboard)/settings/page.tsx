@@ -1,5 +1,13 @@
 "use client";
 
+import {
+  CALENDAR_LEAVE_YEAR,
+  companyCarryOverExpiry,
+  leaveYearBounds,
+  leaveYearLabel,
+  leaveYearOf,
+  type LeaveYearStart,
+} from "@/lib/leave-year";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { allowanceLabel } from "@/lib/leave-type-labels";
 import { peopleOnSspToday, type UkComplianceReport } from "@/lib/uk-compliance-columns";
@@ -51,6 +59,28 @@ type JiraStatus = {
   connectedBy: string | null;
 };
 
+const fmtUtcDate = (d: Date) =>
+  d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+
+/** "2026/27, 1 April 2026 to 31 March 2027" for the year containing today. */
+function describeLeaveYear(start: LeaveYearStart, opts: { short?: boolean } = {}): string {
+  const year = leaveYearOf(new Date(), start);
+  if (opts.short) {
+    return new Date(Date.UTC(2000, start.month - 1, start.day)).toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "long",
+      timeZone: "UTC",
+    });
+  }
+  const { start: from, end: to } = leaveYearBounds(year, start);
+  return `${leaveYearLabel(year, start)}, ${fmtUtcDate(from)} to ${fmtUtcDate(to)}`;
+}
+
+const MONTH_OPTIONS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+].map((label, i) => ({ value: String(i + 1), label }));
+
 type OrgSettings = {
   ukBankHolidayInclusive: boolean;
   ukBankHolidayRegion: "ENGLAND_WALES" | "SCOTLAND" | "NORTHERN_IRELAND";
@@ -58,6 +88,8 @@ type OrgSettings = {
   ukCarryOverMax: number;
   ukCarryOverExpiryMonth: number;
   ukCarryOverExpiryDay: number;
+  leaveYearStartMonth: number;
+  leaveYearStartDay: number;
   dataResidency: "UK" | "EU" | "US";
   maxAdminUsers: number;
   regionsEnabled: boolean;
@@ -122,6 +154,11 @@ export default function SettingsPage() {
   // on every keystroke. Values are committed on blur.
   const [carryOverMaxDraft, setCarryOverMaxDraft] = useState<string | null>(null);
   const [expiryDayDraft, setExpiryDayDraft] = useState<string | null>(null);
+  // The leave year start is a team-wide change: picked as a draft, then
+  // confirmed, and saved once (month and day together).
+  const [leaveYearDraft, setLeaveYearDraft] = useState<LeaveYearStart>(CALENDAR_LEAVE_YEAR);
+  const [confirmingLeaveYear, setConfirmingLeaveYear] = useState(false);
+  const [savingLeaveYear, setSavingLeaveYear] = useState(false);
   const [ukReport, setUkReport] = useState<UKComplianceReport | null>(null);
   const [ukReportLoading, setUkReportLoading] = useState(false);
 
@@ -328,21 +365,37 @@ export default function SettingsPage() {
     }
   }
 
-  async function saveOrgSettings(next: Partial<OrgSettings>) {
-    if (!orgSettings) return;
-    const merged = { ...orgSettings, ...next };
-    setOrgSettings(merged);
+  async function saveOrgSettings(next: Partial<OrgSettings>): Promise<boolean> {
+    if (!orgSettings) return false;
+    const previous = orgSettings;
+    setOrgSettings({ ...orgSettings, ...next });
     const res = await fetch("/api/organization/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(next),
     });
     if (!res.ok) {
+      // Show what's actually saved, not the change that failed.
+      setOrgSettings(previous);
       toast("Failed to save settings", "error");
-      return;
+      return false;
     }
     toast("Settings updated", "success");
+    return true;
   }
+
+  const savedLeaveYear: LeaveYearStart = orgSettings
+    ? { month: orgSettings.leaveYearStartMonth, day: orgSettings.leaveYearStartDay }
+    : CALENDAR_LEAVE_YEAR;
+  const leaveYearChanged =
+    leaveYearDraft.month !== savedLeaveYear.month || leaveYearDraft.day !== savedLeaveYear.day;
+
+  // Drafts follow the saved value when it loads or changes.
+  useEffect(() => {
+    if (orgSettings) {
+      setLeaveYearDraft({ month: orgSettings.leaveYearStartMonth, day: orgSettings.leaveYearStartDay });
+    }
+  }, [orgSettings?.leaveYearStartMonth, orgSettings?.leaveYearStartDay]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     async function checkJira() {
@@ -688,6 +741,118 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {orgSettings && isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Leave year</CardTitle>
+            <CardDescription>
+              When your holiday year starts. Allowances, part-year starters,
+              carry-over, bank holidays and usage all count from this date.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <Select
+                id="leaveYearStartMonth"
+                label="Starts in"
+                value={String(leaveYearDraft.month)}
+                onChange={(e) => {
+                  setLeaveYearDraft({ ...leaveYearDraft, month: parseInt(e.target.value, 10) });
+                  setConfirmingLeaveYear(false);
+                }}
+                options={MONTH_OPTIONS}
+              />
+              <Select
+                id="leaveYearStartDay"
+                label="On day"
+                value={String(leaveYearDraft.day)}
+                onChange={(e) => {
+                  setLeaveYearDraft({ ...leaveYearDraft, day: parseInt(e.target.value, 10) });
+                  setConfirmingLeaveYear(false);
+                }}
+                options={Array.from({ length: 28 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))}
+              />
+            </div>
+            <p className="text-xs text-gray-500">
+              Your current leave year: {describeLeaveYear(savedLeaveYear)}.
+            </p>
+            {leaveYearChanged && !confirmingLeaveYear && (
+              <div className="flex gap-2">
+                <Button type="button" size="sm" onClick={() => setConfirmingLeaveYear(true)}>
+                  Change leave year
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setLeaveYearDraft(savedLeaveYear)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            )}
+            {leaveYearChanged && confirmingLeaveYear && (
+              <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                <p className="font-semibold">Change your leave year?</p>
+                <p>
+                  {describeLeaveYear(savedLeaveYear)}
+                  <br />→ {describeLeaveYear(leaveYearDraft)}
+                </p>
+                <ul className="list-disc space-y-0.5 pl-5 text-xs">
+                  <li>
+                    Everyone&apos;s balance moves to the new dates straight away:
+                    allowances, part-year starters, bank holidays and leave used.
+                  </li>
+                  <li>
+                    Carry-over expiry dates that haven&apos;t passed are worked
+                    out again from the new year end.
+                    {orgSettings.ukCarryOverEnabled &&
+                      ` Your carry-over expiry is ${new Date(
+                        Date.UTC(2000, orgSettings.ukCarryOverExpiryMonth - 1, orgSettings.ukCarryOverExpiryDay)
+                      ).toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" })}: check it still suits the new year.`}
+                  </li>
+                  <li>Run the year-end rollover for the year that&apos;s closing first.</li>
+                  <li>
+                    You can change it back later, but carry-over that expires
+                    in the meantime won&apos;t come back.
+                  </li>
+                </ul>
+                <div className="flex gap-2 pt-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={savingLeaveYear}
+                    onClick={async () => {
+                      setSavingLeaveYear(true);
+                      const ok = await saveOrgSettings({
+                        leaveYearStartMonth: leaveYearDraft.month,
+                        leaveYearStartDay: leaveYearDraft.day,
+                      });
+                      setSavingLeaveYear(false);
+                      if (ok) setConfirmingLeaveYear(false);
+                    }}
+                  >
+                    {savingLeaveYear ? "Saving…" : "Yes, change it"}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={savingLeaveYear}
+                    onClick={() => {
+                      setLeaveYearDraft(savedLeaveYear);
+                      setConfirmingLeaveYear(false);
+                    }}
+                  >
+                    Keep {describeLeaveYear(savedLeaveYear, { short: true })}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {orgSettings && orgSettings.hasUkEmployees && isAdmin && (
         <Card>
           <CardHeader>
@@ -797,20 +962,7 @@ export default function SettingsPage() {
                           ukCarryOverExpiryMonth: parseInt(e.target.value, 10),
                         })
                       }
-                      options={[
-                        { value: "1", label: "January" },
-                        { value: "2", label: "February" },
-                        { value: "3", label: "March" },
-                        { value: "4", label: "April" },
-                        { value: "5", label: "May" },
-                        { value: "6", label: "June" },
-                        { value: "7", label: "July" },
-                        { value: "8", label: "August" },
-                        { value: "9", label: "September" },
-                        { value: "10", label: "October" },
-                        { value: "11", label: "November" },
-                        { value: "12", label: "December" },
-                      ]}
+                      options={MONTH_OPTIONS}
                     />
                     <Input
                       id="carryOverExpiryDay"
@@ -830,18 +982,53 @@ export default function SettingsPage() {
                     />
                   </div>
                   <p className="text-xs text-gray-500">
-                    Carried-over days expire on{" "}
-                    {new Date(
-                      2000,
-                      orgSettings.ukCarryOverExpiryMonth - 1,
-                      orgSettings.ukCarryOverExpiryDay
-                    ).toLocaleDateString("en-GB", {
-                      day: "numeric",
-                      month: "long",
-                    })}{" "}
-                    of the new leave year. Run year-end rollover from the Reports
-                    page when the leave year closes.
+                    {(() => {
+                      const year = leaveYearOf(new Date(), savedLeaveYear);
+                      const e = companyCarryOverExpiry(
+                        year,
+                        savedLeaveYear,
+                        orgSettings.ukCarryOverExpiryMonth,
+                        orgSettings.ukCarryOverExpiryDay
+                      );
+                      return `Days carried out of ${leaveYearLabel(year, savedLeaveYear)} expire on ${fmtUtcDate(e.expiresOn)}.`;
+                    })()}{" "}
+                    Run year-end rollover from the Reports page when the leave
+                    year closes.
                   </p>
+                  {(() => {
+                    const year = leaveYearOf(new Date(), savedLeaveYear);
+                    const e = companyCarryOverExpiry(
+                      year,
+                      savedLeaveYear,
+                      orgSettings.ukCarryOverExpiryMonth,
+                      orgSettings.ukCarryOverExpiryDay
+                    );
+                    const next = leaveYearLabel(year + 1, savedLeaveYear);
+                    if (e.wholeNextYear) {
+                      return (
+                        <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                          Carried days last the whole of {next}. Many teams pick a
+                          date a few months into the year, such as{" "}
+                          {(() => {
+                            const ns = leaveYearBounds(year + 1, savedLeaveYear).start;
+                            return new Date(
+                              Date.UTC(ns.getUTCFullYear(), ns.getUTCMonth() + 3, ns.getUTCDate()) - 86_400_000
+                            ).toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" });
+                          })()}
+                          .
+                        </p>
+                      );
+                    }
+                    if (e.withinFirstMonth) {
+                      return (
+                        <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                          That&apos;s less than a month into {next}, so people have
+                          little time to use carried days.
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
               )}
             </div>

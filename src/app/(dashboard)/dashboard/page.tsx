@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { EmploymentType } from "@prisma/client";
 import { requireActiveSession } from "@/lib/require-active-session";
+import { leaveYearForOrg } from "@/lib/leave-year-server";
 import { rightToWorkAtRiskWhere } from "@/lib/right-to-work";
 import { prisma } from "@/lib/prisma";
 import { getUserLeaveBalances } from "@/lib/leave-balances";
@@ -87,7 +88,8 @@ export default async function DashboardPage() {
       },
     }),
     // Current user's leave balances
-    getUserLeaveBalances(currentUserId, today.getFullYear()),
+    // Their team's current leave year.
+    leaveYearForOrg(orgId).then((y) => getUserLeaveBalances(currentUserId, y)),
     canSeeComplianceAlerts
       ? prisma.user.count({
           where: {

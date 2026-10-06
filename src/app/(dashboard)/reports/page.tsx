@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { formatGBP } from "@/lib/money";
+import { leaveYearBounds, leaveYearLabel } from "@/lib/leave-year";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { CoverShiftsSection } from "@/components/reports/cover-shifts-section";
 import { useSession } from "next-auth/react";
 import {
@@ -64,6 +66,12 @@ type VariableHoursUser = {
 };
 
 type UKReport = UkComplianceReport;
+
+const fmtLeaveYear = (y: UkComplianceReport["leaveYear"]) => {
+  const f = (d: string) =>
+    new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  return `${y.label}, ${f(y.start)} – ${f(y.end)}`;
+};
 
 const REPORT_TABS = [
   "operations",
@@ -181,12 +189,14 @@ export default function ReportsPage() {
   const [payrollReport, setPayrollReport] = useState<PayrollReport | null>(null);
   const [payrollLoading, setPayrollLoading] = useState(false);
 
-  // The year end to process: last year until mid-year, then this year (so in
-  // October it's the coming 31 December, not one that's long gone).
+  // The leave year end to process: the one just ended until halfway through
+  // the next, then the one coming up. Set from the team's leave year once the
+  // report loads (src/lib/leave-year.ts rolloverLeaveYear).
   const [rolloverYear, setRolloverYear] = useState(() => {
     const now = new Date();
     return now.getMonth() < 6 ? now.getFullYear() - 1 : now.getFullYear();
   });
+  const rolloverYearTouched = useRef(false);
   const [rolloverPreview, setRolloverPreview] = useState<
     RolloverPreviewRow[] | null
   >(null);
@@ -204,7 +214,9 @@ export default function ReportsPage() {
       );
       if (res.ok) {
         setHasUkWorkforce(true);
-        setReport(await res.json());
+        const data: UKReport = await res.json();
+        setReport(data);
+        if (!rolloverYearTouched.current) setRolloverYear(data.leaveYear.rolloverYear);
       } else if (res.status === 403) {
         const payload = await res.json().catch(() => null);
         if (payload?.error === "NO_UK_EMPLOYEES") {
@@ -986,7 +998,8 @@ export default function ReportsPage() {
                   <CardHeaderIntro>
                     <CardTitle>Holiday usage</CardTitle>
                     <CardDescription>
-                      Annual leave days taken per UK employee this year.
+                      Annual leave days taken per UK employee this leave year
+                      {report ? ` (${fmtLeaveYear(report.leaveYear)})` : ""}.
                       Holiday records are kept for at least 6 years, including
                       for people who&apos;ve left; the payroll export covers any
                       dates you need.
@@ -1126,7 +1139,7 @@ export default function ReportsPage() {
                               {row.sspDaysPaid}
                             </td>
                             <td className="py-2.5 pr-4 text-right font-mono text-gray-600">
-                              <span title={row.rateBasis}>&pound;{row.dailyRate.toFixed(2)}</span>
+                              <span title={row.rateBasis}>{formatGBP(row.dailyRate)}</span>
                               {(row.averageWeeklyEarnings === null || row.dailyRate === 0) && (
                                 <span className="block max-w-56 text-[11px] font-sans text-amber-700">
                                   {row.rateBasis}
@@ -1134,10 +1147,10 @@ export default function ReportsPage() {
                               )}
                             </td>
                             <td className="py-2.5 pr-4 text-right font-mono text-gray-600">
-                              &pound;{row.estimatedCostToDate.toFixed(2)}
+                              {formatGBP(row.estimatedCostToDate)}
                             </td>
                             <td className="py-2.5 pr-4 text-right font-mono font-medium">
-                              &pound;{row.estimatedTotalCost.toFixed(2)}
+                              {formatGBP(row.estimatedTotalCost)}
                             </td>
                             <td
                               className="py-2.5 text-right font-mono text-gray-600"
@@ -1211,8 +1224,8 @@ export default function ReportsPage() {
                               {row.leaveType}
                               {row.smp && row.smp.phase1WeeklyRate !== null && (
                                 <span className="block text-[11px] text-gray-500">
-                                  SMP £{row.smp.phase1WeeklyRate.toFixed(2)} a week for 6 weeks, then £
-                                  {row.smp.phase2WeeklyRate?.toFixed(2)} · {row.smp.label}
+                                  SMP {formatGBP(row.smp.phase1WeeklyRate)} a week for 6 weeks, then{" "}
+                                  {row.smp.phase2WeeklyRate !== null ? formatGBP(row.smp.phase2WeeklyRate) : "—"} · {row.smp.label}
                                 </span>
                               )}
                             </td>
@@ -1664,9 +1677,9 @@ export default function ReportsPage() {
                         })}
                       </p>
                       <p className="text-[11px] text-gray-500">
-                        SSP £{payrollReport.totals.totalSspPay.toFixed(2)} · SPP £
-                        {payrollReport.totals.totalSppPay.toFixed(2)} · SMP £
-                        {payrollReport.totals.totalSmpPay.toFixed(2)}
+                        SSP {formatGBP(payrollReport.totals.totalSspPay)} · SPP{" "}
+                        {formatGBP(payrollReport.totals.totalSppPay)} · SMP{" "}
+                        {formatGBP(payrollReport.totals.totalSmpPay)}
                       </p>
                     </div>
                   </div>
@@ -1735,39 +1748,39 @@ export default function ReportsPage() {
                               {row.smp
                                 ? row.smp.weeklyRate == null
                                   ? "—"
-                                  : `£${row.smp.weeklyRate.toFixed(2)}/wk SMP`
+                                  : `${formatGBP(row.smp.weeklyRate)}/wk SMP`
                                 : row.spp
                                 ? row.spp.weeklyRate == null
                                   ? "—"
-                                  : `£${row.spp.weeklyRate.toFixed(2)}/wk SPP`
+                                  : `${formatGBP(row.spp.weeklyRate)}/wk SPP`
                                 : row.ssp
                                 ? row.ssp.dailyRate == null
                                   ? "—"
-                                  : `£${row.ssp.dailyRate.toFixed(2)} SSP`
+                                  : `${formatGBP(row.ssp.dailyRate)} SSP`
                                 : row.hoursTaken != null
                                   ? row.hourlyRate == null
                                     ? "—"
-                                    : `£${row.hourlyRate.toFixed(2)}/hr`
+                                    : `${formatGBP(row.hourlyRate)}/hr`
                                   : row.dailyHolidayPayRate == null
                                     ? "—"
-                                    : `£${row.dailyHolidayPayRate.toFixed(2)}`}
+                                    : formatGBP(row.dailyHolidayPayRate)}
                             </td>
                             <td className="py-2 pr-4 text-right font-medium text-gray-900">
                               {row.smp
                                 ? row.smp.pay == null
                                   ? "—"
-                                  : `£${row.smp.pay.toFixed(2)}`
+                                  : formatGBP(row.smp.pay)
                                 : row.spp
                                 ? row.spp.pay == null
                                   ? "—"
-                                  : `£${row.spp.pay.toFixed(2)}`
+                                  : formatGBP(row.spp.pay)
                                 : row.ssp
                                 ? row.ssp.pay == null
                                   ? "—"
-                                  : `£${row.ssp.pay.toFixed(2)}`
+                                  : formatGBP(row.ssp.pay)
                                 : row.estimatedPay == null
                                   ? "—"
-                                  : `£${row.estimatedPay.toFixed(2)}`}
+                                  : formatGBP(row.estimatedPay)}
                               {row.smp && (
                                 <div className="max-w-56 text-[11px] font-normal text-gray-500">
                                   {row.smp.daysInPeriod} days of SMP · {row.smp.label}
@@ -1853,16 +1866,29 @@ export default function ReportsPage() {
                 <div className="flex flex-wrap items-end gap-3">
                   <Input
                     id="rolloverYear"
-                    label="Year ending"
+                    label="Leave year starting"
                     type="number"
                     min="2020"
                     max="2100"
                     value={String(rolloverYear)}
-                    onChange={(e) =>
-                      setRolloverYear(parseInt(e.target.value || "0", 10))
-                    }
+                    onChange={(e) => {
+                      rolloverYearTouched.current = true;
+                      setRolloverYear(parseInt(e.target.value || "0", 10));
+                    }}
                     className="w-32"
                   />
+                  {report && rolloverYear > 2000 && (
+                    <p className="pb-2 text-xs text-gray-500">
+                      {(() => {
+                        const [, m, d] = report.leaveYear.start.split("-").map(Number);
+                        const start = { month: m, day: d };
+                        const { start: from, end: to } = leaveYearBounds(rolloverYear, start);
+                        const f = (x: Date) =>
+                          x.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+                        return `${leaveYearLabel(rolloverYear, start)}: ${f(from)} – ${f(to)}`;
+                      })()}
+                    </p>
+                  )}
                   <Button
                     size="sm"
                     variant="outline"

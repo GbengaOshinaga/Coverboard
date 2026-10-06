@@ -1,5 +1,6 @@
 "use client";
 
+import { formatGBP } from "@/lib/money";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Heart } from "lucide-react";
@@ -274,7 +275,7 @@ export function RequestForm({
       if (data.smpInfo) {
         toast(
           data.smpInfo.eligible
-            ? `SMP: £${data.smpInfo.phase1Weekly.toFixed(2)} a week for 6 weeks, then £${data.smpInfo.phase2Weekly.toFixed(2)} a week for 33 weeks.`
+            ? `SMP: ${formatGBP(data.smpInfo.phase1Weekly)} a week for 6 weeks, then ${formatGBP(data.smpInfo.phase2Weekly)} a week for 33 weeks.`
             : `No SMP: ${data.smpInfo.reason}. They may get Maternity Allowance instead (form SMP1).`,
           data.smpInfo.eligible ? "success" : "error"
         );

@@ -14,6 +14,7 @@ import { isMaternityLeaveType } from "@/lib/smpCalculator";
 import { checkOnBehalf, isSicknessLeaveTypeName, noticeError } from "./rules";
 import { keepingInTouchError } from "@/lib/keeping-in-touch";
 import { uplError } from "@/lib/unpaid-parental";
+import { leaveYearForOrg } from "@/lib/leave-year-server";
 import { computeSmpFields } from "@/lib/smp-request";
 import { sicknessOverlapError } from "./sickness-overlap";
 import { computeSspForSpell, type SspInfo } from "./ssp-spell";
@@ -198,10 +199,11 @@ export async function createLeaveRequest(
   let resolvedHoursBooked: number | null = null;
   try {
     const requestedDays = countWeekdays(startDate, endDate);
+    // The balance for the leave year the booking starts in.
     const balance = await getUserLeaveBalance(
       userId,
       leaveTypeId,
-      startDate.getFullYear()
+      await leaveYearForOrg(orgId, startDate)
     );
     if (balance?.unit === "hours") {
       const avgHoursPerDay = balance.avgHoursPerDay ?? 0;
@@ -258,9 +260,11 @@ export async function createLeaveRequest(
       where: { childId, status: { in: ["APPROVED", "PENDING"] } },
       select: { startDate: true, endDate: true },
     });
+    const parent = await prisma.user.findUnique({ where: { id: userId }, select: { serviceStartDate: true } });
     const uplProblem = uplError({
       childName: child.label?.trim() || "this child",
       dateOfBirth: child.dateOfBirth,
+      serviceStartDate: parent?.serviceStartDate ?? null,
       request: { startDate, endDate },
       bookings,
       weeksTakenElsewhere: child.weeksTakenElsewhere,

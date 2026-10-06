@@ -72,6 +72,9 @@ model Organization {
   ukCarryOverMax          Int               @default(0)
   ukCarryOverExpiryMonth  Int               @default(3)
   ukCarryOverExpiryDay    Int               @default(31)
+  /// When the leave year starts (src/lib/leave-year.ts). Default 1 January.
+  leaveYearStartMonth     Int               @default(1)
+  leaveYearStartDay       Int               @default(1)
   dataResidency           DataResidency     @default(UK)
   maxAdminUsers           Int               @default(2)
   plan                    SubscriptionPlan  @default(TRIAL)

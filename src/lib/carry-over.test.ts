@@ -41,6 +41,7 @@ test("soonest-expiring carry-over is used first", () => {
 
 const base: YearEndInput = {
   fromYear: 2026,
+  yearEnd: new Date("2026-12-31T23:59:59.999Z"),
   unit: "days",
   entitlement: 28,
   carriedIn: [],
@@ -104,7 +105,7 @@ test("sickness carry-over still in date at the next year end comes forward, less
   // 4 used by May; at the 2026 year end the other 6 come forward.
   const { rows } = planYearEndCarryOver({
     ...base,
-    carriedIn: [{ reason: "SICKNESS", carried: 10, expiresAt: sicknessCarryExpiry(2025) }],
+    carriedIn: [{ reason: "SICKNESS", carried: 10, expiresAt: sicknessCarryExpiry(new Date("2025-12-31T23:59:59.999Z")) }],
     takenBy: takenOn([["2026-05-01", 4]]),
     company: { ...base.company, enabled: false },
   });
@@ -114,8 +115,13 @@ test("sickness carry-over still in date at the next year end comes forward, less
 });
 
 test("expiry dates: sickness 18 months after the year end, family leave the next year end", () => {
-  assert.equal(sicknessCarryExpiry(2026).toISOString(), "2028-06-30T23:59:59.999Z");
-  assert.equal(familyLeaveCarryExpiry(2026).toISOString(), "2027-12-31T23:59:59.999Z");
+  const calendarEnd = new Date("2026-12-31T23:59:59.999Z");
+  assert.equal(sicknessCarryExpiry(calendarEnd).toISOString(), "2028-06-30T23:59:59.999Z");
+  assert.equal(familyLeaveCarryExpiry(calendarEnd).toISOString(), "2027-12-31T23:59:59.999Z");
+  // April leave year 2026/27 ends 31 Mar 2027: sickness to 30 Sep 2028, family to 31 Mar 2028.
+  const aprilEnd = new Date("2027-03-31T23:59:59.999Z");
+  assert.equal(sicknessCarryExpiry(aprilEnd).toISOString(), "2028-09-30T23:59:59.999Z");
+  assert.equal(familyLeaveCarryExpiry(aprilEnd).toISOString(), "2028-03-31T23:59:59.999Z");
 });
 
 test("never more than the days they were off: one sick day carries at most one day", () => {
