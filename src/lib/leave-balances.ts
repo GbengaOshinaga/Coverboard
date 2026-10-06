@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { countWorkingDays, prorateForStartDate, resolveWorkingWeek, weekdaysFromPatterns, weeksToWorkingDays } from "@/lib/working-week";
 import { countWeekdays } from "@/lib/utils";
 import { carryOverInEffect, type CarryOverReason } from "@/lib/carry-over";
+import { leaveYearBounds } from "@/lib/leave-year";
 import {
   calculateUkProRatedAnnualLeave,
   calculateIrregularHoursAccrual,
@@ -136,7 +137,8 @@ export function adjustAllowanceForBankHolidays(params: {
 }
 
 /**
- * Calculate leave balances for a user for a given year.
+ * Calculate leave balances for a user for a given leave year (identified by
+ * the calendar year it starts in; see src/lib/leave-year.ts).
  *
  * For each leave type in the org:
  * 1. Look up the country-specific policy allowance (LeavePolicy for user's countryCode)
@@ -176,14 +178,20 @@ export async function getUserLeaveBalances(
       ukBankHolidayInclusive: true,
       ukBankHolidayRegion: true,
       fullTimeHoursPerWeek: true,
+      leaveYearStartMonth: true,
+      leaveYearStartDay: true,
     },
   });
   const ukBankHolidayInclusive = orgUk?.ukBankHolidayInclusive ?? true;
   const ukBankHolidayRegion = orgUk?.ukBankHolidayRegion ?? "ENGLAND_WALES";
   const fullTimeHoursPerWeek = Number(orgUk?.fullTimeHoursPerWeek ?? 37.5);
 
-  const yearStart = new Date(year, 0, 1);
-  const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
+  // `year` is the leave year (the year it starts in): 1 Jan–31 Dec, or e.g.
+  // 1 Apr 2026–31 Mar 2027 for a team whose leave year starts in April.
+  const { start: yearStart, end: yearEnd } = leaveYearBounds(year, {
+    month: orgUk?.leaveYearStartMonth ?? 1,
+    day: orgUk?.leaveYearStartDay ?? 1,
+  });
 
   // Which days they work: their working pattern's days, else their stored
   // days-per-week (Mon–Fri assumed). Drives part-time entitlement, how many
@@ -198,7 +206,7 @@ export async function getUserLeaveBalances(
 
   // Irregular-hours / zero-hours workers accrue statutory holiday at 12.07% of
   // the hours they actually work (post-2024 method), measured in HOURS. We sum
-  // the hours they have logged this calendar year as the accrual base. The
+  // the hours they have logged this leave year as the accrual base. The
   // days-equivalent (for the day-based balance UI, since booking is still
   // days in Phase 1) divides by their average working day; zero-hours workers
   // can have daysWorkedPerWeek = 0, so fall back to a standard 7.5h day.

@@ -88,7 +88,8 @@ export function prorateForStartDate(
 ): number {
   if (!serviceStartDate || serviceStartDate <= yearStart) return fullEntitlement;
   if (serviceStartDate > yearEnd) return 0;
-  const yearDays = Math.round((yearEnd.getTime() - yearStart.getTime()) / DAY_MS) + 1;
-  const remaining = Math.round((yearEnd.getTime() - serviceStartDate.getTime()) / DAY_MS) + 1;
+  // Whole days, inclusive: yearEnd may be its last moment (23:59:59.999).
+  const yearDays = Math.floor((yearEnd.getTime() - yearStart.getTime()) / DAY_MS) + 1;
+  const remaining = Math.floor((yearEnd.getTime() - serviceStartDate.getTime()) / DAY_MS) + 1;
   return Math.ceil((fullEntitlement * remaining) / yearDays);
 }

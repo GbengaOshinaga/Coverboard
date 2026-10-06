@@ -9,6 +9,8 @@ import {
   createSlackClient,
   postSlackCommandResponse,
 } from "@/lib/slack";
+import { getLeaveYearStart } from "@/lib/leave-year-server";
+import { CALENDAR_LEAVE_YEAR, leaveYearLabel, leaveYearOf } from "@/lib/leave-year";
 import { getUserLeaveBalances } from "@/lib/leave-balances";
 import {
   buildWhosOutMessage,
@@ -201,9 +203,12 @@ async function handleMyBalance(
   userId: string,
   userName: string
 ): Promise<SlackCommandResponse> {
-  const year = new Date().getFullYear();
+  // Their team's current leave year (e.g. "2026/27" for an April start).
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { organizationId: true } });
+  const start = user ? await getLeaveYearStart(user.organizationId) : CALENDAR_LEAVE_YEAR;
+  const year = leaveYearOf(new Date(), start);
   const balances = await getUserLeaveBalances(userId, year);
-  const blocks = buildBalanceMessage(userName, year, balances);
+  const blocks = buildBalanceMessage(userName, leaveYearLabel(year, start), balances);
 
   return {
     response_type: "ephemeral",

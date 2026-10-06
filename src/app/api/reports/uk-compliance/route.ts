@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { leaveYearBounds, leaveYearLabel, leaveYearOf, rolloverLeaveYear } from "@/lib/leave-year";
+import { getLeaveYearStart } from "@/lib/leave-year-server";
 import { countWorkingDays, resolveWorkingWeek, weekdaysFromPatterns } from "@/lib/working-week";
 import { bradfordForSickness } from "@/lib/sickness-spells";
 import { getServerSession } from "next-auth";
@@ -94,6 +96,11 @@ export async function GET(request: Request) {
     },
   });
 
+  // This leave year (e.g. 1 Apr 2026 – 31 Mar 2027), not the calendar year.
+  const leaveYearStart = await getLeaveYearStart(orgId);
+  const currentLeaveYear = leaveYearOf(new Date(), leaveYearStart);
+  const { start: lyStart, end: lyEnd } = leaveYearBounds(currentLeaveYear, leaveYearStart);
+
   const holidayUsage = await Promise.all(
     users.map(async (user): Promise<HolidayUsageRow> => {
       const balances = await prisma.leaveRequest.findMany({
@@ -101,8 +108,10 @@ export async function GET(request: Request) {
           userId: user.id,
           status: "APPROVED",
           leaveType: { name: "Annual Leave" },
-          startDate: { gte: new Date(new Date().getFullYear(), 0, 1) },
-          endDate: { lte: new Date(new Date().getFullYear(), 11, 31, 23, 59, 59, 999) },
+          // Overlapping the year, so bookings across its start or end count
+          // for the days inside it.
+          startDate: { lte: lyEnd },
+          endDate: { gte: lyStart },
         },
         select: { startDate: true, endDate: true, hoursBooked: true },
       });
@@ -110,11 +119,19 @@ export async function GET(request: Request) {
       // already workCountry=GB), so report their usage in hours.
       const isHours = isHoursAveragedEmploymentType(user.employmentType);
       const weekdays = weekdaysFromPatterns(user.workPatterns, new Date());
+      const inYear = (r: { startDate: Date; endDate: Date }) =>
+        countWorkingDays(r.startDate < lyStart ? lyStart : r.startDate, r.endDate > lyEnd ? lyEnd : r.endDate, weekdays);
       const taken = isHours
         ? Number(
-            balances.reduce((sum, r) => sum + (r.hoursBooked ?? 0), 0).toFixed(1)
+            balances
+              .reduce((sum, r) => {
+                // Hours for the share of the booking inside the year.
+                const all = countWorkingDays(r.startDate, r.endDate, weekdays);
+                return sum + (all > 0 ? ((r.hoursBooked ?? 0) * inYear(r)) / all : 0);
+              }, 0)
+              .toFixed(1)
           )
-        : balances.reduce((sum, r) => sum + countWorkingDays(r.startDate, r.endDate, weekdays), 0);
+        : balances.reduce((sum, r) => sum + inYear(r), 0);
       return {
         userId: user.id,
         name: user.name,
@@ -332,6 +349,13 @@ export async function GET(request: Request) {
 
   const report: UkComplianceReport = {
     workforce,
+    leaveYear: {
+      year: currentLeaveYear,
+      label: leaveYearLabel(currentLeaveYear, leaveYearStart),
+      start: lyStart.toISOString().slice(0, 10),
+      end: lyEnd.toISOString().slice(0, 10),
+      rolloverYear: rolloverLeaveYear(new Date(), leaveYearStart),
+    },
     holidayUsage,
     absenceTrigger: { threshold, rows: bradfordReport },
     sspLiability: sspCurrent,

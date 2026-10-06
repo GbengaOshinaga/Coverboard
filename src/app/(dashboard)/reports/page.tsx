@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { leaveYearBounds, leaveYearLabel } from "@/lib/leave-year";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { CoverShiftsSection } from "@/components/reports/cover-shifts-section";
 import { useSession } from "next-auth/react";
 import {
@@ -64,6 +65,12 @@ type VariableHoursUser = {
 };
 
 type UKReport = UkComplianceReport;
+
+const fmtLeaveYear = (y: UkComplianceReport["leaveYear"]) => {
+  const f = (d: string) =>
+    new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  return `${y.label}, ${f(y.start)} – ${f(y.end)}`;
+};
 
 const REPORT_TABS = [
   "operations",
@@ -181,12 +188,14 @@ export default function ReportsPage() {
   const [payrollReport, setPayrollReport] = useState<PayrollReport | null>(null);
   const [payrollLoading, setPayrollLoading] = useState(false);
 
-  // The year end to process: last year until mid-year, then this year (so in
-  // October it's the coming 31 December, not one that's long gone).
+  // The leave year end to process: the one just ended until halfway through
+  // the next, then the one coming up. Set from the team's leave year once the
+  // report loads (src/lib/leave-year.ts rolloverLeaveYear).
   const [rolloverYear, setRolloverYear] = useState(() => {
     const now = new Date();
     return now.getMonth() < 6 ? now.getFullYear() - 1 : now.getFullYear();
   });
+  const rolloverYearTouched = useRef(false);
   const [rolloverPreview, setRolloverPreview] = useState<
     RolloverPreviewRow[] | null
   >(null);
@@ -204,7 +213,9 @@ export default function ReportsPage() {
       );
       if (res.ok) {
         setHasUkWorkforce(true);
-        setReport(await res.json());
+        const data: UKReport = await res.json();
+        setReport(data);
+        if (!rolloverYearTouched.current) setRolloverYear(data.leaveYear.rolloverYear);
       } else if (res.status === 403) {
         const payload = await res.json().catch(() => null);
         if (payload?.error === "NO_UK_EMPLOYEES") {
@@ -986,7 +997,8 @@ export default function ReportsPage() {
                   <CardHeaderIntro>
                     <CardTitle>Holiday usage</CardTitle>
                     <CardDescription>
-                      Annual leave days taken per UK employee this year.
+                      Annual leave days taken per UK employee this leave year
+                      {report ? ` (${fmtLeaveYear(report.leaveYear)})` : ""}.
                       Holiday records are kept for at least 6 years, including
                       for people who&apos;ve left; the payroll export covers any
                       dates you need.
@@ -1853,16 +1865,29 @@ export default function ReportsPage() {
                 <div className="flex flex-wrap items-end gap-3">
                   <Input
                     id="rolloverYear"
-                    label="Year ending"
+                    label="Leave year starting"
                     type="number"
                     min="2020"
                     max="2100"
                     value={String(rolloverYear)}
-                    onChange={(e) =>
-                      setRolloverYear(parseInt(e.target.value || "0", 10))
-                    }
+                    onChange={(e) => {
+                      rolloverYearTouched.current = true;
+                      setRolloverYear(parseInt(e.target.value || "0", 10));
+                    }}
                     className="w-32"
                   />
+                  {report && rolloverYear > 2000 && (
+                    <p className="pb-2 text-xs text-gray-500">
+                      {(() => {
+                        const [, m, d] = report.leaveYear.start.split("-").map(Number);
+                        const start = { month: m, day: d };
+                        const { start: from, end: to } = leaveYearBounds(rolloverYear, start);
+                        const f = (x: Date) =>
+                          x.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+                        return `${leaveYearLabel(rolloverYear, start)}: ${f(from)} – ${f(to)}`;
+                      })()}
+                    </p>
+                  )}
                   <Button
                     size="sm"
                     variant="outline"

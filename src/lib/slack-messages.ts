@@ -114,7 +114,8 @@ type BalanceEntry = {
  */
 export function buildBalanceMessage(
   userName: string,
-  year: number,
+  /** Leave year label, e.g. "2026" or "2026/27" (src/lib/leave-year.ts). */
+  year: number | string,
   balances: BalanceEntry[]
 ): KnownBlock[] {
   const blocks: KnownBlock[] = [];

@@ -1,3 +1,4 @@
+import { firstDateAfterYear } from "@/lib/leave-year";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -13,6 +14,9 @@ const updateSchema = z.object({
   ukCarryOverMax: z.number().int().min(0).max(8).optional(),
   ukCarryOverExpiryMonth: z.number().int().min(1).max(12).optional(),
   ukCarryOverExpiryDay: z.number().int().min(1).max(31).optional(),
+  // Day 1–28 so the leave year starts on the same date every year.
+  leaveYearStartMonth: z.number().int().min(1).max(12).optional(),
+  leaveYearStartDay: z.number().int().min(1).max(28).optional(),
   regionsEnabled: z.boolean().optional(),
   industry: z.string().max(80).nullable().optional(),
 });
@@ -40,6 +44,8 @@ export async function GET() {
         ukCarryOverMax: true,
         ukCarryOverExpiryMonth: true,
         ukCarryOverExpiryDay: true,
+        leaveYearStartMonth: true,
+        leaveYearStartDay: true,
         dataResidency: true,
         maxAdminUsers: true,
         plan: true,
@@ -112,6 +118,8 @@ export async function PATCH(request: Request) {
       ukCarryOverMax: true,
       ukCarryOverExpiryMonth: true,
       ukCarryOverExpiryDay: true,
+      leaveYearStartMonth: true,
+      leaveYearStartDay: true,
       dataResidency: true,
       maxAdminUsers: true,
       plan: true,
@@ -127,8 +135,11 @@ export async function PATCH(request: Request) {
   // that have already lapsed.
   if (
     data.ukCarryOverExpiryMonth !== undefined ||
-    data.ukCarryOverExpiryDay !== undefined
+    data.ukCarryOverExpiryDay !== undefined ||
+    data.leaveYearStartMonth !== undefined ||
+    data.leaveYearStartDay !== undefined
   ) {
+    const leaveYearStart = { month: updated.leaveYearStartMonth, day: updated.leaveYearStartDay };
     const now = new Date();
     const liveYears = await prisma.leaveCarryOverBalance.findMany({
       // Only the team's own carry-over: sickness and family leave carry-over
@@ -140,14 +151,11 @@ export async function PATCH(request: Request) {
     for (const { leaveYear } of liveYears) {
       // Matches the expiry computation in /api/carry-over/process (leaveYear
       // there is fromYear + 1).
-      const newExpiry = new Date(
-        leaveYear,
-        updated.ukCarryOverExpiryMonth - 1,
-        updated.ukCarryOverExpiryDay,
-        23,
-        59,
-        59,
-        999
+      const newExpiry = firstDateAfterYear(
+        leaveYear - 1,
+        leaveYearStart,
+        updated.ukCarryOverExpiryMonth,
+        updated.ukCarryOverExpiryDay
       );
       await prisma.leaveCarryOverBalance.updateMany({
         where: {

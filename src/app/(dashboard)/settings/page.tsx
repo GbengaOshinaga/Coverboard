@@ -1,5 +1,6 @@
 "use client";
 
+import { leaveYearBounds, leaveYearLabel, leaveYearOf } from "@/lib/leave-year";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { allowanceLabel } from "@/lib/leave-type-labels";
 import { peopleOnSspToday, type UkComplianceReport } from "@/lib/uk-compliance-columns";
@@ -51,6 +52,11 @@ type JiraStatus = {
   connectedBy: string | null;
 };
 
+const MONTH_OPTIONS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+].map((label, i) => ({ value: String(i + 1), label }));
+
 type OrgSettings = {
   ukBankHolidayInclusive: boolean;
   ukBankHolidayRegion: "ENGLAND_WALES" | "SCOTLAND" | "NORTHERN_IRELAND";
@@ -58,6 +64,8 @@ type OrgSettings = {
   ukCarryOverMax: number;
   ukCarryOverExpiryMonth: number;
   ukCarryOverExpiryDay: number;
+  leaveYearStartMonth: number;
+  leaveYearStartDay: number;
   dataResidency: "UK" | "EU" | "US";
   maxAdminUsers: number;
   regionsEnabled: boolean;
@@ -688,6 +696,50 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {orgSettings && isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Leave year</CardTitle>
+            <CardDescription>
+              When your holiday year starts. Allowances, part-year starters,
+              carry-over, bank holidays and usage all count from this date.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <Select
+                id="leaveYearStartMonth"
+                label="Starts in"
+                value={String(orgSettings.leaveYearStartMonth)}
+                onChange={(e) => saveOrgSettings({ leaveYearStartMonth: parseInt(e.target.value, 10) })}
+                options={MONTH_OPTIONS}
+              />
+              <Select
+                id="leaveYearStartDay"
+                label="On day"
+                value={String(orgSettings.leaveYearStartDay)}
+                onChange={(e) => saveOrgSettings({ leaveYearStartDay: parseInt(e.target.value, 10) })}
+                options={Array.from({ length: 28 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))}
+              />
+            </div>
+            <p className="text-xs text-gray-500">
+              Your current leave year:{" "}
+              {(() => {
+                const start = { month: orgSettings.leaveYearStartMonth, day: orgSettings.leaveYearStartDay };
+                const year = leaveYearOf(new Date(), start);
+                const { start: from, end: to } = leaveYearBounds(year, start);
+                const f = (d: Date) =>
+                  d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+                return `${leaveYearLabel(year, start)}, ${f(from)} to ${f(to)}`;
+              })()}
+              . Changing it moves every balance to the new dates straight away,
+              so change it at a year end and run the year-end rollover for the
+              year that&apos;s closing first.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {orgSettings && orgSettings.hasUkEmployees && isAdmin && (
         <Card>
           <CardHeader>
@@ -797,20 +849,7 @@ export default function SettingsPage() {
                           ukCarryOverExpiryMonth: parseInt(e.target.value, 10),
                         })
                       }
-                      options={[
-                        { value: "1", label: "January" },
-                        { value: "2", label: "February" },
-                        { value: "3", label: "March" },
-                        { value: "4", label: "April" },
-                        { value: "5", label: "May" },
-                        { value: "6", label: "June" },
-                        { value: "7", label: "July" },
-                        { value: "8", label: "August" },
-                        { value: "9", label: "September" },
-                        { value: "10", label: "October" },
-                        { value: "11", label: "November" },
-                        { value: "12", label: "December" },
-                      ]}
+                      options={MONTH_OPTIONS}
                     />
                     <Input
                       id="carryOverExpiryDay"
@@ -839,7 +878,7 @@ export default function SettingsPage() {
                       day: "numeric",
                       month: "long",
                     })}{" "}
-                    of the new leave year. Run year-end rollover from the Reports
+                    after the leave year ends. Run year-end rollover from the Reports
                     page when the leave year closes.
                   </p>
                 </div>

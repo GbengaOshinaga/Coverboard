@@ -12,6 +12,7 @@ import {
 
 const report: UkComplianceReport = {
   workforce: { uk: 3, total: 3 },
+  leaveYear: { year: 2026, label: "2026", start: "2026-01-01", end: "2026-12-31", rolloverYear: 2026 },
   holidayUsage: [
     { userId: "u1", name: "Brian", department: null, contractType: "PART_TIME", taken: 6, unit: "days" },
     { userId: "u2", name: "Zoe", department: "Care", contractType: "ZERO_HOURS", taken: 22.5, unit: "hours" },

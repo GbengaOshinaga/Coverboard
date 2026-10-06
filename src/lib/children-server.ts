@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getWorkingWeek } from "@/lib/working-week-server";
-import { eighteenthBirthday, uplUsage } from "@/lib/unpaid-parental";
+import { eighteenthBirthday, uplEntitledFrom, uplUsage, uplYearContaining } from "@/lib/unpaid-parental";
 
 /**
  * Children are needed for unpaid parental leave, which is per child. The
@@ -43,11 +43,13 @@ export type ChildWithUsage = {
   hasLeave: boolean;
   /** Working days of unpaid parental leave used and allowed. */
   usage: { daysThisYear: number; capThisYear: number; daysTotal: number; capTotal: number };
+  /** The child's current parental-leave year (YYYY-MM-DD), from their birthday or a year's service. */
+  year: { start: string; end: string };
 };
 
 /** A member's children with their unpaid parental leave used so far. */
 export async function listChildren(userId: string): Promise<ChildWithUsage[]> {
-  const [children, week] = await Promise.all([
+  const [children, week, parent] = await Promise.all([
     prisma.child.findMany({
       where: { userId },
       orderBy: { dateOfBirth: "asc" },
@@ -60,21 +62,25 @@ export async function listChildren(userId: string): Promise<ChildWithUsage[]> {
       },
     }),
     getWorkingWeek(userId),
+    prisma.user.findUnique({ where: { id: userId }, select: { serviceStartDate: true } }),
   ]);
-  const year = new Date().getUTCFullYear();
-  return children.map((c) => ({
-    id: c.id,
-    label: c.label,
-    dateOfBirth: c.dateOfBirth.toISOString().slice(0, 10),
-    eighteenthBirthday: eighteenthBirthday(c.dateOfBirth).toISOString().slice(0, 10),
-    weeksTakenElsewhere: c.weeksTakenElsewhere,
-    hasLeave: c.leaveRequests.length > 0,
-    usage: uplUsage({
-      bookings: c.leaveRequests,
-      year,
+  return children.map((c) => {
+    const year = uplYearContaining(new Date(), uplEntitledFrom(c.dateOfBirth, parent?.serviceStartDate ?? null));
+    return {
+      id: c.id,
+      label: c.label,
+      dateOfBirth: c.dateOfBirth.toISOString().slice(0, 10),
+      eighteenthBirthday: eighteenthBirthday(c.dateOfBirth).toISOString().slice(0, 10),
       weeksTakenElsewhere: c.weeksTakenElsewhere,
-      daysPerWeek: week.daysPerWeek,
-      weekdays: week.weekdays,
-    }),
-  }));
+      hasLeave: c.leaveRequests.length > 0,
+      usage: uplUsage({
+        bookings: c.leaveRequests,
+        year,
+        weeksTakenElsewhere: c.weeksTakenElsewhere,
+        daysPerWeek: week.daysPerWeek,
+        weekdays: week.weekdays,
+      }),
+      year: { start: year.start.toISOString().slice(0, 10), end: year.end.toISOString().slice(0, 10) },
+    };
+  });
 }

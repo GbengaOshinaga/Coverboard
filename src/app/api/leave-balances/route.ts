@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { leaveYearForOrg } from "@/lib/leave-year-server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getUserLeaveBalances } from "@/lib/leave-balances";
@@ -36,7 +37,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Team member not found" }, { status: 404 });
     }
   }
-  const balanceYear = year ? parseInt(year) : new Date().getFullYear();
+  // A leave year (the year it starts in); the team's current one by default.
+  const balanceYear = year ? parseInt(year) : await leaveYearForOrg(sessionUser.organizationId as string);
 
   try {
     const balances = await getUserLeaveBalances(userId, balanceYear);

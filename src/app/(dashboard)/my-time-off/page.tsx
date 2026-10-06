@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Plus, CalendarHeart, CalendarDays } from "lucide-react";
 import { requireActiveSession } from "@/lib/require-active-session";
+import { leaveYearForOrg } from "@/lib/leave-year-server";
 import { prisma } from "@/lib/prisma";
 import { getUserLeaveBalances } from "@/lib/leave-balances";
 import { LeaveBalances } from "@/components/dashboard/leave-balances";
@@ -20,7 +21,8 @@ export default async function MyTimeOffPage() {
 
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
-  const year = startOfToday.getFullYear();
+  // Their team's current leave year (e.g. 2026/27 for an April start).
+  const year = await leaveYearForOrg(orgId);
 
   const [balances, rawRequests, userRow, orgRow] = await Promise.all([
     getUserLeaveBalances(userId, year),

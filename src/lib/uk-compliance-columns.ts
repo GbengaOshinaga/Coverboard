@@ -103,6 +103,8 @@ export type RightToWorkRow = {
 
 export type UkComplianceReport = {
   workforce: { uk: number; total: number };
+  /** The team's current leave year (src/lib/leave-year.ts), for labels and the rollover. */
+  leaveYear: { year: number; label: string; start: string; end: string; rolloverYear: number };
   holidayUsage: HolidayUsageRow[];
   absenceTrigger: { threshold: number; rows: BradfordRow[] };
   sspLiability: SspLiabilityRow[];
