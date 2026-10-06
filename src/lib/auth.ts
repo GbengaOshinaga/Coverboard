@@ -75,7 +75,8 @@ export const authOptions: NextAuthOptions = {
           include: { organization: true },
         });
 
-        if (!user) {
+        // People who've left the team can't sign in.
+        if (!user || !user.isActive) {
           return null;
         }
 
@@ -130,8 +131,12 @@ export const authOptions: NextAuthOptions = {
       // team, after which their account exists.
       const dbUser = await prisma.user.findUnique({
         where: { email },
-        select: { id: true, emailVerified: true },
+        select: { id: true, emailVerified: true, isActive: true },
       });
+      // People who've left the team can't sign in.
+      if (dbUser && !dbUser.isActive) {
+        return "/login?error=AccessDenied";
+      }
       if (dbUser && !dbUser.emailVerified) {
         await prisma.user.update({
           where: { id: dbUser.id },

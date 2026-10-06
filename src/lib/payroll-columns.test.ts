@@ -18,6 +18,7 @@ const base: PayrollRow = {
   startDate: "2026-10-19T00:00:00.000Z",
   endDate: "2026-10-30T00:00:00.000Z",
   daysTaken: 6,
+  calendarDays: 12,
   hoursTaken: null,
   hourlyRate: null,
   dailyHolidayPayRate: 130,
@@ -35,9 +36,9 @@ test("payroll export headers are fixed (change them here on purpose)", () => {
   assert.deepEqual(PAYROLL_EXPORT_COLUMNS.map((c) => c.header), [
     "Leave request ID", "Employee ID", "Employee", "Email", "Department", "Work country",
     "Employment type", "Leave type", "Category", "Paid", "Start date", "End date",
-    "Days taken", "Hours taken", "Daily holiday pay rate (£)", "Hourly holiday pay rate (£)",
+    "Working days taken", "Calendar days", "Hours taken", "Daily holiday pay rate (£)", "Hourly holiday pay rate (£)",
     "Estimated holiday pay (£)", "Rate source", "SSP days", "SSP daily rate (£, 4 d.p. per HMRC tables)", "SSP pay (£)", "SSP rate basis",
-    "SPP weekly rate (£)", "SPP pay (£)", "SPP basis", "SMP phase", "SMP weekly rate (£)",
+    "SPP weekly rate (£)", "SPP pay (£)", "SPP basis", "SMP phase", "SMP weekly rate (£)", "SMP days", "SMP pay (£)",
     "SMP average weekly earnings (£)", "Neonatal weeks", "Neonatal weekly rate (£)",
     "Neonatal estimated pay (£)",
   ]);
@@ -47,7 +48,7 @@ test("UK holiday row: plain dates, Yes/No, money to 2 decimal places", () => {
   const [, row] = csvLines([base]);
   assert.equal(
     row,
-    "lr_1,u_1,Brian Lee,brian@example.com,,GB,PART_TIME,Annual Leave,STATUTORY,Yes,2026-10-19,2026-10-30,6,,130.00,,780.00,captured_at_booking,,,,,,,,,,,,,"
+    "lr_1,u_1,Brian Lee,brian@example.com,,GB,PART_TIME,Annual Leave,STATUTORY,Yes,2026-10-19,2026-10-30,6,12,,130.00,,780.00,captured_at_booking,,,,,,,,,,,,,,,"
   );
 });
 
@@ -61,8 +62,10 @@ test("maternity row carries SMP into its own columns", () => {
       rateSource: "not_applicable",
       smp: {
         phase: "phase_1",
-        label: "Phase 1 (90% AWE)",
+        label: "First 6 weeks (90%)",
         weeklyRate: 405,
+        daysInPeriod: 28,
+        pay: 1620,
         averageWeeklyEarnings: 450,
         phase1EndDate: "2026-11-30T00:00:00.000Z",
         phase2EndDate: "2027-08-23T00:00:00.000Z",
@@ -71,14 +74,14 @@ test("maternity row carries SMP into its own columns", () => {
       },
     },
   ]);
-  assert.ok(row.endsWith(",not_applicable,,,,,,,,Phase 1 (90% AWE),405.00,450.00,,,"), row);
+  assert.ok(row.endsWith(",not_applicable,,,,,,,,First 6 weeks (90%),405.00,28,1620.00,450.00,,,"), row);
 });
 
 test("non-UK row leaves the UK pay columns empty", () => {
   const { dailyHolidayPayRate: _d, estimatedPay: _e, rateSource: _r, ...rest } = base;
   const [, row] = csvLines([{ ...rest, workCountry: "NG" }]);
   assert.ok(row.includes(",NG,"));
-  assert.ok(row.endsWith(",6,,,,,,,,,,,,,,,,,,"), row);
+  assert.ok(row.endsWith(",6,12" + ",".repeat(20)), row); // 20 empty columns after "Calendar days"
 });
 
 test("Excel export has the same headers and numeric money cells", async () => {
@@ -113,7 +116,7 @@ test("SSP row: Brian's 6 days at HMRC's 4-decimal rate, paid £246.50", () => {
   ]);
   assert.ok(
     row.endsWith(
-      ",not_applicable,6,41.0833,246.50,Flat rate of £123.25 a week (80% of £480.00 average weekly earnings is more),,,,,,,,,"
+      ",not_applicable,6,41.0833,246.50,Flat rate of £123.25 a week (80% of £480.00 average weekly earnings is more),,,,,,,,,,,"
     ),
     row
   );

@@ -59,6 +59,8 @@ export async function GET() {
         organizationId: orgId,
         id: { not: userId },
         role: { in: ["ADMIN", "MANAGER"] },
+        // People who've left don't approve or get alerts.
+        isActive: true,
       },
     }),
   ]);
@@ -129,7 +131,9 @@ export async function PATCH(request: Request) {
   ) {
     const now = new Date();
     const liveYears = await prisma.leaveCarryOverBalance.findMany({
-      where: { user: { organizationId: orgId }, expiresAt: { gt: now } },
+      // Only the team's own carry-over: sickness and family leave carry-over
+      // expiries are set by law, not by this setting.
+      where: { user: { organizationId: orgId }, reason: "COMPANY_POLICY", expiresAt: { gt: now } },
       select: { leaveYear: true },
       distinct: ["leaveYear"],
     });
@@ -148,6 +152,7 @@ export async function PATCH(request: Request) {
       await prisma.leaveCarryOverBalance.updateMany({
         where: {
           user: { organizationId: orgId },
+          reason: "COMPANY_POLICY",
           leaveYear,
           expiresAt: { gt: now },
         },

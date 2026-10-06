@@ -1,0 +1,45 @@
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { recordAudit, requestAuditContext } from "@/lib/audit";
+import { maxEmployeesForPlan } from "@/lib/plans";
+
+/**
+ * Someone who left comes back: their record (and its history) is reused, so
+ * they can sign in again. Their working pattern and location are set afresh.
+ */
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const u = session.user as Record<string, unknown>;
+  if (u.role !== "ADMIN") {
+    return NextResponse.json({ error: "Only admins can mark someone as rejoined" }, { status: 403 });
+  }
+  const orgId = u.organizationId as string;
+  const { id } = await params;
+
+  const [target, org, activeCount] = await Promise.all([
+    prisma.user.findFirst({ where: { id, organizationId: orgId }, select: { name: true, isActive: true, leftOn: true } }),
+    prisma.organization.findUnique({ where: { id: orgId }, select: { plan: true } }),
+    prisma.user.count({ where: { organizationId: orgId, isActive: true } }),
+  ]);
+  if (!target) return NextResponse.json({ error: "Team member not found" }, { status: 404 });
+  if (target.isActive) return NextResponse.json({ error: `${target.name} is already on the team` }, { status: 409 });
+  const max = org ? maxEmployeesForPlan(org.plan) : Infinity;
+  if (Number.isFinite(max) && activeCount >= max) {
+    return NextResponse.json({ error: "Your plan's team size limit has been reached." }, { status: 403 });
+  }
+
+  await prisma.user.update({ where: { id }, data: { isActive: true, leftOn: null } });
+  recordAudit({
+    organizationId: orgId,
+    action: "team_member.updated",
+    resource: "team_member",
+    resourceId: id,
+    actor: { id: u.id as string, email: session.user.email ?? null, role: u.role as string },
+    metadata: { event: "team_member.rejoined", previouslyLeftOn: target.leftOn?.toISOString().slice(0, 10) ?? null },
+    context: requestAuditContext(request),
+  });
+  return NextResponse.json({ success: true });
+}

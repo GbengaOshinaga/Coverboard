@@ -4,21 +4,18 @@ import { recomputeBradfordScore } from "./bradford";
 import { getUserLeaveBalance } from "@/lib/leave-balances";
 import { countWeekdays } from "@/lib/utils";
 import { notifyNewRequest } from "@/lib/slack-notifications";
-import { emailNewRequest, emailSspCapReached } from "@/lib/email-notifications";
+import { emailNewRequest, emailRequestStatusChange, emailSspCapReached } from "@/lib/email-notifications";
 import { UK_SSP_WEEKLY_RATE } from "@/lib/uk-compliance";
 import { recordAudit, type AuditContext } from "@/lib/audit";
 import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
 import { getDailyHolidayPayRateForUser } from "@/lib/holidayPay";
-import {
-  calculateSMPPhaseDates,
-  calculateSmpEntitlement,
-  getAweForUser,
-  isMaternityLeaveType,
-} from "@/lib/smpCalculator";
+import { isMaternityLeaveType } from "@/lib/smpCalculator";
 import { checkOnBehalf, isSicknessLeaveTypeName, noticeError } from "./rules";
 import { keepingInTouchError } from "@/lib/keeping-in-touch";
 import { uplError } from "@/lib/unpaid-parental";
+import { computeSmpFields } from "@/lib/smp-request";
+import { sicknessOverlapError } from "./sickness-overlap";
 import { computeSspForSpell, type SspInfo } from "./ssp-spell";
 
 /**
@@ -32,6 +29,8 @@ import { computeSspForSpell, type SspInfo } from "./ssp-spell";
 export type CreateLeaveActor = {
   id: string;
   email: string | null;
+  /** Shown to the employee when a manager records leave for them. */
+  name?: string | null;
   role: string;
   plan?: string;
 };
@@ -70,6 +69,11 @@ export type CreateLeaveResult =
       request: Awaited<ReturnType<typeof createRequestRow>>;
       balanceWarning: string | null;
       sspInfo: SspInfo | null;
+      /** Maternity: SMP weekly rates, or why not eligible. */
+      smpInfo:
+        | { eligible: true; phase1Weekly: number; phase2Weekly: number }
+        | { eligible: false; reason: string }
+        | null;
       firstRequest: boolean;
       autoApproved: boolean;
       daysRequested: number;
@@ -146,7 +150,6 @@ export async function createLeaveRequest(
     const check = checkOnBehalf({
       actorRole: actor.role,
       subjectFound: !!subject,
-      leaveTypeName: leaveTypeConfig.name,
     });
     if (!check.ok) return check;
     subjectName = subject!.name;
@@ -155,7 +158,10 @@ export async function createLeaveRequest(
   const kitProblem = keepingInTouchError(leaveTypeConfig.name, { kitDaysUsed, splitDaysUsed });
   if (kitProblem) return { ok: false, status: 400, error: kitProblem };
 
-  const noticeProblem = noticeError(leaveTypeConfig, startDate, new Date());
+  // Notice is between the employee and their manager. Leave a manager records
+  // for someone was arranged with them already (often from earlier notice),
+  // so it isn't held to the notice period at the time it's entered.
+  const noticeProblem = onBehalf ? null : noticeError(leaveTypeConfig, startDate, new Date());
   if (noticeProblem) {
     return { ok: false, status: 400, error: noticeProblem };
   }
@@ -176,6 +182,11 @@ export async function createLeaveRequest(
 
   if (endDate < startDate) {
     return { ok: false, status: 400, error: "End date must be after start date" };
+  }
+
+  if (isSicknessType) {
+    const overlap = await sicknessOverlapError({ userId, startDate, endDate });
+    if (overlap) return { ok: false, status: 409, error: overlap };
   }
 
   // Check leave balance (warn but don't block). For irregular/zero-hours
@@ -277,38 +288,32 @@ export async function createLeaveRequest(
   let smpPhase2WeeklyRate: number | null = null;
   let smpPhase1EndDate: Date | null = null;
   let smpPhase2EndDate: Date | null = null;
+  let smpInfo: Extract<CreateLeaveResult, { ok: true }>["smpInfo"] = null;
   if (isMaternityLeaveType(leaveTypeConfig.name)) {
     try {
-      smpAverageWeeklyEarnings = await getAweForUser(userId, startDate);
-      const smpEmployee = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { serviceStartDate: true },
-      });
-      // Stamp SMP pay rates only when the employee passes BOTH statutory limbs:
-      // the earnings test (AWE ≥ LEL) and — when an expected due date is given —
-      // 26 weeks' continuous service into the qualifying week. Otherwise rates
-      // stay null (Maternity Allowance instead). Maternity LEAVE is a day-one
-      // right, so the dates are recorded regardless of pay eligibility.
-      const smpEntitlement = calculateSmpEntitlement(smpAverageWeeklyEarnings, {
-        serviceStartDate: smpEmployee?.serviceStartDate ?? null,
-        expectedDueDate,
-      });
-      if (smpEntitlement.eligible) {
-        smpPhase1WeeklyRate = smpEntitlement.phase1Weekly;
-        smpPhase2WeeklyRate = smpEntitlement.phase2Weekly;
-      }
-      const phases = calculateSMPPhaseDates(startDate);
-      smpPhase1EndDate = phases.phase1EndDate;
-      smpPhase2EndDate = phases.phase2EndDate;
+      // Earnings from the 8 weeks up to the qualifying week (15 weeks before
+      // the due week), not before the leave starts. Maternity LEAVE is a
+      // day-one right, so the dates are recorded whatever the pay outcome;
+      // rates stay null when not eligible (Maternity Allowance instead).
+      const smp = await computeSmpFields({ userId, startDate, expectedDueDate: expectedDueDate ?? null });
+      smpAverageWeeklyEarnings = smp.fields.smpAverageWeeklyEarnings;
+      smpPhase1WeeklyRate = smp.fields.smpPhase1WeeklyRate;
+      smpPhase2WeeklyRate = smp.fields.smpPhase2WeeklyRate;
+      smpPhase1EndDate = smp.fields.smpPhase1EndDate;
+      smpPhase2EndDate = smp.fields.smpPhase2EndDate;
+      smpInfo = smp.entitlement.eligible
+        ? { eligible: true, phase1Weekly: smp.entitlement.phase1Weekly, phase2Weekly: smp.entitlement.phase2Weekly }
+        : { eligible: false, reason: smp.entitlement.reason };
     } catch (err) {
       console.error("SMP phase calculation failed:", err);
     }
   }
 
   // ── SSP eligibility & 28-week cap ──────────────────────────────────
-  const isSspLeave = leaveTypeConfig.name.includes("SSP");
-  const isSicknessLeave = isSspLeave || leaveTypeConfig.name.includes("Sick");
-  const ssp = isSspLeave
+  // Any sickness absence of a UK worker, whatever the leave type is called
+  // (computeSspForSpell returns null for people who don't work in the UK).
+  const isSicknessLeave = isSicknessType;
+  const ssp = isSicknessLeave
     ? await computeSspForSpell({ userId, startDate, endDate })
     : null;
   const sspInfo: SspInfo | null = ssp?.info ?? null;
@@ -327,6 +332,8 @@ export async function createLeaveRequest(
       organizationId: orgId,
       id: { not: userId },
       role: { in: ["ADMIN", "MANAGER"] },
+      // People who've left don't approve or get alerts.
+      isActive: true,
     },
   });
   // Sickness logged by a manager is a record of fact, not a request to review.
@@ -400,6 +407,21 @@ export async function createLeaveRequest(
       note: note ?? null,
       organizationId: orgId,
     }).catch((err) => console.error("Email notification error:", err));
+  }
+
+  // Planned leave a manager records for someone is news to them in the app:
+  // tell them it's on the system. (Logged sickness isn't — they rang in.)
+  if (onBehalf && !isSicknessType) {
+    emailRequestStatusChange({
+      requesterEmail: leaveRequest.user.email,
+      requesterName: leaveRequest.user.name,
+      status: "APPROVED",
+      leaveTypeName: leaveRequest.leaveType.name,
+      startDate,
+      endDate,
+      reviewerName: actor.name ?? actor.email ?? "Your manager",
+      recorded: true,
+    }).catch((err) => console.error("Recorded leave email error:", err));
   }
 
   const actorMeta = {
@@ -495,6 +517,7 @@ export async function createLeaveRequest(
     request: leaveRequest,
     balanceWarning,
     sspInfo,
+    smpInfo,
     firstRequest,
     autoApproved: autoApprove,
     daysRequested,

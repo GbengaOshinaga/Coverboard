@@ -30,6 +30,8 @@ import { formatEmploymentType } from "@/lib/employment-types";
 import { ActivityLog } from "@/components/team/activity-log";
 import { WorkPatternCard } from "@/components/team/work-pattern-card";
 import { ChildrenCard } from "@/components/team/children";
+import { RightToWorkCard } from "@/components/team/right-to-work-card";
+import { WorkingTimeOptOutCard } from "@/components/team/working-time-opt-out-card";
 import { hasAuditTrail, type AnyPlan } from "@/lib/plans";
 import {
   parseEarningsCsv,
@@ -60,6 +62,13 @@ type EarningsStats = {
 
 type Member = {
   id: string;
+  /** false once they've left (records kept for 6 years). */
+  isActive?: boolean;
+  leftOn?: string | null;
+  workingTimeOptOutFrom?: string | null;
+  /** Days per week taken from their working pattern. */
+  daysFromPattern?: boolean;
+  workingTimeOptOutUntil?: string | null;
   name: string;
   email: string;
   role: string;
@@ -758,6 +767,14 @@ export default function EmployeeProfilePage({
                   {member.role}
                 </Badge>
                 <Badge variant="outline">{member.memberType}</Badge>
+                {member.isActive === false && (
+                  <Badge variant="warning">
+                    Left
+                    {member.leftOn
+                      ? ` ${new Date(member.leftOn).toLocaleDateString("en-GB", { timeZone: "UTC" })}`
+                      : ""}
+                  </Badge>
+                )}
                 <Badge variant="outline">
                   Work country:{" "}
                   {member.workCountry
@@ -772,6 +789,7 @@ export default function EmployeeProfilePage({
                 {formatEmploymentType(member.employmentType)} ·{" "}
                 {member.fte ? fteLabel(member.fte) : `FTE ${member.fteRatio}`} ·{" "}
                 {member.daysWorkedPerWeek} days/week
+                {member.daysFromPattern ? " (from working pattern)" : ""}
               </p>
               {member.bradfordScore > 0 && (
                 <p className="mt-1 text-xs text-gray-400">
@@ -780,7 +798,7 @@ export default function EmployeeProfilePage({
               )}
             </div>
             <div className="flex w-full shrink-0 flex-wrap gap-2 sm:ml-auto sm:w-auto sm:justify-end">
-              {canManage && (sessionUserId === undefined || sessionUserId !== memberId) && (
+              {canManage && member.isActive !== false && (sessionUserId === undefined || sessionUserId !== memberId) && (
                 <Button
                   type="button"
                   variant="outline"
@@ -803,18 +821,43 @@ export default function EmployeeProfilePage({
                   Export data (SAR)
                 </a>
               )}
-              {isAdmin && (sessionUserId === undefined || sessionUserId !== memberId) && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowRemoveMember(true)}
-                  className="inline-flex h-8 items-center gap-1.5 border-red-200 text-red-700 hover:bg-red-50"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Remove from team
-                </Button>
-              )}
+              {isAdmin &&
+                (sessionUserId === undefined || sessionUserId !== memberId) &&
+                (member.isActive === false ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={removeMemberBusy}
+                    onClick={async () => {
+                      setRemoveMemberBusy(true);
+                      const res = await fetch(`/api/team-members/${memberId}/rejoin`, { method: "POST" });
+                      const data = (await res.json().catch(() => ({}))) as { error?: string };
+                      setRemoveMemberBusy(false);
+                      if (!res.ok) {
+                        toast(data.error ?? "Couldn't mark them as rejoined", "error");
+                        return;
+                      }
+                      toast(`${member.name} is back on the team. Set their working pattern again.`, "success");
+                      router.refresh();
+                      window.location.reload();
+                    }}
+                    className="inline-flex h-8 items-center gap-1.5"
+                  >
+                    Mark as rejoined
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowRemoveMember(true)}
+                    className="inline-flex h-8 items-center gap-1.5 border-red-200 text-red-700 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Mark as left
+                  </Button>
+                ))}
             </div>
           </div>
         </CardContent>
@@ -879,14 +922,17 @@ export default function EmployeeProfilePage({
         onClose={() => {
           if (!removeMemberBusy) setShowRemoveMember(false);
         }}
-        title="Remove team member?"
+        title={`Mark ${member.name} as left?`}
       >
         <p className="text-sm text-gray-700">
-          This permanently deletes <strong>{member.name}</strong> ({member.email}) from your
-          workspace. Their leave history and other data tied to this account will be removed.
+          From today, <strong>{member.name}</strong> can&apos;t sign in and won&apos;t appear on
+          the team or count towards cover. Their working pattern ends, and any leave or cover
+          booked after today is cancelled.
         </p>
-        <p className="mt-2 text-xs text-amber-800">
-          This cannot be undone. Export a SAR first if you need a record of their data.
+        <p className="mt-2 text-xs text-gray-600">
+          Their records are kept: the law requires holiday and holiday pay records for 6 years.
+          They&apos;re removed automatically 6 years after leaving (right-to-work checks after 2).
+          If they come back, mark them as rejoined.
         </p>
         <div className="mt-4 flex justify-end gap-2">
           <Button
@@ -912,7 +958,7 @@ export default function EmployeeProfilePage({
                   toast(data.error ?? "Could not remove member", "error");
                   return;
                 }
-                toast(`${member.name} has been removed from the team.`, "success");
+                toast(`${member.name} has been marked as left. Their records are kept.`, "success");
                 setShowRemoveMember(false);
                 router.push("/team");
               } catch {
@@ -922,12 +968,25 @@ export default function EmployeeProfilePage({
               }
             }}
           >
-            {removeMemberBusy ? "Removing…" : "Remove member"}
+            {removeMemberBusy ? "Saving…" : "Mark as left"}
           </Button>
         </div>
       </Dialog>
 
       <WorkPatternCard memberId={memberId} canManage={canManage} />
+
+      {/* Right-to-work checks (UK, admins and managers) */}
+      {member.workCountry === "GB" && canManage && <RightToWorkCard memberId={memberId} />}
+
+      {/* 48-hour week opt-out (UK, admins and managers) */}
+      {member.workCountry === "GB" && canManage && (
+        <WorkingTimeOptOutCard
+          memberId={memberId}
+          optOutFrom={member.workingTimeOptOutFrom}
+          optOutUntil={member.workingTimeOptOutUntil}
+          onSaved={() => window.location.reload()}
+        />
+      )}
 
       {/* Unpaid parental leave is per child (UK) */}
       {member.workCountry === "GB" && <ChildrenCard memberId={memberId} />}

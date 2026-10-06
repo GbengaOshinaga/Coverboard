@@ -25,17 +25,25 @@ export type PayrollRow = {
   /** ISO timestamps. */
   startDate: string;
   endDate: string;
+  /** Days they'd have worked (their working week), within the period. */
   daysTaken: number;
+  /** Calendar days within the period (weekly pay like SMP/SPP is per calendar day). */
+  calendarDays: number;
   hoursTaken: number | null;
   hourlyRate: number | null;
   /** Holiday pay fields: present for UK-based staff only. */
   dailyHolidayPayRate?: number | null;
   estimatedPay?: number | null;
   rateSource?: PayrollRateSource;
+  /** SMP for the days of this pay period (src/lib/smp-dates.ts smpPayInPeriod). */
   smp: {
     phase: SMPPhase;
     label: string;
+    /** The rate for these days (the 90% rate if any fall in the first 6 weeks). */
     weeklyRate: number | null;
+    daysInPeriod: number;
+    /** null when not eligible. */
+    pay: number | null;
     averageWeeklyEarnings: number | null;
     phase1EndDate: string;
     phase2EndDate: string;
@@ -86,6 +94,7 @@ export type PayrollReport = {
     totalEstimatedPay: number;
     totalSspPay: number;
     totalSppPay: number;
+    totalSmpPay: number;
   };
 };
 
@@ -104,7 +113,8 @@ export const PAYROLL_EXPORT_COLUMNS: ExportColumn<PayrollRow>[] = [
   { key: (r) => (r.isPaid ? "Yes" : "No"), header: "Paid" },
   { key: (r) => day(r.startDate), header: "Start date" },
   { key: (r) => day(r.endDate), header: "End date" },
-  { key: "daysTaken", header: "Days taken" },
+  { key: "daysTaken", header: "Working days taken" },
+  { key: "calendarDays", header: "Calendar days" },
   { key: "hoursTaken", header: "Hours taken" },
   { key: (r) => r.dailyHolidayPayRate ?? null, header: "Daily holiday pay rate (£)", format: "money" },
   { key: "hourlyRate", header: "Hourly holiday pay rate (£)", format: "money" },
@@ -119,6 +129,8 @@ export const PAYROLL_EXPORT_COLUMNS: ExportColumn<PayrollRow>[] = [
   { key: (r) => r.spp?.basis ?? null, header: "SPP basis" },
   { key: (r) => r.smp?.label ?? null, header: "SMP phase" },
   { key: (r) => r.smp?.weeklyRate ?? null, header: "SMP weekly rate (£)", format: "money" },
+  { key: (r) => r.smp?.daysInPeriod ?? null, header: "SMP days" },
+  { key: (r) => r.smp?.pay ?? null, header: "SMP pay (£)", format: "money" },
   { key: (r) => r.smp?.averageWeeklyEarnings ?? null, header: "SMP average weekly earnings (£)", format: "money" },
   { key: (r) => r.neonatal?.weeksTaken ?? null, header: "Neonatal weeks" },
   { key: (r) => r.neonatal?.weeklyRate ?? null, header: "Neonatal weekly rate (£)", format: "money" },

@@ -13,7 +13,7 @@ import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
 import { maxAdminsForPlan, maxEmployeesForPlan } from "@/lib/plans";
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -21,10 +21,14 @@ export async function GET() {
 
   const orgId = (session.user as Record<string, unknown>).organizationId as string;
 
+  // People who've left are kept (6-year holiday records) but listed only
+  // when asked for: ?former=1.
+  const includeFormer = new URL(request.url).searchParams.get("former") === "1";
   const members = await prisma.user.findMany({
-    where: { organizationId: orgId },
+    where: { organizationId: orgId, ...(includeFormer ? {} : { isActive: true }) },
     select: {
       id: true,
+      leftOn: true,
       name: true,
       email: true,
       role: true,
@@ -33,6 +37,8 @@ export async function GET() {
       daysWorkedPerWeek: true,
       fteRatio: true,
       rightToWorkVerified: true,
+      rightToWorkCheckedOn: true,
+      rightToWorkExpiresOn: true,
       department: true,
       countryCode: true,
       workCountry: true,
@@ -100,10 +106,18 @@ export async function POST(request: Request) {
     } = parsed.data;
     const orgId = (session.user as Record<string, unknown>).organizationId as string;
 
-    const existing = await prisma.user.findUnique({ where: { email } });
+    const existing = await prisma.user.findUnique({
+      where: { email },
+      select: { organizationId: true, isActive: true, name: true },
+    });
     if (existing) {
       return NextResponse.json(
-        { error: "A user with this email already exists" },
+        {
+          error:
+            existing.organizationId === orgId && !existing.isActive
+              ? `${existing.name} left the team. Find them under "Show people who've left" and mark them as rejoined.`
+              : "A user with this email already exists",
+        },
         { status: 409 }
       );
     }
@@ -114,7 +128,7 @@ export async function POST(request: Request) {
         select: { plan: true },
       }),
       prisma.user.count({
-        where: { organizationId: orgId, role: "ADMIN" },
+        where: { organizationId: orgId, role: "ADMIN", isActive: true },
       }),
       prisma.user.count({
         where: { organizationId: orgId, isActive: true },

@@ -10,6 +10,8 @@ export default async function NewRequestPage() {
   const { session } = await requireActiveSession();
   const orgId = (session.user as Record<string, unknown>).organizationId as string;
   const currentUserId = (session.user as Record<string, unknown>).id as string;
+  const role = (session.user as Record<string, unknown>).role as string;
+  const canRecordForOthers = role === "ADMIN" || role === "MANAGER";
 
   const leaveTypes = await prisma.leaveType.findMany({
     where: { organizationId: orgId },
@@ -19,9 +21,19 @@ export default async function NewRequestPage() {
       color: true,
       requiresEvidence: true,
       minNoticeDays: true,
+      allowanceUnit: true,
     },
     orderBy: { name: "asc" },
   });
+
+  // Admins and managers can record leave for someone on their team.
+  const teamMembers = canRecordForOthers
+    ? await prisma.user.findMany({
+        where: { organizationId: orgId, isActive: true },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      })
+    : undefined;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -30,7 +42,9 @@ export default async function NewRequestPage() {
           Request time off
         </h1>
         <p className="text-sm text-gray-500">
-          Submit a leave request for your manager to review
+          {canRecordForOthers
+            ? "Book your own leave, or record leave already agreed with someone on your team"
+            : "Submit a leave request for your manager to review"}
         </p>
       </div>
 
@@ -43,7 +57,11 @@ export default async function NewRequestPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <RequestForm leaveTypes={leaveTypes} currentUserId={currentUserId} />
+          <RequestForm
+            leaveTypes={leaveTypes}
+            currentUserId={currentUserId}
+            teamMembers={teamMembers}
+          />
         </CardContent>
       </Card>
     </div>

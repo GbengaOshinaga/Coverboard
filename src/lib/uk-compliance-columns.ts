@@ -1,5 +1,6 @@
 import type { ExcelSheetSpec, ExportColumn } from "@/lib/export-formats";
 import type { SMPPhase } from "@/lib/smpCalculator";
+import type { RightToWorkStatus } from "@/lib/right-to-work";
 
 /**
  * The UK compliance report, defined once. The API builds these rows, serves
@@ -60,6 +61,8 @@ export type ParentalRow = {
   expectedReturnDate: string;
   /** Length of the leave in their working days (2 weeks' paternity = 10 on 5 days). */
   leaveDays: number;
+  /** Length in calendar weeks (to one decimal place). */
+  leaveWeeks: number;
   /**
    * KIT days (maternity/adoption, up to 10) or SPLIT days (shared parental,
    * up to 20); null for leave with neither, e.g. paternity.
@@ -89,6 +92,13 @@ export type RightToWorkRow = {
   department: string | null;
   employmentType: string;
   rightToWorkVerified: boolean | null;
+  /** YYYY-MM-DD; null when never checked. */
+  checkedOn: string | null;
+  /** Time-limited permission ends (YYYY-MM-DD); null = no time limit. */
+  expiresOn: string | null;
+  status: RightToWorkStatus;
+  /** e.g. "Recheck before 3 Dec 2026" (src/lib/right-to-work.ts). */
+  statusLabel: string;
 };
 
 export type UkComplianceReport = {
@@ -186,6 +196,7 @@ export const UK_COMPLIANCE_TABLES = {
       { key: "leaveType", header: "Leave type" },
       { key: (r) => day(r.startDate), header: "Start date" },
       { key: (r) => day(r.expectedReturnDate), header: "Expected return" },
+      { key: "leaveWeeks", header: "Leave (weeks)" },
       { key: "leaveDays", header: "Leave (working days)" },
       // Paternity and other leave have no KIT/SPLIT days: say so, rather than
       // leaving cells blank that read as missing data.
@@ -194,7 +205,9 @@ export const UK_COMPLIANCE_TABLES = {
       { key: (r) => r.keepingInTouch?.allowed ?? NOT_APPLICABLE, header: "KIT/SPLIT days allowed" },
       { key: (r) => r.keepingInTouch?.remaining ?? NOT_APPLICABLE, header: "KIT/SPLIT days remaining" },
       { key: (r) => r.smp?.label ?? null, header: "SMP phase" },
-      { key: (r) => r.smp?.weeklyRate ?? null, header: "SMP weekly rate (£)", format: "money" },
+      // Both rates, even before pay starts ("Not started" is the phase).
+      { key: (r) => r.smp?.phase1WeeklyRate ?? null, header: "SMP first 6 weeks (£ a week)", format: "money" },
+      { key: (r) => r.smp?.phase2WeeklyRate ?? null, header: "SMP weeks 7–39 (£ a week)", format: "money" },
     ],
   }),
   "right-to-work": table<RightToWorkRow>({
@@ -207,10 +220,9 @@ export const UK_COMPLIANCE_TABLES = {
       { key: "email", header: "Email" },
       { key: "department", header: "Department" },
       { key: "employmentType", header: "Employment type" },
-      {
-        key: (r) => (r.rightToWorkVerified === null ? "Unknown" : yesNo(r.rightToWorkVerified)),
-        header: "Right to work checked",
-      },
+      { key: "statusLabel", header: "Right to work" },
+      { key: "checkedOn", header: "Last checked" },
+      { key: (r) => r.expiresOn ?? (r.checkedOn && r.rightToWorkVerified ? "No time limit" : null), header: "Permission until" },
     ],
   }),
 };

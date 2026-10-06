@@ -124,6 +124,11 @@ function makePrisma(data: FakeData): {
         return (data.children ?? []) as never;
       },
     },
+    rightToWorkCheck: {
+      async findMany() {
+        return [] as never;
+      },
+    },
   };
   return { prisma, capturedAuditWhere: captured };
 }

@@ -119,7 +119,7 @@ export async function POST(request: Request) {
       select: { plan: true },
     }),
     prisma.user.count({
-      where: { organizationId: orgId, role: "ADMIN" },
+      where: { organizationId: orgId, role: "ADMIN", isActive: true },
     }),
     prisma.user.count({
       where: { organizationId: orgId, isActive: true },

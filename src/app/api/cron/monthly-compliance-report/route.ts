@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { rightToWorkAtRiskWhere } from "@/lib/right-to-work";
 import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email";
 import { monthlyComplianceReportEmail } from "@/lib/email-templates";
@@ -123,9 +124,8 @@ async function runMonthlyReport(now: Date): Promise<{
           organizationId: org.id,
           isActive: true,
           workCountry: "GB",
-          // null means "not yet reviewed"; false means "explicitly not
-          // verified". Both belong in the unverified bucket for the email.
-          OR: [{ rightToWorkVerified: null }, { rightToWorkVerified: false }],
+          // Not checked, failed, or time-limited permission expired.
+          ...rightToWorkAtRiskWhere(),
         },
         select: { id: true, name: true },
       }),
@@ -133,6 +133,8 @@ async function runMonthlyReport(now: Date): Promise<{
         where: {
           organizationId: org.id,
           role: { in: ["ADMIN", "MANAGER"] },
+          // People who've left don't approve or get alerts.
+          isActive: true,
         },
         select: { name: true, email: true },
       }),

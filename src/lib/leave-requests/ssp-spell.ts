@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { SICKNESS_LEAVE_TYPE, sspAppliesTo } from "@/lib/ssp-scope";
 import { getWorkingWeek } from "@/lib/working-week-server";
 import {
   SSP_MAX_WEEKS,
@@ -44,7 +45,7 @@ export type SspSpellResult = {
  * towards linking or the cap.
  */
 /**
- * The earlier SSP absences linked to one starting on `startDate` (each within
+ * The earlier sickness absences linked to one starting on `startDate` (each within
  * 56 days of the next; a linked period can last up to 3 years) and the SSP
  * days already paid across them. Rejected and cancelled requests never
  * happened, so they don't count.
@@ -55,7 +56,7 @@ export async function priorLinkedSsp(userId: string, startDate: Date) {
   const priorSsp = await prisma.leaveRequest.findMany({
     where: {
       userId,
-      leaveType: { name: { contains: "SSP" } },
+      leaveType: SICKNESS_LEAVE_TYPE,
       status: { notIn: ["REJECTED", "CANCELLED"] },
       endDate: { gte: lookbackFloor, lt: startDate },
     },
@@ -124,9 +125,11 @@ export async function computeSspForSpell(input: {
     select: {
       name: true,
       organizationId: true,
+      workCountry: true,
     },
   });
-  if (!employee) return null;
+  // SSP is a UK duty: no SSP for people who work elsewhere.
+  if (!employee || !sspAppliesTo(employee.workCountry)) return null;
 
   const chain = await priorLinkedSsp(userId, startDate);
   const cumulativePrior = chain.daysPaid;
@@ -224,7 +227,7 @@ async function recomputeSspSpells(userId: string, where: object): Promise<number
   const spells = await prisma.leaveRequest.findMany({
     where: {
       userId,
-      leaveType: { name: { contains: "SSP" } },
+      leaveType: SICKNESS_LEAVE_TYPE,
       status: { notIn: ["REJECTED", "CANCELLED"] },
       ...where,
     },

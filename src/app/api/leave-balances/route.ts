@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getUserLeaveBalances } from "@/lib/leave-balances";
@@ -25,6 +26,16 @@ export async function GET(request: Request) {
   }
 
   const userId = targetUserId ?? currentUserId;
+  // Only people in your own team.
+  if (targetUserId && targetUserId !== currentUserId) {
+    const member = await prisma.user.findFirst({
+      where: { id: targetUserId, organizationId: sessionUser.organizationId as string },
+      select: { id: true },
+    });
+    if (!member) {
+      return NextResponse.json({ error: "Team member not found" }, { status: 404 });
+    }
+  }
   const balanceYear = year ? parseInt(year) : new Date().getFullYear();
 
   try {

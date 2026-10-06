@@ -92,13 +92,6 @@ export function MemberForm({
       ? initialData.serviceStartDate.slice(0, 10)
       : ""
   );
-  const [rightToWorkVerified, setRightToWorkVerified] = useState<string>(
-    initialData?.rightToWorkVerified === null || initialData?.rightToWorkVerified === undefined
-      ? "unknown"
-      : initialData.rightToWorkVerified
-        ? "yes"
-        : "no"
-  );
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -118,10 +111,9 @@ export function MemberForm({
         daysWorkedPerWeek:
           employmentType === "ZERO_HOURS" ? 0 : parseFloat(daysWorkedPerWeek),
         fteRatio: parseFloat(fteRatio),
-        rightToWorkVerified:
-          rightToWorkVerified === "unknown"
-            ? null
-            : rightToWorkVerified === "yes",
+        // Right to work comes from checks recorded on their profile, not
+        // this form: keep whatever is on record.
+        rightToWorkVerified: initialData?.rightToWorkVerified ?? null,
         department: department.trim() || undefined,
         countryCode,
         workCountry,
@@ -264,17 +256,12 @@ export function MemberForm({
         />
       )}
 
-      <Select
-        id="rightToWorkVerified"
-        label="Right to work verified"
-        options={[
-          { value: "unknown", label: "Unknown" },
-          { value: "yes", label: "Verified" },
-          { value: "no", label: "Not verified" },
-        ]}
-        value={rightToWorkVerified}
-        onChange={(e) => setRightToWorkVerified(e.target.value)}
-      />
+      {workCountry === "GB" && (
+        <p className="text-xs text-gray-500">
+          Right to work: record checks on their profile, with the date and when
+          any time-limited permission ends.
+        </p>
+      )}
 
       <div className="flex flex-wrap items-center gap-2 pt-2 sm:gap-3">
         <Button type="submit" disabled={loading}>

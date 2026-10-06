@@ -8,6 +8,7 @@ import { CoverageWarning } from "./coverage-warning";
 import { RegionalCoverPanel } from "./regional-cover-panel";
 import { RegionalCoverWarning } from "./regional-cover-warning";
 import { FitNoteSection, type FitNoteRow } from "./fit-note-section";
+import { SmpSummary } from "./smp-summary";
 import { formatDateRange, countWeekdays } from "@/lib/utils";
 import { Check, X, ChevronDown, ChevronRight, CalendarClock } from "lucide-react";
 import { isSicknessLeaveTypeName } from "@/lib/leave-requests/rules";
@@ -44,6 +45,16 @@ type LeaveRequest = {
   };
   reviewedBy: { id?: string; name: string } | null;
   fitNotes?: FitNoteRow[];
+  /** Days they'd have worked (from the API, on their working week). */
+  workingDays?: number;
+  /** Maternity: stored SMP (recalculated when earnings change). */
+  expectedDueDate?: string | null;
+  smpAverageWeeklyEarnings?: string | number | null;
+  smpPhase1WeeklyRate?: string | number | null;
+  smpPhase2WeeklyRate?: string | number | null;
+  smpPhase1EndDate?: string | null;
+  smpPhase2EndDate?: string | null;
+  smpEarningsWeeks?: number;
 };
 
 const statusVariant: Record<string, "success" | "warning" | "error" | "default"> = {
@@ -71,10 +82,9 @@ export function RequestCard({
   onUpdated?: () => void;
   balance?: LeaveBalance | null;
 }) {
-  const days = countWeekdays(
-    new Date(request.startDate),
-    new Date(request.endDate)
-  );
+  // Their working days, worked out by the API on their working week.
+  const days =
+    request.workingDays ?? countWeekdays(new Date(request.startDate), new Date(request.endDate));
 
   const [showCover, setShowCover] = useState(false);
   const [editingEnd, setEditingEnd] = useState(false);
@@ -305,10 +315,14 @@ export function RequestCard({
           </div>
           <p className="mt-1.5 text-xs text-gray-500">
             Off longer, or back early? This keeps it as one absence
-            {request.leaveType.name.includes("SSP") ? ", and SSP is recalculated" : ""}.
+            {isSicknessLeaveTypeName(request.leaveType.name) ? ", and SSP is recalculated" : ""}.
           </p>
           {endError && <p className="mt-1.5 text-xs text-red-700">{endError}</p>}
         </div>
+      )}
+
+      {/maternity/i.test(request.leaveType.name) && request.status !== "CANCELLED" && request.status !== "REJECTED" && (
+        <SmpSummary request={request} />
       )}
 
       {canChangeEnd && request.status === "APPROVED" && (

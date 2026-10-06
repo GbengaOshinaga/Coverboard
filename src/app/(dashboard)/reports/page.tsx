@@ -31,6 +31,9 @@ import {
 } from "lucide-react";
 import type { PayrollReport } from "@/lib/payroll-columns";
 import type { Fte } from "@/lib/fte";
+import { WorkingTimeSection } from "@/components/reports/working-time-section";
+import { rightToWorkAtRisk } from "@/lib/right-to-work";
+import { CARRY_OVER_REASON_LABEL, type CarryOverReason } from "@/lib/carry-over";
 import {
   peopleOnSspToday,
   sspStarted,
@@ -62,19 +65,23 @@ type VariableHoursUser = {
 
 type UKReport = UkComplianceReport;
 
-type ActiveTab =
-  | "operations"
-  | "analytics"
-  | "bradford"
-  | "absence-trends"
-  | "regional-cover"
-  | "right-to-work"
-  | "weekly-hours"
-  | "holiday-usage"
-  | "ssp"
-  | "parental"
-  | "payroll"
-  | "year-end";
+const REPORT_TABS = [
+  "operations",
+  "analytics",
+  "bradford",
+  "absence-trends",
+  "regional-cover",
+  "right-to-work",
+  "weekly-hours",
+  "working-time",
+  "holiday-usage",
+  "ssp",
+  "parental",
+  "payroll",
+  "year-end",
+] as const;
+
+type ActiveTab = (typeof REPORT_TABS)[number];
 
 type Analytics = {
   year: number;
@@ -99,7 +106,16 @@ type RolloverPreviewRow = {
   leaveTypeName: string;
   unusedDays: number;
   daysCarried: number;
-  unit?: "days" | "hours";
+  unit: "days" | "hours";
+  sicknessDays: number;
+  familyLeaveDays: number;
+  statutoryExcluded: boolean;
+  rows: Array<{
+    reason: CarryOverReason;
+    carried: number;
+    expiresAt: string;
+    source: "brought_forward" | "this_year";
+  }>;
 };
 
 /** Monday (YYYY-MM-DD) of the week containing a YYYY-MM-DD date. */
@@ -137,6 +153,12 @@ export default function ReportsPage() {
   );
   const [threshold, setThreshold] = useState(200);
 
+  // Links from emails open a tab directly, e.g. /reports?tab=right-to-work.
+  useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    if (tab && (REPORT_TABS as readonly string[]).includes(tab)) setActiveTab(tab as ActiveTab);
+  }, []);
+
   const [variableUsers, setVariableUsers] = useState<VariableHoursUser[]>([]);
   // Accepted cover hours per week (Monday YYYY-MM-DD) for the selected person.
   // Shown beside logged hours, never added automatically: logged hours usually
@@ -159,13 +181,18 @@ export default function ReportsPage() {
   const [payrollReport, setPayrollReport] = useState<PayrollReport | null>(null);
   const [payrollLoading, setPayrollLoading] = useState(false);
 
-  const [rolloverYear, setRolloverYear] = useState(
-    new Date().getFullYear() - 1
-  );
+  // The year end to process: last year until mid-year, then this year (so in
+  // October it's the coming 31 December, not one that's long gone).
+  const [rolloverYear, setRolloverYear] = useState(() => {
+    const now = new Date();
+    return now.getMonth() < 6 ? now.getFullYear() - 1 : now.getFullYear();
+  });
   const [rolloverPreview, setRolloverPreview] = useState<
     RolloverPreviewRow[] | null
   >(null);
   const [rolloverProcessing, setRolloverProcessing] = useState(false);
+  // People whose sickness or family leave didn't stop them taking holiday.
+  const [rolloverExcluded, setRolloverExcluded] = useState<Set<string>>(new Set());
 
   const { toast } = useToast();
 
@@ -261,7 +288,11 @@ export default function ReportsPage() {
       const res = await fetch("/api/carry-over/process", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fromYear: rolloverYear, dryRun }),
+        body: JSON.stringify({
+          fromYear: rolloverYear,
+          dryRun,
+          excludeStatutory: [...rolloverExcluded],
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -430,6 +461,7 @@ export default function ReportsPage() {
       },
       { id: "right-to-work", label: "Right to work", requiresUk: true },
       { id: "weekly-hours", label: "Weekly hours" },
+      { id: "working-time", label: "Working time", requiresUk: true },
       { id: "holiday-usage", label: "Holiday usage", requiresUk: true },
       { id: "ssp", label: "SSP liability", requiresUk: true },
       { id: "parental", label: "Parental leave", requiresUk: true },
@@ -467,9 +499,8 @@ export default function ReportsPage() {
   const flaggedCount = bradfordRows.filter((r) => r.flagged).length;
 
   const rtwRows = report?.rightToWork ?? [];
-  const rtwUnverified = rtwRows.filter(
-    (r) => r.rightToWorkVerified !== true
-  ).length;
+  // No valid check on record: not checked, failed, or permission expired.
+  const rtwUnverified = rtwRows.filter((r) => rightToWorkAtRisk(r.status)).length;
 
   return (
     <div className="space-y-6">
@@ -728,6 +759,9 @@ export default function ReportsPage() {
           {/* Regional cover (Scale+) */}
           {activeTab === "regional-cover" && <RegionalCoverSection />}
 
+          {/* Working time: 48-hour average, opt-outs, rest */}
+          {activeTab === "working-time" && <WorkingTimeSection />}
+
           {/* Right to work */}
           {activeTab === "right-to-work" && (
             <Card>
@@ -736,12 +770,12 @@ export default function ReportsPage() {
                   <CardHeaderIntro>
                     <CardTitle>Right to work verification</CardTitle>
                     <CardDescription>
-                      Compliance status for all UK employees. Unverified
-                      employees are flagged.
+                      Every UK employee&apos;s latest check. Time-limited
+                      permission has to be checked again before it expires;
+                      rechecks due within 60 days are flagged. Record checks
+                      on each person&apos;s profile.
                       {rtwRows.some(
-                        (r) =>
-                          r.employmentType === "ZERO_HOURS" &&
-                          r.rightToWorkVerified !== true
+                        (r) => r.employmentType === "ZERO_HOURS" && rightToWorkAtRisk(r.status)
                       )
                         ? " Right to work verification is especially important for zero-hours and bank staff."
                         : ""}
@@ -771,7 +805,7 @@ export default function ReportsPage() {
                         <tr className="border-b border-gray-100 text-left text-xs font-medium uppercase text-gray-500">
                           <th className="pb-2 pr-4">Employee</th>
                           <th className="pb-2 pr-4">Email</th>
-                          <th className="pb-2 pr-4">Department</th>
+                          <th className="pb-2 pr-4">Last checked</th>
                           <th className="pb-2">Status</th>
                         </tr>
                       </thead>
@@ -788,16 +822,24 @@ export default function ReportsPage() {
                               {row.email}
                             </td>
                             <td className="py-2.5 pr-4 text-gray-600">
-                              {row.department ?? "—"}
+                              {row.checkedOn
+                                ? new Date(`${row.checkedOn}T00:00:00Z`).toLocaleDateString("en-GB", { timeZone: "UTC" })
+                                : "—"}
                             </td>
                             <td className="py-2.5">
-                              {row.rightToWorkVerified === true ? (
-                                <Badge variant="success">Verified</Badge>
-                              ) : row.rightToWorkVerified === false ? (
-                                <Badge variant="error">Not verified</Badge>
-                              ) : (
-                                <Badge variant="outline">Unknown</Badge>
-                              )}
+                              <Badge
+                                variant={
+                                  row.status === "checked"
+                                    ? "success"
+                                    : row.status === "recheck_due"
+                                      ? "warning"
+                                      : row.status === "not_checked"
+                                        ? "outline"
+                                        : "error"
+                                }
+                              >
+                                {row.statusLabel}
+                              </Badge>
                             </td>
                           </tr>
                         ))}
@@ -945,6 +987,9 @@ export default function ReportsPage() {
                     <CardTitle>Holiday usage</CardTitle>
                     <CardDescription>
                       Annual leave days taken per UK employee this year.
+                      Holiday records are kept for at least 6 years, including
+                      for people who&apos;ve left; the payroll export covers any
+                      dates you need.
                     </CardDescription>
                     {ukOnlyNote && (
                       <p className="text-xs text-gray-500">{ukOnlyNote}</p>
@@ -1147,7 +1192,7 @@ export default function ReportsPage() {
                           <th className="pb-2 pr-4">Employee</th>
                           <th className="pb-2 pr-4">Leave type</th>
                           <th className="pb-2 pr-4">Expected return</th>
-                          <th className="pb-2 pr-4 text-right">Leave (working days)</th>
+                          <th className="pb-2 pr-4 text-right">Leave</th>
                           <th className="pb-2 text-right">KIT/SPLIT used</th>
                           <th className="pb-2 text-right">Remaining</th>
                           <th className="pb-2 text-right">Allowed</th>
@@ -1164,14 +1209,23 @@ export default function ReportsPage() {
                             </td>
                             <td className="py-2.5 pr-4 text-gray-600">
                               {row.leaveType}
+                              {row.smp && row.smp.phase1WeeklyRate !== null && (
+                                <span className="block text-[11px] text-gray-500">
+                                  SMP £{row.smp.phase1WeeklyRate.toFixed(2)} a week for 6 weeks, then £
+                                  {row.smp.phase2WeeklyRate?.toFixed(2)} · {row.smp.label}
+                                </span>
+                              )}
                             </td>
                             <td className="py-2.5 pr-4 text-gray-600">
                               {new Date(
                                 row.expectedReturnDate
                               ).toLocaleDateString("en-GB")}
                             </td>
-                            <td className="py-2.5 pr-4 text-right font-mono text-gray-600">
-                              {row.leaveDays}
+                            <td className="py-2.5 pr-4 text-right text-gray-600">
+                              {row.leaveWeeks} week{row.leaveWeeks === 1 ? "" : "s"}
+                              <span className="block text-[11px] text-gray-500">
+                                {row.leaveDays} of their working days
+                              </span>
                             </td>
                             {row.keepingInTouch ? (
                               <>
@@ -1600,13 +1654,19 @@ export default function ReportsPage() {
                     <div className="rounded-md border border-gray-100 bg-gray-50 p-3">
                       <p className="text-xs text-gray-500">Statutory pay (£)</p>
                       <p className="text-lg font-semibold text-gray-900">
-                        {(payrollReport.totals.totalSspPay + payrollReport.totals.totalSppPay).toLocaleString("en-GB", {
+                        {(
+                          payrollReport.totals.totalSspPay +
+                          payrollReport.totals.totalSppPay +
+                          payrollReport.totals.totalSmpPay
+                        ).toLocaleString("en-GB", {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
                         })}
                       </p>
                       <p className="text-[11px] text-gray-500">
-                        SSP £{payrollReport.totals.totalSspPay.toFixed(2)} · SPP £{payrollReport.totals.totalSppPay.toFixed(2)}
+                        SSP £{payrollReport.totals.totalSspPay.toFixed(2)} · SPP £
+                        {payrollReport.totals.totalSppPay.toFixed(2)} · SMP £
+                        {payrollReport.totals.totalSmpPay.toFixed(2)}
                       </p>
                     </div>
                   </div>
@@ -1627,7 +1687,8 @@ export default function ReportsPage() {
                           <th className="pb-2 pr-4">Employee</th>
                           <th className="pb-2 pr-4">Leave type</th>
                           <th className="pb-2 pr-4">Dates</th>
-                          <th className="pb-2 pr-4 text-right">Taken</th>
+                          <th className="pb-2 pr-4 text-right" title="Days they'd have worked">Working days</th>
+                          <th className="pb-2 pr-4 text-right">Calendar days</th>
                           <th className="pb-2 pr-4 text-right">Rate</th>
                           <th className="pb-2 pr-4 text-right">Est. pay</th>
                           <th className="pb-2">Source</th>
@@ -1669,8 +1730,13 @@ export default function ReportsPage() {
                                 ? `${row.hoursTaken} hrs`
                                 : row.daysTaken}
                             </td>
+                            <td className="py-2 pr-4 text-right text-gray-500">{row.calendarDays}</td>
                             <td className="py-2 pr-4 text-right text-gray-700">
-                              {row.spp
+                              {row.smp
+                                ? row.smp.weeklyRate == null
+                                  ? "—"
+                                  : `£${row.smp.weeklyRate.toFixed(2)}/wk SMP`
+                                : row.spp
                                 ? row.spp.weeklyRate == null
                                   ? "—"
                                   : `£${row.spp.weeklyRate.toFixed(2)}/wk SPP`
@@ -1687,7 +1753,11 @@ export default function ReportsPage() {
                                     : `£${row.dailyHolidayPayRate.toFixed(2)}`}
                             </td>
                             <td className="py-2 pr-4 text-right font-medium text-gray-900">
-                              {row.spp
+                              {row.smp
+                                ? row.smp.pay == null
+                                  ? "—"
+                                  : `£${row.smp.pay.toFixed(2)}`
+                                : row.spp
                                 ? row.spp.pay == null
                                   ? "—"
                                   : `£${row.spp.pay.toFixed(2)}`
@@ -1698,6 +1768,11 @@ export default function ReportsPage() {
                                 : row.estimatedPay == null
                                   ? "—"
                                   : `£${row.estimatedPay.toFixed(2)}`}
+                              {row.smp && (
+                                <div className="max-w-56 text-[11px] font-normal text-gray-500">
+                                  {row.smp.daysInPeriod} days of SMP · {row.smp.label}
+                                </div>
+                              )}
                               {row.spp && (
                                 <div className="max-w-56 text-[11px] font-normal text-gray-500">
                                   {row.spp.weeklyRate == null
@@ -1745,11 +1820,34 @@ export default function ReportsPage() {
                   Year-end carry-over rollover
                 </CardTitle>
                 <CardDescription>
-                  Process the end of a UK leave year. For each UK employee,
-                  unused Annual Leave (capped by your carry-over max) is
-                  carried into the next year and expires on the date configured
-                  in Settings.
+                  Process the end of a UK leave year. Unused Annual Leave
+                  carries into the next year:
                 </CardDescription>
+                <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-gray-600">
+                  <li>
+                    <strong>After sickness</strong> — the untaken part of the
+                    4 weeks (all untaken leave for irregular-hours staff), no
+                    more than the days they were off, to use within 18 months
+                    of the year end. Required by law.
+                  </li>
+                  <li>
+                    <strong>After family leave</strong> (maternity, paternity,
+                    adoption, shared parental, bereavement, neonatal) — all the
+                    statutory leave they couldn&apos;t take, including the
+                    extra 1.6 weeks (up to 28 days), into next year. Required by
+                    law.
+                  </li>
+                  <li>
+                    <strong>Company carry-over</strong> — from what&apos;s
+                    left, up to your cap, expiring on the date set in
+                    Settings.
+                  </li>
+                </ul>
+                <p className="mt-1 text-xs text-gray-500">
+                  The law covers leave people couldn&apos;t take because they
+                  were off. Untick anyone whose absence didn&apos;t stop them
+                  taking it, then preview again.
+                </p>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap items-end gap-3">
@@ -1794,35 +1892,98 @@ export default function ReportsPage() {
                       <thead>
                         <tr className="border-b border-gray-100 text-left text-xs font-medium uppercase text-gray-500">
                           <th className="pb-2 pr-4">Employee</th>
-                          <th className="pb-2 pr-4">Email</th>
                           <th className="pb-2 pr-4 text-right">Unused</th>
-                          <th className="pb-2 text-right">Carried</th>
+                          <th className="pb-2 pr-4">Off sick / family leave</th>
+                          <th className="pb-2 pr-4">Carries over</th>
+                          <th className="pb-2 text-right">Total</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {rolloverPreview.map((row) => (
-                          <tr
-                            key={row.userId}
-                            className="border-b border-gray-50"
-                          >
-                            <td className="py-2.5 pr-4 font-medium text-gray-900">
-                              {row.name}
-                            </td>
-                            <td className="py-2.5 pr-4 text-gray-600">
-                              {row.email}
-                            </td>
-                            <td className="py-2.5 pr-4 text-right font-mono text-gray-600">
-                              {row.unusedDays}
-                              {row.unit === "hours" ? "h" : " days"}
-                            </td>
-                            <td className="py-2.5 text-right font-mono font-medium">
-                              {row.daysCarried}
-                              {row.unit === "hours" ? "h" : " days"}
-                            </td>
-                          </tr>
-                        ))}
+                        {rolloverPreview.map((row) => {
+                          const unit = row.unit === "hours" ? "h" : " days";
+                          const off = row.sicknessDays + row.familyLeaveDays > 0;
+                          return (
+                            <tr key={row.userId} className="border-b border-gray-50 align-top">
+                              <td className="py-2.5 pr-4">
+                                <div className="font-medium text-gray-900">{row.name}</div>
+                                <div className="text-[11px] text-gray-500">{row.email}</div>
+                              </td>
+                              <td className="py-2.5 pr-4 text-right font-mono text-gray-600">
+                                {row.unusedDays}
+                                {unit}
+                              </td>
+                              <td className="py-2.5 pr-4 text-xs text-gray-600">
+                                {off ? (
+                                  <label className="flex items-start gap-1.5">
+                                    <input
+                                      type="checkbox"
+                                      className="mt-0.5"
+                                      checked={!rolloverExcluded.has(row.userId)}
+                                      onChange={(e) => {
+                                        const next = new Set(rolloverExcluded);
+                                        if (e.target.checked) next.delete(row.userId);
+                                        else next.add(row.userId);
+                                        setRolloverExcluded(next);
+                                      }}
+                                    />
+                                    <span>
+                                      {row.sicknessDays > 0 &&
+                                        `${row.sicknessDays} day${row.sicknessDays === 1 ? "" : "s"} sick`}
+                                      {row.sicknessDays > 0 && row.familyLeaveDays > 0 && " · "}
+                                      {row.familyLeaveDays > 0 &&
+                                        `${row.familyLeaveDays} day${row.familyLeaveDays === 1 ? "" : "s"} family leave`}
+                                      <span className="block text-gray-400">
+                                        Carry over what they couldn&apos;t take
+                                      </span>
+                                    </span>
+                                  </label>
+                                ) : (
+                                  <span className="text-gray-400">—</span>
+                                )}
+                              </td>
+                              <td className="py-2.5 pr-4 text-xs text-gray-700">
+                                {row.rows.length === 0 ? (
+                                  <span className="text-gray-400">Nothing</span>
+                                ) : (
+                                  <ul className="space-y-0.5">
+                                    {row.rows.map((r, k) => (
+                                      <li key={k}>
+                                        <span className="font-mono">
+                                          {r.carried}
+                                          {unit}
+                                        </span>{" "}
+                                        {CARRY_OVER_REASON_LABEL[r.reason]}
+                                        {r.source === "brought_forward" ? " (brought forward)" : ""}
+                                        <span
+                                          className={
+                                            new Date(r.expiresAt) < new Date() ? "text-red-700" : "text-gray-400"
+                                          }
+                                        >
+                                          {" "}
+                                          · until{" "}
+                                          {new Date(r.expiresAt).toLocaleDateString("en-GB", { timeZone: "UTC" })}
+                                          {new Date(r.expiresAt) < new Date() ? " (already passed: check the year)" : ""}
+                                        </span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </td>
+                              <td className="py-2.5 text-right font-mono font-medium">
+                                {row.daysCarried}
+                                {unit}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
+                    {rolloverExcluded.size > 0 && (
+                      <p className="mt-2 text-xs text-amber-700">
+                        Changed who gets carry-over after an absence? Preview
+                        again before running.
+                      </p>
+                    )}
                   </div>
                 )}
               </CardContent>

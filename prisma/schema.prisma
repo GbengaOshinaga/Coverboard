@@ -129,7 +129,18 @@ model User {
   countryCode               String         @default("NG")
   workCountry               String?
   isActive                  Boolean        @default(true)
+  /// The day they left. Leavers keep their records (holiday records must be
+  /// kept for 6 years) but can't sign in; data retention removes them later.
+  leftOn                    DateTime?      @db.Date
   rightToWorkVerified       Boolean?
+  /// Latest right-to-work check, kept in step with RightToWorkCheck
+  /// (src/lib/right-to-work.ts). Expires on: null = no time limit.
+  rightToWorkCheckedOn      DateTime?      @db.Date
+  rightToWorkExpiresOn      DateTime?      @db.Date
+  /// Written opt-out of the 48-hour average (WTR reg. 5): signed on, and
+  /// until (null = no end date). src/lib/working-time.ts.
+  workingTimeOptOutFrom     DateTime?      @db.Date
+  workingTimeOptOutUntil    DateTime?      @db.Date
   department                String?
   serviceStartDate          DateTime?
   ukParentalLeaveChildCount Int            @default(0)
@@ -151,6 +162,7 @@ model User {
   weeklyHours             UserWeeklyHours[]
   carryOverBalances       LeaveCarryOverBalance[]
   children                Child[]
+  rightToWorkChecks       RightToWorkCheck[]
   weeklyEarnings          WeeklyEarning[]
   regionHistory           UserRegionHistory[]      @relation("UserRegionHistorySubject")
   regionChangesMade       UserRegionHistory[]      @relation("UserRegionHistoryActor")
@@ -402,21 +414,28 @@ model UserWeeklyHours {
 }
 
 model LeaveCarryOverBalance {
-  id            String   @id @default(cuid())
+  id            String          @id @default(cuid())
   userId        String
   leaveTypeId   String
   leaveYear     Int
+  /// Why it carried over; each reason has its own expiry (src/lib/carry-over.ts).
+  reason        CarryOverReason @default(COMPANY_POLICY)
   daysCarried   Float
   daysRemaining Float
   expiresAt     DateTime
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, leaveTypeId, leaveYear])
-  @@index([userId, leaveTypeId])
+  @@index([userId, leaveTypeId, leaveYear])
+}
+
+enum CarryOverReason {
+  COMPANY_POLICY
+  SICKNESS
+  FAMILY_LEAVE
 }
 
 model WeeklyEarning {
@@ -615,4 +634,33 @@ model Child {
   leaveRequests LeaveRequest[]
 
   @@index([userId])
+}
+
+/// A right-to-work check as the Home Office requires it recorded: the date,
+/// how it was done and the outcome. Copies of the documents are kept by the
+/// employer (during employment and 2 years after), not uploaded here.
+model RightToWorkCheck {
+  id             String            @id @default(cuid())
+  userId         String
+  checkedOn      DateTime          @db.Date
+  method         RightToWorkMethod
+  /// e.g. "UK passport", "Share code result", "BRP".
+  documentType   String?
+  /// false: the check found no right to work.
+  hasRightToWork Boolean
+  /// Time-limited permission ends; null = no time limit. Recheck before then.
+  expiresOn      DateTime?         @db.Date
+  notes          String?
+  checkedById    String?
+  createdAt      DateTime          @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, checkedOn])
+}
+
+enum RightToWorkMethod {
+  ONLINE_SHARE_CODE
+  MANUAL_DOCUMENTS
+  IDENTITY_SERVICE_PROVIDER
 }

@@ -105,6 +105,8 @@ export async function emailNewRequest(data: {
     where: {
       organizationId: data.organizationId,
       role: { in: ["ADMIN", "MANAGER"] },
+      // People who've left don't approve or get alerts.
+      isActive: true,
     },
     select: { email: true },
   });
@@ -144,6 +146,8 @@ export async function emailApprovedLeaveCancelled(data: {
     where: {
       organizationId: data.organizationId,
       role: { in: ["ADMIN", "MANAGER"] },
+      // People who've left don't approve or get alerts.
+      isActive: true,
       id: { not: data.cancellerUserId },
     },
     select: { email: true },
@@ -176,10 +180,13 @@ export async function emailRequestStatusChange(data: {
   startDate: Date;
   endDate: Date;
   reviewerName: string;
+  /** A manager recorded the leave for them. */
+  recorded?: boolean;
 }) {
   const daysRequested = countWeekdays(data.startDate, data.endDate);
 
   const { subject, html } = leaveRequestStatusEmail({
+    recorded: data.recorded,
     requesterName: data.requesterName,
     status: data.status,
     leaveTypeName: data.leaveTypeName,
@@ -205,6 +212,8 @@ export async function emailParentalLeaveReturnAlert(data: {
     where: {
       organizationId: data.organizationId,
       role: { in: ["ADMIN", "MANAGER"] },
+      // People who've left don't approve or get alerts.
+      isActive: true,
     },
     select: { email: true },
   });
@@ -273,6 +282,8 @@ export async function emailSspCapReached(data: {
     where: {
       organizationId: data.organizationId,
       role: { in: ["ADMIN", "MANAGER"] },
+      // People who've left don't approve or get alerts.
+      isActive: true,
     },
     select: { email: true },
   });

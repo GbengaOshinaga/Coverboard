@@ -9,6 +9,15 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { AlertTriangle } from "lucide-react";
 
+/** Every leave record with holiday pay, SSP, SMP and SPP, for the last 6 years. */
+function holidayRecordsHref(): string {
+  const to = new Date();
+  const from = new Date(to);
+  from.setFullYear(from.getFullYear() - 6);
+  const day = (d: Date) => d.toISOString().slice(0, 10);
+  return `/api/reports/payroll?format=excel&from=${day(from)}&to=${day(to)}`;
+}
+
 export default function DeleteAccountPage() {
   const router = useRouter();
   const [confirmation, setConfirmation] = useState("");
@@ -69,6 +78,20 @@ export default function DeleteAccountPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="font-semibold">Download your holiday records first</p>
+              <p className="mt-1 text-amber-800">
+                As an employer you must keep records of holiday taken, carried
+                over and holiday pay for 6 years. Deleting your account here
+                doesn&apos;t remove that duty, so keep a copy.
+              </p>
+              <a
+                href={holidayRecordsHref()}
+                className="mt-2 inline-block font-medium text-amber-900 underline hover:no-underline"
+              >
+                Download leave and pay records for the last 6 years (Excel)
+              </a>
+            </div>
             <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-900">
               <p className="font-semibold">What happens next</p>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-red-800">

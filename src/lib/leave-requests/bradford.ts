@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { SICKNESS_LEAVE_TYPE } from "@/lib/ssp-scope";
 import { bradfordForSickness } from "@/lib/sickness-spells";
 
 /**
@@ -11,10 +12,7 @@ export function recomputeBradfordScore(userId: string): void {
     .findMany({
       where: {
         userId,
-        OR: [
-          { leaveType: { name: { contains: "SSP" } } },
-          { leaveType: { name: { contains: "Sick" } } },
-        ],
+        leaveType: SICKNESS_LEAVE_TYPE,
         status: "APPROVED",
       },
       select: { startDate: true, endDate: true },

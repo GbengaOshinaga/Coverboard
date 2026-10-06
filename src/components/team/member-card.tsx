@@ -1,6 +1,7 @@
 "use client";
 
 import { fteLabel, type Fte } from "@/lib/fte";
+import { rightToWorkLabel, rightToWorkStatus } from "@/lib/right-to-work";
 
 import Link from "next/link";
 import { Avatar } from "@/components/ui/avatar";
@@ -20,6 +21,10 @@ type Member = {
   /** Calculated by the API: logged hours for irregular-hours staff. */
   fte?: Fte;
   rightToWorkVerified: boolean | null;
+  rightToWorkCheckedOn?: string | null;
+  rightToWorkExpiresOn?: string | null;
+  isActive?: boolean;
+  leftOn?: string | null;
   department?: string | null;
   countryCode: string;
   workCountry: string | null;
@@ -50,10 +55,12 @@ export function MemberCard({
   onAssignRegion?: (member: Member) => void;
 }) {
   const isOut = member._count?.leaveRequests && member._count.leaveRequests > 0;
-  const needsRightToWork =
-    member.workCountry === "GB" &&
-    (member.rightToWorkVerified === false ||
-      member.rightToWorkVerified === null);
+  // Same rules as reports and the dashboard (src/lib/right-to-work.ts).
+  const rtwStatus = rightToWorkStatus({
+    verified: member.rightToWorkVerified,
+    expiresOn: member.rightToWorkExpiresOn ? new Date(member.rightToWorkExpiresOn) : null,
+  });
+  const needsRightToWork = member.workCountry === "GB" && rtwStatus !== "checked";
   const isZeroHours = member.employmentType === "ZERO_HOURS";
 
   return (
@@ -96,6 +103,15 @@ export function MemberCard({
             ? COUNTRY_NAMES[member.workCountry] ?? member.workCountry
             : "Not set"}
         </p>
+        {member.isActive === false && (
+          <p className="text-xs font-medium text-amber-700">
+            Left
+            {member.leftOn
+              ? ` ${new Date(member.leftOn).toLocaleDateString("en-GB", { timeZone: "UTC" })}`
+              : ""}
+            {" "}· records kept for 6 years
+          </p>
+        )}
         <p className="text-xs text-gray-400 mt-0.5">
           {formatEmploymentType(member.employmentType)} •{" "}
           {member.fte ? fteLabel(member.fte) : `FTE ${member.fteRatio}`}
@@ -108,7 +124,12 @@ export function MemberCard({
                 : "border-amber-200 bg-amber-50 text-amber-700"
             }`}
           >
-            <p>Right to work verification required</p>
+            <p>
+              {rightToWorkLabel(rtwStatus, {
+                expiresOn: member.rightToWorkExpiresOn ? new Date(member.rightToWorkExpiresOn) : null,
+                checkedOn: member.rightToWorkCheckedOn ? new Date(member.rightToWorkCheckedOn) : null,
+              })}
+            </p>
             {isZeroHours && (
               <p className="mt-0.5 font-normal">
                 Right to work verification is especially important for

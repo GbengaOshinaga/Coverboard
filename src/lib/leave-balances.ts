@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { countWorkingDays, prorateForStartDate, resolveWorkingWeek, weekdaysFromPatterns, weeksToWorkingDays } from "@/lib/working-week";
 import { countWeekdays } from "@/lib/utils";
+import { carryOverInEffect, type CarryOverReason } from "@/lib/carry-over";
 import {
   calculateUkProRatedAnnualLeave,
   calculateIrregularHoursAccrual,
@@ -33,12 +34,63 @@ export type LeaveBalance = {
   pending: number;
   remaining: number;
   carryOver: {
+    /** Carried into this year, all kinds. */
     carried: number;
+    /** What carry-over adds to the allowance now (used + still available). */
+    inAllowance: number;
+    /** Still available. */
     remaining: number;
+    /** Soonest expiry of carry-over still available. */
     expiresAt: string | null;
+    /** Some carry-over expired unused. */
     expired: boolean;
+    /** Each kind, soonest expiry first (src/lib/carry-over.ts). */
+    parts: Array<{
+      reason: CarryOverReason;
+      carried: number;
+      used: number;
+      lapsed: number;
+      remaining: number;
+      expiresAt: string | null;
+    }>;
   };
 };
+
+/**
+ * Leave of one type taken (or booked) in a year up to a date, in the
+ * balance's unit: only days they'd have worked, or the hours booked for
+ * irregular-hours staff (split across days when a booking straddles the date).
+ * Shared by balances and the year-end carry-over so they count leave alike.
+ */
+export function leaveTakenBy(
+  requests: ReadonlyArray<{ startDate: Date; endDate: Date; hoursBooked: number | null }>,
+  opts: {
+    yearStart: Date;
+    yearEnd: Date;
+    weekdays: number[] | null;
+    unit: "days" | "hours";
+    avgHoursPerDay: number;
+  }
+): (date: Date | null) => number {
+  return (date) => {
+    let total = 0;
+    for (const req of requests) {
+      const start = req.startDate < opts.yearStart ? opts.yearStart : req.startDate;
+      const end = req.endDate > opts.yearEnd ? opts.yearEnd : req.endDate;
+      const until = date !== null && date < end ? date : end;
+      if (until < start) continue;
+      const days = countWorkingDays(start, end, opts.weekdays);
+      const daysBy = countWorkingDays(start, until, opts.weekdays);
+      if (opts.unit === "hours") {
+        const hours = req.hoursBooked ?? days * opts.avgHoursPerDay;
+        total += days > 0 ? (hours * daysBy) / days : 0;
+      } else {
+        total += daysBy;
+      }
+    }
+    return total;
+  };
+}
 
 /**
  * Adjust an Annual Leave allowance for the org's bank-holiday accounting mode.
@@ -176,6 +228,7 @@ export async function getUserLeaveBalances(
     },
     select: {
       leaveTypeId: true,
+      reason: true,
       daysCarried: true,
       daysRemaining: true,
       expiresAt: true,
@@ -279,44 +332,29 @@ export async function getUserLeaveBalances(
       });
     }
 
-    const carryOver = carryOverBalances.find((c) => c.leaveTypeId === lt.id);
-    // Carry-over only counts toward the allowance until it expires. Once the
-    // expiry date has passed, the leftover days lapse and must not inflate the
-    // allowance (or show as available on the balance page).
-    const carryOverExpired = carryOver?.expiresAt
-      ? carryOver.expiresAt.getTime() < Date.now()
-      : false;
-    const carryOverRemaining = carryOverExpired
-      ? 0
-      : carryOver?.daysRemaining ?? 0;
-    // Carry-over is stored in the balance's own unit (hours for irregular /
-    // zero-hours staff — see carry-over/process), so it adds straight on.
-    allowance += carryOverRemaining;
+    // Carry-over is used before this year's leave, soonest-expiring first;
+    // when it expires only the unused part lapses. Stored in the balance's own
+    // unit (hours for irregular-hours staff), so it adds straight on.
+    const carry = carryOverInEffect(
+      carryOverBalances
+        .filter((c) => c.leaveTypeId === lt.id)
+        .map((c) => ({ reason: c.reason, carried: c.daysCarried, expiresAt: c.expiresAt })),
+      leaveTakenBy(
+        requests.filter((r) => r.leaveTypeId === lt.id),
+        { yearStart, yearEnd, weekdays: workingWeek.weekdays, unit, avgHoursPerDay }
+      ),
+      new Date()
+    );
+    allowance += carry.allowance;
+    const available = carry.parts.filter((p) => p.remaining > 0);
 
-    let used = 0;
-    let pending = 0;
-
-    for (const req of requests) {
-      if (req.leaveTypeId !== lt.id) continue;
-
-      const start = req.startDate < yearStart ? yearStart : req.startDate;
-      const end = req.endDate > yearEnd ? yearEnd : req.endDate;
-      // Only the days they'd have worked come off their balance.
-      const days = countWorkingDays(start, end, workingWeek.weekdays);
-      // Hours-unit balances deduct in hours: the hours stored at booking, or a
-      // fallback of working-days × the worker's average day for legacy rows
-      // (booked before Phase 2) that have no hoursBooked.
-      const amount =
-        unit === "hours"
-          ? req.hoursBooked ?? days * avgHoursPerDay
-          : days;
-
-      if (req.status === "APPROVED") {
-        used += amount;
-      } else {
-        pending += amount;
-      }
-    }
+    // Only the days they'd have worked come off their balance; hours-unit
+    // balances deduct the hours booked (working days × their average day for
+    // older bookings without hours).
+    const countOpts = { yearStart, yearEnd, weekdays: workingWeek.weekdays, unit, avgHoursPerDay };
+    const ofType = requests.filter((r) => r.leaveTypeId === lt.id);
+    const used = leaveTakenBy(ofType.filter((r) => r.status === "APPROVED"), countOpts)(null);
+    const pending = leaveTakenBy(ofType.filter((r) => r.status !== "APPROVED"), countOpts)(null);
 
     return {
       leaveTypeId: lt.id,
@@ -332,10 +370,19 @@ export async function getUserLeaveBalances(
       pending,
       remaining: Math.max(0, allowance - used - pending),
       carryOver: {
-        carried: carryOver?.daysCarried ?? 0,
-        remaining: carryOverRemaining,
-        expiresAt: carryOver?.expiresAt?.toISOString() ?? null,
-        expired: carryOverExpired,
+        carried: carry.parts.reduce((s, p) => s + p.carried, 0),
+        inAllowance: carry.allowance,
+        remaining: available.reduce((s, p) => s + p.remaining, 0),
+        expiresAt: available.find((p) => p.expiresAt)?.expiresAt?.toISOString() ?? null,
+        expired: carry.parts.some((p) => p.lapsed > 0),
+        parts: carry.parts.map((p) => ({
+          reason: p.reason,
+          carried: p.carried,
+          used: p.used,
+          lapsed: p.lapsed,
+          remaining: p.remaining,
+          expiresAt: p.expiresAt?.toISOString() ?? null,
+        })),
       },
     };
   });

@@ -299,6 +299,7 @@ const hrEssentials = [
   "Holiday entitlement",
   "statutory leave & SSP",
   "payroll export",
+  "6-year holiday records",
   "audit trail",
 ];
 

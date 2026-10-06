@@ -12,6 +12,7 @@ import { BalanceIndicator } from "./balance-indicator";
 import { CoverageWarning } from "./coverage-warning";
 import { RegionalCoverWarning } from "./regional-cover-warning";
 import { countWeekdays } from "@/lib/utils";
+import { countWorkingDays } from "@/lib/working-week";
 import { AddChildForm, childName, usageLine, useChildren } from "@/components/team/children";
 
 type LeaveType = {
@@ -20,6 +21,8 @@ type LeaveType = {
   color: string;
   requiresEvidence: boolean;
   minNoticeDays: number;
+  /** WEEKS for statutory family leave (shown in weeks as well as days). */
+  allowanceUnit?: "DAYS" | "WEEKS";
 };
 
 type OverlapData = {
@@ -50,9 +53,25 @@ type LeaveBalance = {
   avgHoursPerDay?: number;
 };
 
-export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveType[]; currentUserId?: string }) {
+export function RequestForm({
+  leaveTypes,
+  currentUserId,
+  teamMembers,
+}: {
+  leaveTypes: LeaveType[];
+  currentUserId?: string;
+  /**
+   * Admins and managers: the team, so they can record leave for someone else
+   * (e.g. maternity leave from a MATB1). Recorded as approved.
+   */
+  teamMembers?: { id: string; name: string }[];
+}) {
   const router = useRouter();
   const { toast } = useToast();
+  // Who the leave is for: themselves, or (managers) someone on their team.
+  const [subjectId, setSubjectId] = useState(currentUserId ?? "");
+  const forSomeoneElse = !!currentUserId && !!subjectId && subjectId !== currentUserId;
+  const subjectName = teamMembers?.find((m) => m.id === subjectId)?.name ?? null;
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [leaveTypeId, setLeaveTypeId] = useState("");
@@ -71,12 +90,13 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
   // Expected due date — maternity only, for the SMP service-test.
   const [expectedDueDate, setExpectedDueDate] = useState("");
 
-  // Fetch the user's leave balances on mount
+  // Balances of whoever the leave is for.
   useEffect(() => {
     async function fetchBalances() {
       setBalanceLoading(true);
       try {
-        const res = await fetch("/api/leave-balances");
+        const qs = forSomeoneElse ? `?userId=${encodeURIComponent(subjectId)}` : "";
+        const res = await fetch(`/api/leave-balances${qs}`);
         if (res.ok) {
           setBalances(await res.json());
         }
@@ -86,7 +106,7 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
       setBalanceLoading(false);
     }
     fetchBalances();
-  }, []);
+  }, [forSomeoneElse, subjectId]);
 
   const selectedLeaveType = useMemo(
     () => leaveTypes.find((lt) => lt.id === leaveTypeId) ?? null,
@@ -116,14 +136,34 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
   // Unpaid parental leave is per child, so the booking names the child.
   const isUnpaidParental = /unpaid parental/i.test(selectedLeaveType?.name ?? "");
   const { children, reload: reloadChildren } = useChildren(
-    isUnpaidParental ? currentUserId : undefined
+    isUnpaidParental ? subjectId || undefined : undefined
   );
   const [childId, setChildId] = useState("");
   const [addingChild, setAddingChild] = useState(false);
 
+  // The days the person would have worked, as their balance counts them
+  // (a 4-day worker's four Mon–Fri weeks are 16 days, not 20).
+  const [workingWeek, setWorkingWeek] = useState<{ weekdays: number[] | null; daysPerWeek: number } | null>(null);
+  useEffect(() => {
+    const qs = forSomeoneElse ? `?userId=${encodeURIComponent(subjectId)}` : "";
+    fetch(`/api/working-week${qs}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setWorkingWeek)
+      .catch(() => setWorkingWeek(null));
+  }, [forSomeoneElse, subjectId]);
+
   const requestedDays = useMemo(() => {
     if (!startDate || !endDate) return 0;
-    return countWeekdays(new Date(startDate), new Date(endDate));
+    const start = new Date(`${startDate}T00:00:00Z`);
+    const end = new Date(`${endDate}T00:00:00Z`);
+    return workingWeek
+      ? countWorkingDays(start, end, workingWeek.weekdays)
+      : countWeekdays(new Date(startDate), new Date(endDate));
+  }, [startDate, endDate, workingWeek]);
+  const calendarWeeks = useMemo(() => {
+    if (!startDate || !endDate) return 0;
+    const days = (Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86_400_000 + 1;
+    return Math.round((days / 7) * 10) / 10;
   }, [startDate, endDate]);
 
   // Hours-based balances (irregular/zero-hours workers): the request deducts
@@ -211,6 +251,7 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
               ? new Date(expectedDueDate).toISOString()
               : undefined,
           childId: isUnpaidParental ? childId || undefined : undefined,
+          onBehalfOfUserId: forSomeoneElse ? subjectId : undefined,
         }),
       });
 
@@ -221,10 +262,21 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
         return;
       }
 
-      if (data.firstRequest) {
+      if (forSomeoneElse) {
+        toast(`Recorded for ${subjectName ?? "them"} as approved. They've been emailed.`, "success");
+      } else if (data.firstRequest) {
         toast(
           "🎉 Your first request is in! You'll hear back once it's reviewed.",
           "success"
+        );
+      }
+      // Maternity: SMP from the earnings in the 8 weeks before.
+      if (data.smpInfo) {
+        toast(
+          data.smpInfo.eligible
+            ? `SMP: £${data.smpInfo.phase1Weekly.toFixed(2)} a week for 6 weeks, then £${data.smpInfo.phase2Weekly.toFixed(2)} a week for 33 weeks.`
+            : `No SMP: ${data.smpInfo.reason}. They may get Maternity Allowance instead (form SMP1).`,
+          data.smpInfo.eligible ? "success" : "error"
         );
       }
 
@@ -254,6 +306,33 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
         </div>
       )}
 
+      {teamMembers && teamMembers.length > 0 && currentUserId && (
+        <div className="space-y-1">
+          <Select
+            id="subject"
+            label="Who is it for?"
+            options={[
+              { value: currentUserId, label: "Me" },
+              ...teamMembers
+                .filter((m) => m.id !== currentUserId)
+                .map((m) => ({ value: m.id, label: m.name })),
+            ]}
+            value={subjectId}
+            onChange={(e) => {
+              setSubjectId(e.target.value);
+              setChildId("");
+            }}
+          />
+          {forSomeoneElse && (
+            <p className="text-xs text-gray-500">
+              Recorded as approved for {subjectName}, for leave already agreed
+              with them; notice periods don&apos;t apply. They&apos;ll get an email,
+              and it&apos;s in the audit log as recorded by you.
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Input
           id="startDate"
@@ -276,7 +355,11 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
 
       {startDate && endDate && requestedDays > 0 && (
         <p className="text-xs text-gray-500">
-          {requestedDays} weekday{requestedDays !== 1 ? "s" : ""} selected
+          {selectedLeaveType?.allowanceUnit === "WEEKS" && `${calendarWeeks} week${calendarWeeks === 1 ? "" : "s"} · `}
+          {requestedDays} working day{requestedDays !== 1 ? "s" : ""}
+          {workingWeek && workingWeek.daysPerWeek !== 5
+            ? ` (${forSomeoneElse ? `${subjectName ?? "they"} works` : "you work"} ${workingWeek.daysPerWeek} days a week)`
+            : ""}
         </p>
       )}
 
@@ -318,7 +401,7 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
           )}
           {addingChild ? (
             <AddChildForm
-              memberId={currentUserId}
+              memberId={subjectId}
               onAdded={async (id) => {
                 setAddingChild(false);
                 await reloadChildren();
@@ -457,7 +540,7 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
         </div>
       )}
 
-      {selectedLeaveType && selectedLeaveType.minNoticeDays > 0 && (
+      {selectedLeaveType && selectedLeaveType.minNoticeDays > 0 && !forSomeoneElse && (
         <p className="text-xs text-gray-500">
           This leave type requires at least {selectedLeaveType.minNoticeDays}{" "}
           day{selectedLeaveType.minNoticeDays !== 1 ? "s" : ""} notice before the
@@ -490,7 +573,13 @@ export function RequestForm({ leaveTypes, currentUserId }: { leaveTypes: LeaveTy
 
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={loading}>
-          {loading ? "Submitting..." : "Submit request"}
+          {loading
+            ? forSomeoneElse
+              ? "Recording..."
+              : "Submitting..."
+            : forSomeoneElse
+              ? "Record leave"
+              : "Submit request"}
         </Button>
         <Button
           type="button"

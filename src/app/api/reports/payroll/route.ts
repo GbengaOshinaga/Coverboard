@@ -5,7 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { countWorkingDays, type WorkingWeek } from "@/lib/working-week";
 import { getWorkingWeek } from "@/lib/working-week-server";
 import { sspDaysInPeriod } from "@/lib/ssp-period";
+import { smpPayInPeriod } from "@/lib/smp-dates";
 import { sspRateFor } from "@/lib/leave-requests/ssp-spell";
+import { isSspAbsence } from "@/lib/ssp-scope";
 import { sspPay } from "@/lib/uk-compliance";
 import {
   getDailyHolidayPayRateForUser,
@@ -15,7 +17,6 @@ import {
 import {
   calculatePaternityPay,
   getAweForUser,
-  getCurrentSMPPhase,
   isMaternityLeaveType,
   weeklyStatutoryPayFor,
 } from "@/lib/smpCalculator";
@@ -127,7 +128,6 @@ export async function GET(request: Request) {
     return rate;
   }
 
-  const referenceDate = to < new Date() ? to : new Date();
 
   // Days are counted on the person's working week as it was when the absence
   // started (a 3-day worker off for a fortnight has 6 days, not 10) — the
@@ -180,20 +180,22 @@ export async function GET(request: Request) {
 
       // Maternity rows get SMP phase data so payroll can apply the
       // correct weekly rate for each payslip in the export period.
-      const smp = isMaternityLeaveType(r.leaveType.name)
-        ? getCurrentSMPPhase({
-            startDate: r.startDate,
-            phase1EndDate: r.smpPhase1EndDate,
-            phase2EndDate: r.smpPhase2EndDate,
-            phase1Weekly:
-              r.smpPhase1WeeklyRate === null
-                ? null
-                : Number(r.smpPhase1WeeklyRate),
-            phase2Weekly:
-              r.smpPhase2WeeklyRate === null
-                ? null
-                : Number(r.smpPhase2WeeklyRate),
-            referenceDate,
+      // SMP for the days of this pay period (not today's phase): calendar
+      // days at the weekly rate ÷ 7, split across the 90% and flat-rate weeks.
+      const smpPhases =
+        isMaternityLeaveType(r.leaveType.name) && r.smpPhase1EndDate && r.smpPhase2EndDate
+          ? { phase1End: r.smpPhase1EndDate, phase2End: r.smpPhase2EndDate }
+          : null;
+      const smpPeriod = smpPhases
+        ? smpPayInPeriod({
+            leaveStart: r.startDate,
+            leaveEnd: r.endDate,
+            phase1End: smpPhases.phase1End,
+            phase2End: smpPhases.phase2End,
+            phase1Weekly: r.smpPhase1WeeklyRate === null ? null : Number(r.smpPhase1WeeklyRate),
+            phase2Weekly: r.smpPhase2WeeklyRate === null ? null : Number(r.smpPhase2WeeklyRate),
+            from,
+            to,
           })
         : null;
 
@@ -234,6 +236,11 @@ export async function GET(request: Request) {
         startDate: r.startDate.toISOString(),
         endDate: r.endDate.toISOString(),
         daysTaken,
+        calendarDays: (() => {
+          const a = r.startDate > from ? r.startDate : from;
+          const b = r.endDate < to ? r.endDate : to;
+          return b < a ? 0 : Math.round((b.getTime() - a.getTime()) / 86_400_000) + 1;
+        })(),
         hoursTaken,
         hourlyRate: hourly,
         ...buildPayrollHolidayRateFields({
@@ -250,17 +257,30 @@ export async function GET(request: Request) {
                 ? "recalculated"
                 : "not_applicable",
         }),
-        smp: smp
+        smp: smpPeriod && smpPhases
           ? {
-              phase: smp.phase,
-              label: smp.label,
-              weeklyRate: smp.weeklyRate,
+              phase:
+                smpPeriod.phase1Days > 0 ? "phase_1" : smpPeriod.phase2Days > 0 ? "phase_2" : "ended",
+              label:
+                smpPeriod.phase1Days > 0 && smpPeriod.phase2Days > 0
+                  ? "6 weeks at 90%, then flat rate"
+                  : smpPeriod.phase1Days > 0
+                    ? "First 6 weeks (90%)"
+                    : smpPeriod.phase2Days > 0
+                      ? "Weeks 7–39 (flat rate)"
+                      : "Outside the SMP weeks",
+              weeklyRate:
+                smpPeriod.phase1Days > 0
+                  ? r.smpPhase1WeeklyRate === null ? null : Number(r.smpPhase1WeeklyRate)
+                  : r.smpPhase2WeeklyRate === null ? null : Number(r.smpPhase2WeeklyRate),
+              daysInPeriod: smpPeriod.phase1Days + smpPeriod.phase2Days,
+              pay: smpPeriod.pay,
               averageWeeklyEarnings:
                 r.smpAverageWeeklyEarnings === null
                   ? null
                   : Number(r.smpAverageWeeklyEarnings),
-              phase1EndDate: smp.phase1EndDate.toISOString(),
-              phase2EndDate: smp.phase2EndDate.toISOString(),
+              phase1EndDate: smpPhases.phase1End.toISOString(),
+              phase2EndDate: smpPhases.phase2End.toISOString(),
               phase1WeeklyRate:
                 r.smpPhase1WeeklyRate === null
                   ? null
@@ -295,7 +315,7 @@ export async function GET(request: Request) {
                 };
               })()
             : null,
-        ssp: r.leaveType.name.includes("SSP")
+        ssp: isSspAbsence(r.leaveType.name, r.user.workCountry)
           ? await (async () => {
               const days = sspDaysInPeriod({
                 startDate: r.startDate,
@@ -333,6 +353,7 @@ export async function GET(request: Request) {
     ),
     totalSspPay: Number(rows.reduce((s, r) => s + (r.ssp?.pay ?? 0), 0).toFixed(2)),
     totalSppPay: Number(rows.reduce((s, r) => s + (r.spp?.pay ?? 0), 0).toFixed(2)),
+    totalSmpPay: Number(rows.reduce((s, r) => s + (r.smp?.pay ?? 0), 0).toFixed(2)),
   };
 
   const format = parseExportFormat(searchParams.get("format"));
