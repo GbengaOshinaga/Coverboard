@@ -187,18 +187,7 @@ export function calculatePaternityPay(
   };
 }
 
-/**
- * Weekly statutory pay (SPP, SMP) is for 7 calendar days a week: full weeks
- * pay the weekly rate, part weeks a seventh of it per day, rounded up to the
- * penny.
- */
-export function weeklyStatutoryPayFor(weeklyRate: number, calendarDays: number): number {
-  if (weeklyRate <= 0 || calendarDays <= 0) return 0;
-  const fullWeeks = Math.floor(calendarDays / 7);
-  const rest = calendarDays - fullWeeks * 7;
-  const part = Math.ceil(Number(((rest * weeklyRate) / 7 * 100).toFixed(6))) / 100;
-  return Number((fullWeeks * weeklyRate + part).toFixed(2));
-}
+export { weeklyStatutoryPayFor } from "@/lib/smp-dates";
 
 export type SMPPhaseDates = {
   startDate: Date;

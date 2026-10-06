@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { dbDate, endWorkPatternOps, ukToday } from "@/lib/workPattern";
-import { qualifyingDaysFor } from "@/lib/working-week-server";
+import { getWorkingWeek, qualifyingDaysFor, syncDaysFromPattern } from "@/lib/working-week-server";
 import { recomputeCurrentSspSpells } from "@/lib/leave-requests/ssp-spell";
 import { ftesFor } from "@/lib/fte-server";
 import { getServerSession } from "next-auth";
@@ -111,7 +111,21 @@ export async function GET(
   }
 
   const fte = (await ftesFor(orgId, [member])).get(member.id);
-  return NextResponse.json({ ...member, fte });
+
+  // Days per week come from their working pattern when they have one. The
+  // stored count can lag (a pattern saved before it was kept in step, or one
+  // that started later): correct it here so every screen agrees.
+  const week = await getWorkingWeek(member.id);
+  const fromPattern = week.weekdays !== null;
+  if (fromPattern && member.daysWorkedPerWeek !== week.daysPerWeek) {
+    await syncDaysFromPattern(member.id);
+  }
+  return NextResponse.json({
+    ...member,
+    daysWorkedPerWeek: fromPattern ? week.daysPerWeek : member.daysWorkedPerWeek,
+    daysFromPattern: fromPattern,
+    fte,
+  });
 }
 
 export async function PATCH(

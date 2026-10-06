@@ -1209,6 +1209,12 @@ export default function ReportsPage() {
                             </td>
                             <td className="py-2.5 pr-4 text-gray-600">
                               {row.leaveType}
+                              {row.smp && row.smp.phase1WeeklyRate !== null && (
+                                <span className="block text-[11px] text-gray-500">
+                                  SMP £{row.smp.phase1WeeklyRate.toFixed(2)} a week for 6 weeks, then £
+                                  {row.smp.phase2WeeklyRate?.toFixed(2)} · {row.smp.label}
+                                </span>
+                              )}
                             </td>
                             <td className="py-2.5 pr-4 text-gray-600">
                               {new Date(
@@ -1648,13 +1654,19 @@ export default function ReportsPage() {
                     <div className="rounded-md border border-gray-100 bg-gray-50 p-3">
                       <p className="text-xs text-gray-500">Statutory pay (£)</p>
                       <p className="text-lg font-semibold text-gray-900">
-                        {(payrollReport.totals.totalSspPay + payrollReport.totals.totalSppPay).toLocaleString("en-GB", {
+                        {(
+                          payrollReport.totals.totalSspPay +
+                          payrollReport.totals.totalSppPay +
+                          payrollReport.totals.totalSmpPay
+                        ).toLocaleString("en-GB", {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
                         })}
                       </p>
                       <p className="text-[11px] text-gray-500">
-                        SSP £{payrollReport.totals.totalSspPay.toFixed(2)} · SPP £{payrollReport.totals.totalSppPay.toFixed(2)}
+                        SSP £{payrollReport.totals.totalSspPay.toFixed(2)} · SPP £
+                        {payrollReport.totals.totalSppPay.toFixed(2)} · SMP £
+                        {payrollReport.totals.totalSmpPay.toFixed(2)}
                       </p>
                     </div>
                   </div>
@@ -1675,7 +1687,8 @@ export default function ReportsPage() {
                           <th className="pb-2 pr-4">Employee</th>
                           <th className="pb-2 pr-4">Leave type</th>
                           <th className="pb-2 pr-4">Dates</th>
-                          <th className="pb-2 pr-4 text-right">Taken</th>
+                          <th className="pb-2 pr-4 text-right" title="Days they'd have worked">Working days</th>
+                          <th className="pb-2 pr-4 text-right">Calendar days</th>
                           <th className="pb-2 pr-4 text-right">Rate</th>
                           <th className="pb-2 pr-4 text-right">Est. pay</th>
                           <th className="pb-2">Source</th>
@@ -1717,8 +1730,13 @@ export default function ReportsPage() {
                                 ? `${row.hoursTaken} hrs`
                                 : row.daysTaken}
                             </td>
+                            <td className="py-2 pr-4 text-right text-gray-500">{row.calendarDays}</td>
                             <td className="py-2 pr-4 text-right text-gray-700">
-                              {row.spp
+                              {row.smp
+                                ? row.smp.weeklyRate == null
+                                  ? "—"
+                                  : `£${row.smp.weeklyRate.toFixed(2)}/wk SMP`
+                                : row.spp
                                 ? row.spp.weeklyRate == null
                                   ? "—"
                                   : `£${row.spp.weeklyRate.toFixed(2)}/wk SPP`
@@ -1735,7 +1753,11 @@ export default function ReportsPage() {
                                     : `£${row.dailyHolidayPayRate.toFixed(2)}`}
                             </td>
                             <td className="py-2 pr-4 text-right font-medium text-gray-900">
-                              {row.spp
+                              {row.smp
+                                ? row.smp.pay == null
+                                  ? "—"
+                                  : `£${row.smp.pay.toFixed(2)}`
+                                : row.spp
                                 ? row.spp.pay == null
                                   ? "—"
                                   : `£${row.spp.pay.toFixed(2)}`
@@ -1746,6 +1768,11 @@ export default function ReportsPage() {
                                 : row.estimatedPay == null
                                   ? "—"
                                   : `£${row.estimatedPay.toFixed(2)}`}
+                              {row.smp && (
+                                <div className="max-w-56 text-[11px] font-normal text-gray-500">
+                                  {row.smp.daysInPeriod} days of SMP · {row.smp.label}
+                                </div>
+                              )}
                               {row.spp && (
                                 <div className="max-w-56 text-[11px] font-normal text-gray-500">
                                   {row.spp.weeklyRate == null

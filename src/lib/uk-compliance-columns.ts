@@ -205,7 +205,9 @@ export const UK_COMPLIANCE_TABLES = {
       { key: (r) => r.keepingInTouch?.allowed ?? NOT_APPLICABLE, header: "KIT/SPLIT days allowed" },
       { key: (r) => r.keepingInTouch?.remaining ?? NOT_APPLICABLE, header: "KIT/SPLIT days remaining" },
       { key: (r) => r.smp?.label ?? null, header: "SMP phase" },
-      { key: (r) => r.smp?.weeklyRate ?? null, header: "SMP weekly rate (£)", format: "money" },
+      // Both rates, even before pay starts ("Not started" is the phase).
+      { key: (r) => r.smp?.phase1WeeklyRate ?? null, header: "SMP first 6 weeks (£ a week)", format: "money" },
+      { key: (r) => r.smp?.phase2WeeklyRate ?? null, header: "SMP weeks 7–39 (£ a week)", format: "money" },
     ],
   }),
   "right-to-work": table<RightToWorkRow>({

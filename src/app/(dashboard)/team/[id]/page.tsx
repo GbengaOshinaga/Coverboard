@@ -66,6 +66,8 @@ type Member = {
   isActive?: boolean;
   leftOn?: string | null;
   workingTimeOptOutFrom?: string | null;
+  /** Days per week taken from their working pattern. */
+  daysFromPattern?: boolean;
   workingTimeOptOutUntil?: string | null;
   name: string;
   email: string;
@@ -787,6 +789,7 @@ export default function EmployeeProfilePage({
                 {formatEmploymentType(member.employmentType)} ·{" "}
                 {member.fte ? fteLabel(member.fte) : `FTE ${member.fteRatio}`} ·{" "}
                 {member.daysWorkedPerWeek} days/week
+                {member.daysFromPattern ? " (from working pattern)" : ""}
               </p>
               {member.bradfordScore > 0 && (
                 <p className="mt-1 text-xs text-gray-400">

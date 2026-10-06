@@ -1,4 +1,4 @@
-import { maternityLeaveLatestEnd, qualifyingWeek } from "@/lib/smp-dates";
+import { lastDayBefore, maternityLeaveLatestEnd, qualifyingWeek } from "@/lib/smp-dates";
 import { UK_LEL_WEEKLY } from "@/lib/uk-compliance";
 
 type Stored = string | number | null | undefined;
@@ -28,8 +28,7 @@ export function SmpSummary({
   };
 }) {
   const weeks = request.smpEarningsWeeks;
-  const fromWeeks =
-    weeks !== undefined && weeks > 0 && weeks < 8 ? ` (from ${weeks} of the 8 weeks; ${8 - weeks} with no pay recorded)` : "";
+  const missing = weeks !== undefined && weeks > 0 && weeks < 8 ? 8 - weeks : 0;
   const due = request.expectedDueDate ? new Date(request.expectedDueDate) : null;
   const qw = due ? qualifyingWeek(due) : null;
   const awe = num(request.smpAverageWeeklyEarnings);
@@ -61,11 +60,19 @@ export function SmpSummary({
       {p1 !== null && p2 !== null ? (
         <>
           <p>
-            Average weekly earnings {money(awe!)}{fromWeeks}: {money(p1)} a week (90%) for 6 weeks
-            {request.smpPhase1EndDate ? `, to ${fmt(new Date(request.smpPhase1EndDate))}` : ""}, then{" "}
+            Average weekly earnings {money(awe!)}: {money(p1)} a week (90%) for 6 weeks
+            {request.smpPhase1EndDate ? `, to ${fmt(lastDayBefore(new Date(request.smpPhase1EndDate)))}` : ""}, then{" "}
             {money(p2)} a week for 33 weeks
-            {request.smpPhase2EndDate ? `, to ${fmt(new Date(request.smpPhase2EndDate))}` : ""}.
+            {request.smpPhase2EndDate ? `, to ${fmt(lastDayBefore(new Date(request.smpPhase2EndDate)))}` : ""}.
           </p>
+          {missing > 0 && (
+            <p className="text-amber-700">
+              Based on {weeks} of the 8 weeks. The {missing} week{missing === 1 ? "" : "s"} with nothing
+              recorded {missing === 1 ? "is" : "are"} treated as pay not entered yet. If they earned
+              nothing then, mark {missing === 1 ? "it" : "them"} as no-pay weeks: the average would be{" "}
+              {money((awe! * weeks!) / 8)}.
+            </p>
+          )}
         </>
       ) : (
         <p className="text-amber-700">No SMP: {reason}.</p>
