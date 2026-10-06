@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   CALENDAR_LEAVE_YEAR,
+  companyCarryOverExpiry,
   firstDateAfterYear,
   leaveYearBounds,
   leaveYearLabel,
@@ -55,4 +56,23 @@ test("a starter on 1 Oct 2026 in an April leave year gets half the year (182 of 
   // 1 July in a calendar year: 184 of 365 days → 28 × 184/365 = 14.1 → 15.
   const cal = leaveYearBounds(2026, CALENDAR_LEAVE_YEAR);
   assert.equal(prorateForStartDate(28, d("2026-07-01"), cal.start, cal.end), 15);
+});
+
+test("company carry-over expiry: flags a date that lasts the whole next year, or comes within a month", () => {
+  // Calendar year, 31 March: carried out of 2026, gone 31 Mar 2027. Fine.
+  const cal = companyCarryOverExpiry(2026, CALENDAR_LEAVE_YEAR, 3, 31);
+  assert.equal(day(cal.expiresOn), "2027-03-31");
+  assert.equal(cal.wholeNextYear, false);
+  assert.equal(cal.withinFirstMonth, false);
+  // April year, 31 March: carried out of 2026/27, lasts all of 2027/28.
+  const apr = companyCarryOverExpiry(2026, april, 3, 31);
+  assert.equal(day(apr.expiresOn), "2028-03-31");
+  assert.equal(apr.wholeNextYear, true);
+  // April year, 30 June: three months in. Fine.
+  assert.deepEqual(
+    { ...companyCarryOverExpiry(2026, april, 6, 30), expiresOn: undefined },
+    { expiresOn: undefined, wholeNextYear: false, withinFirstMonth: false }
+  );
+  // April year, 15 April: two weeks to use it.
+  assert.equal(companyCarryOverExpiry(2026, april, 4, 15).withinFirstMonth, true);
 });

@@ -64,3 +64,25 @@ export function rolloverLeaveYear(now: Date, s: LeaveYearStart): number {
   const { start } = leaveYearBounds(current, s);
   return now.getTime() - start.getTime() < 182 * DAY_MS ? current - 1 : current;
 }
+
+/**
+ * When the team's own carry-over out of a leave year expires, and whether
+ * that's easy to misread: on the last day of the next year (so carried days
+ * last all of it), or within its first month.
+ */
+export function companyCarryOverExpiry(
+  year: number,
+  s: LeaveYearStart,
+  month: number,
+  day: number
+): { expiresOn: Date; wholeNextYear: boolean; withinFirstMonth: boolean } {
+  const expiresOn = firstDateAfterYear(year, s, month, day);
+  const next = leaveYearBounds(year + 1, s);
+  const sameDay = (a: Date, b: Date) => a.toISOString().slice(0, 10) === b.toISOString().slice(0, 10);
+  const oneMonthIn = new Date(Date.UTC(next.start.getUTCFullYear(), next.start.getUTCMonth() + 1, next.start.getUTCDate()));
+  return {
+    expiresOn,
+    wholeNextYear: expiresOn >= next.end || sameDay(expiresOn, next.end),
+    withinFirstMonth: expiresOn < oneMonthIn,
+  };
+}
