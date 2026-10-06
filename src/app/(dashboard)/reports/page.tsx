@@ -1,5 +1,6 @@
 "use client";
 
+import { formatGBP } from "@/lib/money";
 import { leaveYearBounds, leaveYearLabel } from "@/lib/leave-year";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { CoverShiftsSection } from "@/components/reports/cover-shifts-section";
@@ -1138,7 +1139,7 @@ export default function ReportsPage() {
                               {row.sspDaysPaid}
                             </td>
                             <td className="py-2.5 pr-4 text-right font-mono text-gray-600">
-                              <span title={row.rateBasis}>&pound;{row.dailyRate.toFixed(2)}</span>
+                              <span title={row.rateBasis}>{formatGBP(row.dailyRate)}</span>
                               {(row.averageWeeklyEarnings === null || row.dailyRate === 0) && (
                                 <span className="block max-w-56 text-[11px] font-sans text-amber-700">
                                   {row.rateBasis}
@@ -1146,10 +1147,10 @@ export default function ReportsPage() {
                               )}
                             </td>
                             <td className="py-2.5 pr-4 text-right font-mono text-gray-600">
-                              &pound;{row.estimatedCostToDate.toFixed(2)}
+                              {formatGBP(row.estimatedCostToDate)}
                             </td>
                             <td className="py-2.5 pr-4 text-right font-mono font-medium">
-                              &pound;{row.estimatedTotalCost.toFixed(2)}
+                              {formatGBP(row.estimatedTotalCost)}
                             </td>
                             <td
                               className="py-2.5 text-right font-mono text-gray-600"
@@ -1223,8 +1224,8 @@ export default function ReportsPage() {
                               {row.leaveType}
                               {row.smp && row.smp.phase1WeeklyRate !== null && (
                                 <span className="block text-[11px] text-gray-500">
-                                  SMP £{row.smp.phase1WeeklyRate.toFixed(2)} a week for 6 weeks, then £
-                                  {row.smp.phase2WeeklyRate?.toFixed(2)} · {row.smp.label}
+                                  SMP {formatGBP(row.smp.phase1WeeklyRate)} a week for 6 weeks, then{" "}
+                                  {row.smp.phase2WeeklyRate !== null ? formatGBP(row.smp.phase2WeeklyRate) : "—"} · {row.smp.label}
                                 </span>
                               )}
                             </td>
@@ -1676,9 +1677,9 @@ export default function ReportsPage() {
                         })}
                       </p>
                       <p className="text-[11px] text-gray-500">
-                        SSP £{payrollReport.totals.totalSspPay.toFixed(2)} · SPP £
-                        {payrollReport.totals.totalSppPay.toFixed(2)} · SMP £
-                        {payrollReport.totals.totalSmpPay.toFixed(2)}
+                        SSP {formatGBP(payrollReport.totals.totalSspPay)} · SPP{" "}
+                        {formatGBP(payrollReport.totals.totalSppPay)} · SMP{" "}
+                        {formatGBP(payrollReport.totals.totalSmpPay)}
                       </p>
                     </div>
                   </div>
@@ -1747,39 +1748,39 @@ export default function ReportsPage() {
                               {row.smp
                                 ? row.smp.weeklyRate == null
                                   ? "—"
-                                  : `£${row.smp.weeklyRate.toFixed(2)}/wk SMP`
+                                  : `${formatGBP(row.smp.weeklyRate)}/wk SMP`
                                 : row.spp
                                 ? row.spp.weeklyRate == null
                                   ? "—"
-                                  : `£${row.spp.weeklyRate.toFixed(2)}/wk SPP`
+                                  : `${formatGBP(row.spp.weeklyRate)}/wk SPP`
                                 : row.ssp
                                 ? row.ssp.dailyRate == null
                                   ? "—"
-                                  : `£${row.ssp.dailyRate.toFixed(2)} SSP`
+                                  : `${formatGBP(row.ssp.dailyRate)} SSP`
                                 : row.hoursTaken != null
                                   ? row.hourlyRate == null
                                     ? "—"
-                                    : `£${row.hourlyRate.toFixed(2)}/hr`
+                                    : `${formatGBP(row.hourlyRate)}/hr`
                                   : row.dailyHolidayPayRate == null
                                     ? "—"
-                                    : `£${row.dailyHolidayPayRate.toFixed(2)}`}
+                                    : formatGBP(row.dailyHolidayPayRate)}
                             </td>
                             <td className="py-2 pr-4 text-right font-medium text-gray-900">
                               {row.smp
                                 ? row.smp.pay == null
                                   ? "—"
-                                  : `£${row.smp.pay.toFixed(2)}`
+                                  : formatGBP(row.smp.pay)
                                 : row.spp
                                 ? row.spp.pay == null
                                   ? "—"
-                                  : `£${row.spp.pay.toFixed(2)}`
+                                  : formatGBP(row.spp.pay)
                                 : row.ssp
                                 ? row.ssp.pay == null
                                   ? "—"
-                                  : `£${row.ssp.pay.toFixed(2)}`
+                                  : formatGBP(row.ssp.pay)
                                 : row.estimatedPay == null
                                   ? "—"
-                                  : `£${row.estimatedPay.toFixed(2)}`}
+                                  : formatGBP(row.estimatedPay)}
                               {row.smp && (
                                 <div className="max-w-56 text-[11px] font-normal text-gray-500">
                                   {row.smp.daysInPeriod} days of SMP · {row.smp.label}

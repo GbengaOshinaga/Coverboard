@@ -1,5 +1,6 @@
 "use client";
 
+import { formatGBP } from "@/lib/money";
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
@@ -329,7 +330,7 @@ export default function ProfilePage() {
                   Current daily rate:{" "}
                   <span className="font-semibold text-gray-900">
                     {holidayPay.averageDailyRate !== null
-                      ? `£${holidayPay.averageDailyRate.toFixed(2)}`
+                      ? formatGBP(holidayPay.averageDailyRate)
                       : "—"}
                   </span>
                 </p>
