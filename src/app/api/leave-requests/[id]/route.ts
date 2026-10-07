@@ -30,6 +30,8 @@ const updateSchema = z.object({
   matchedDate: isoDateSchema.nullable().optional(),
   /** Shared parental leave: whether their notice claims ShPP for these weeks. */
   shppClaimed: z.boolean().optional(),
+  /** Neonatal care leave: the last full day in care, once the baby leaves. */
+  neonatalCareLastDay: isoDateSchema.nullable().optional(),
 });
 
 export async function PATCH(
@@ -80,7 +82,7 @@ export async function PATCH(
     }
 
     const { status, kitDaysUsed, splitDaysUsed, evidenceProvided, splCurtailmentConfirmed, coverOverride, endDate } = parsed.data;
-    const { expectedDueDate, matchedDate, shppClaimed } = parsed.data;
+    const { expectedDueDate, matchedDate, shppClaimed, neonatalCareLastDay } = parsed.data;
 
     // Date changes stand alone so they can't be mixed with a status change.
     if (endDate !== undefined) {
@@ -232,15 +234,32 @@ export async function PATCH(
     const payKind = birthPayKind(leaveRequest.leaveType.name);
     const isSpl = isSharedParentalLeaveType(leaveRequest.leaveType.name);
     const isPaternity = /paternity/i.test(leaveRequest.leaveType.name);
+    const isNeonatal = /neonatal/i.test(leaveRequest.leaveType.name);
+    if (neonatalCareLastDay !== undefined) {
+      if (leaveRequest.userId !== userId && userRole !== "ADMIN" && userRole !== "MANAGER") {
+        return NextResponse.json({ error: "You can't change this request" }, { status: 403 });
+      }
+      if (!isNeonatal) {
+        return NextResponse.json({ error: "Days in neonatal care are for neonatal care leave." }, { status: 400 });
+      }
+      if (
+        neonatalCareLastDay &&
+        leaveRequest.neonatalCareFirstDay &&
+        isoDateToUtc(neonatalCareLastDay) < leaveRequest.neonatalCareFirstDay
+      ) {
+        return NextResponse.json({ error: "The last day in neonatal care can't be before the first." }, { status: 400 });
+      }
+    }
     const datesChanging = expectedDueDate !== undefined || matchedDate !== undefined;
     if (datesChanging || shppClaimed !== undefined) {
       if (leaveRequest.userId !== userId && userRole !== "ADMIN" && userRole !== "MANAGER") {
         return NextResponse.json({ error: "You can't change this request" }, { status: 403 });
       }
-      // SPL and paternity can be for a birth (due date) or an adoption (matching date).
+      // SPL, paternity and neonatal can be for a birth (due date) or an adoption (matching date).
       if (
         !isSpl &&
         !isPaternity &&
+        !isNeonatal &&
         ((expectedDueDate !== undefined && payKind !== "SMP") || (matchedDate !== undefined && payKind !== "SAP"))
       ) {
         return NextResponse.json(
@@ -280,6 +299,9 @@ export async function PATCH(
     if (expectedDueDate !== undefined) updateData.expectedDueDate = expectedDueDate ? isoDateToUtc(expectedDueDate) : null;
     if (matchedDate !== undefined) updateData.matchedDate = matchedDate ? isoDateToUtc(matchedDate) : null;
     if (shppClaimed !== undefined) updateData.shppClaimed = shppClaimed;
+    if (neonatalCareLastDay !== undefined) {
+      updateData.neonatalCareLastDay = neonatalCareLastDay ? isoDateToUtc(neonatalCareLastDay) : null;
+    }
     if (status === "CANCELLED") {
       updateData.status = "CANCELLED";
     }

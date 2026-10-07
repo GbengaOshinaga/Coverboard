@@ -54,10 +54,15 @@ export type PayrollRow = {
     phase1WeeklyRate: number | null;
     phase2WeeklyRate: number | null;
   } | null;
+  /**
+   * Statutory Neonatal Care Pay within the pay period: like SPP, calendar
+   * days at the weekly rate ÷ 7 (src/lib/smp-request.ts computeSncp).
+   */
   neonatal: {
     weeklyRate: number | null;
-    weeksTaken: number;
-    estimatedPay: number | null;
+    calendarDays: number;
+    pay: number | null;
+    basis: string;
   } | null;
   /**
    * Statutory Paternity Pay within the pay period (paternity leave, UK):
@@ -110,6 +115,7 @@ export type PayrollReport = {
     totalSspPay: number;
     totalSppPay: number;
     totalShppPay: number;
+    totalNeonatalPay: number;
     totalSmpPay: number;
     totalSapPay: number;
   };
@@ -154,7 +160,8 @@ export const PAYROLL_EXPORT_COLUMNS: ExportColumn<PayrollRow>[] = [
   { key: (r) => r.smp?.daysInPeriod ?? null, header: "SMP/SAP days" },
   { key: (r) => r.smp?.pay ?? null, header: "SMP/SAP pay (£)", format: "money" },
   { key: (r) => r.smp?.averageWeeklyEarnings ?? null, header: "SMP/SAP average weekly earnings (£)", format: "money" },
-  { key: (r) => r.neonatal?.weeksTaken ?? null, header: "Neonatal weeks" },
+  { key: (r) => r.neonatal?.calendarDays ?? null, header: "Neonatal pay days" },
   { key: (r) => r.neonatal?.weeklyRate ?? null, header: "Neonatal weekly rate (£)", format: "money" },
-  { key: (r) => r.neonatal?.estimatedPay ?? null, header: "Neonatal estimated pay (£)", format: "money" },
+  { key: (r) => r.neonatal?.pay ?? null, header: "Neonatal pay (£)", format: "money" },
+  { key: (r) => r.neonatal?.basis ?? null, header: "Neonatal pay basis" },
 ];

@@ -97,6 +97,8 @@ export function RequestForm({
   const [splFor, setSplFor] = useState<"birth" | "adoption">("birth");
   const [shppClaimed, setShppClaimed] = useState(true);
   const [childBirthDate, setChildBirthDate] = useState("");
+  const [careFirstDay, setCareFirstDay] = useState("");
+  const [careLastDay, setCareLastDay] = useState("");
 
   // Balances of whoever the leave is for.
   useEffect(() => {
@@ -144,8 +146,9 @@ export function RequestForm({
   const isAdoptionLeave = /adoption/i.test(selectedLeaveType?.name ?? "");
   const isSplLeave = /shared parental|\bSPL\b/i.test(selectedLeaveType?.name ?? "");
   const isPaternityLeave = /paternity/i.test(selectedLeaveType?.name ?? "");
-  // Paternity and shared parental leave: the child's due or matching date.
-  const asksChildDate = isSplLeave || isPaternityLeave;
+  const isNeonatalLeave = /neonatal/i.test(selectedLeaveType?.name ?? "");
+  // Paternity, shared parental and neonatal care leave: the child's due or matching date.
+  const asksChildDate = isSplLeave || isPaternityLeave || isNeonatalLeave;
   // Unpaid parental leave is per child, so the booking names the child.
   const isUnpaidParental = /unpaid parental/i.test(selectedLeaveType?.name ?? "");
   const { children, reload: reloadChildren } = useChildren(
@@ -269,7 +272,13 @@ export function RequestForm({
               : undefined,
           shppClaimed: isSplLeave ? shppClaimed : undefined,
           childBirthDate:
-            isPaternityLeave && childBirthDate ? new Date(childBirthDate).toISOString() : undefined,
+            (isPaternityLeave || isNeonatalLeave) && childBirthDate
+              ? new Date(childBirthDate).toISOString()
+              : undefined,
+          neonatalCareFirstDay:
+            isNeonatalLeave && careFirstDay ? new Date(careFirstDay).toISOString() : undefined,
+          neonatalCareLastDay:
+            isNeonatalLeave && careLastDay ? new Date(careLastDay).toISOString() : undefined,
           childId: isUnpaidParental ? childId || undefined : undefined,
           onBehalfOfUserId: forSomeoneElse ? subjectId : undefined,
         }),
@@ -288,6 +297,16 @@ export function RequestForm({
         toast(
           "🎉 Your first request is in! You'll hear back once it's reviewed.",
           "success"
+        );
+      }
+      // Neonatal care leave: the rate and weeks the time in care gives.
+      if (data.sncpInfo) {
+        const weeks = `${data.sncpInfo.weeksEntitled} week${data.sncpInfo.weeksEntitled === 1 ? "" : "s"} of leave from the time in care`;
+        toast(
+          data.sncpInfo.eligible
+            ? `Neonatal care pay: ${data.sncpInfo.basis}. ${weeks}.`
+            : `No neonatal care pay: ${data.sncpInfo.basis} ${weeks}.`,
+          data.sncpInfo.eligible ? "success" : "error"
         );
       }
       // Paternity leave: the SPP rate, or why there's none.
@@ -505,7 +524,13 @@ export function RequestForm({
         <div className="space-y-3 rounded-lg border border-gray-200 p-3">
           <Select
             id="splFor"
-            label={isPaternityLeave ? "Paternity leave for" : "Shared parental leave for"}
+            label={
+              isPaternityLeave
+                ? "Paternity leave for"
+                : isNeonatalLeave
+                  ? "Neonatal care leave for"
+                  : "Shared parental leave for"
+            }
             value={splFor}
             onChange={(e) => setSplFor(e.target.value as "birth" | "adoption")}
             options={[
@@ -529,6 +554,42 @@ export function RequestForm({
               value={matchedDate}
               onChange={(e) => setMatchedDate(e.target.value)}
             />
+          )}
+          {isNeonatalLeave && (
+            <>
+              <Input
+                id="neonatalBirthDate"
+                label="Baby's date of birth"
+                type="date"
+                value={childBirthDate}
+                onChange={(e) => setChildBirthDate(e.target.value)}
+              />
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Input
+                  id="careFirstDay"
+                  label="First full day in neonatal care"
+                  type="date"
+                  value={careFirstDay}
+                  onChange={(e) => setCareFirstDay(e.target.value)}
+                />
+                <Input
+                  id="careLastDay"
+                  label="Last full day in care (leave empty if still there)"
+                  type="date"
+                  value={careLastDay}
+                  onChange={(e) => setCareLastDay(e.target.value)}
+                />
+              </div>
+              <p className="text-xs text-gray-500">
+                One week of leave and pay for every 7 full days in neonatal care
+                in a row, up to 12, taken within 68 weeks of the birth. Pay is
+                the lower of {formatGBP(SMP_FLAT_RATE)} or 90% of their average
+                weekly earnings, from the 8 weeks up to the{" "}
+                {splFor === "birth" ? "15th week before the due week" : "week they were matched"} if
+                they get maternity, paternity or adoption pay, otherwise up to
+                the week before the baby went into care.
+              </p>
+            </>
           )}
           {isPaternityLeave && (
             <>

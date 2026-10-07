@@ -5,6 +5,7 @@ import {
   calculateSmpEntitlement,
   getAweDetailForUser,
 } from "@/lib/smpCalculator";
+import { neonatalWeeksEntitled, weekBeforeNeonatalCare } from "@/lib/neonatalPay";
 import { birthPayKind, parentPayDates, payTestWeek, smpEarningsCutoff, type BirthPayKind } from "@/lib/smp-dates";
 
 /**
@@ -62,6 +63,8 @@ export async function withCurrentSmp<
     matchedDate?: Date | null;
     shppClaimed?: boolean;
     childBirthDate?: Date | null;
+    neonatalCareFirstDay?: Date | null;
+    neonatalCareLastDay?: Date | null;
     smpAverageWeeklyEarnings: unknown;
     smpPhase1WeeklyRate: unknown;
     smpPhase2WeeklyRate: unknown;
@@ -77,6 +80,15 @@ export async function withCurrentSmp<
       shpp?: { claimed: boolean; eligible: boolean; weeklyRate: number | null; basis: string; dateKnown: boolean };
       /** Paternity leave: SPP worked out now (not stored). */
       spp?: { eligible: boolean; weeklyRate: number | null; basis: string; dateKnown: boolean };
+      /** Neonatal care leave: pay and the weeks the time in care gives (not stored). */
+      neonatal?: {
+        eligible: boolean;
+        weeklyRate: number | null;
+        basis: string;
+        weeksEntitled: number;
+        daysInCare: number;
+        stillInCare: boolean;
+      };
     }
   >
 > {
@@ -84,6 +96,33 @@ export async function withCurrentSmp<
   return Promise.all(
     requests.map(async (r) => {
       if (r.status === "CANCELLED" || r.status === "REJECTED") return r;
+      if (/neonatal/i.test(r.leaveType.name)) {
+        if (!r.neonatalCareFirstDay) return r;
+        const [pay, entitled] = await Promise.all([
+          computeSncp({
+            userId: r.userId,
+            startDate: r.startDate,
+            expectedDueDate: r.expectedDueDate,
+            matchedDate: r.matchedDate ?? null,
+            childBirthDate: r.childBirthDate ?? null,
+            careFirstDay: r.neonatalCareFirstDay,
+          }),
+          Promise.resolve(
+            neonatalWeeksEntitled({ firstFullDay: r.neonatalCareFirstDay, lastFullDay: r.neonatalCareLastDay ?? null })
+          ),
+        ]);
+        return {
+          ...r,
+          neonatal: {
+            eligible: pay.eligible,
+            weeklyRate: pay.weeklyRate,
+            basis: pay.basis,
+            weeksEntitled: entitled.weeks,
+            daysInCare: entitled.daysInCare,
+            stillInCare: entitled.ongoing,
+          },
+        };
+      }
       if (/paternity/i.test(r.leaveType.name)) {
         const pay = await computeSpp({
           userId: r.userId,
@@ -174,22 +213,85 @@ async function computeWeeklyParentPay(input: {
 }) {
   const dates = parentPayDates(input);
   const kind: BirthPayKind = dates.matchedDate ? "SAP" : "SMP";
-  const [{ awe, weeksCounted }, employee] = await Promise.all([
-    getAweDetailForUser(input.userId, smpEarningsCutoff({ startDate: input.startDate, ...dates, kind })),
-    prisma.user.findUnique({ where: { id: input.userId }, select: { serviceStartDate: true } }),
-  ]);
-  const pay = calculatePaternityPay(awe, {
-    serviceStartDate: employee?.serviceStartDate ?? null,
-    serviceTestWeek: payTestWeek({ kind, ...dates }),
+  const pay = await weeklyParentPayFromWeek({
+    userId: input.userId,
+    testWeek: payTestWeek({ kind, ...dates }),
+    startDate: input.startDate,
     payName: input.payName,
     testWeekName: kind === "SAP" ? "matching week" : "qualifying week",
   });
   return {
     ...pay,
     basis: dates.note ? `${pay.basis.replace(/\.$/, "")}. ${dates.note}` : pay.basis,
-    averageWeeklyEarnings: awe,
-    weeksCounted,
     dateKnown: !!(dates.expectedDueDate || dates.matchedDate),
+  };
+}
+
+/**
+ * The lower of the flat rate and 90% of earnings, with earnings from the 8
+ * weeks up to `testWeek` and 26 weeks' service into it (the leave start when
+ * there's no week).
+ */
+async function weeklyParentPayFromWeek(input: {
+  userId: string;
+  testWeek: { start: Date; end: Date } | null;
+  startDate: Date;
+  payName: string;
+  testWeekName: string;
+}) {
+  const cutoff = input.testWeek ? new Date(input.testWeek.end.getTime() + 86_400_000) : input.startDate;
+  const [{ awe, weeksCounted }, employee] = await Promise.all([
+    getAweDetailForUser(input.userId, cutoff),
+    prisma.user.findUnique({ where: { id: input.userId }, select: { serviceStartDate: true } }),
+  ]);
+  const pay = calculatePaternityPay(awe, {
+    serviceStartDate: employee?.serviceStartDate ?? null,
+    serviceTestWeek: input.testWeek,
+    payName: input.payName,
+    testWeekName: input.testWeekName,
+  });
+  return { ...pay, averageWeeklyEarnings: awe, weeksCounted };
+}
+
+/**
+ * Statutory Neonatal Care Pay: the lower of the flat rate and 90% of
+ * earnings. The earnings and service week is the qualifying week (birth) or
+ * matching week (adoption) when they're entitled to SMP, SPP or SAP — taken
+ * here as passing those same tests there — otherwise the week before the
+ * baby went into neonatal care.
+ * https://www.gov.uk/employers-neonatal-care-pay-leave/eligibility
+ */
+export async function computeSncp(input: {
+  userId: string;
+  startDate: Date;
+  expectedDueDate: Date | null;
+  matchedDate: Date | null;
+  childBirthDate: Date | null;
+  careFirstDay: Date | null;
+}) {
+  const payName = "neonatal care pay";
+  const primary = await computeWeeklyParentPay({ ...input, payName });
+  if (primary.dateKnown && primary.eligible) {
+    return {
+      ...primary,
+      basis: `${primary.basis.replace(/\.$/, "")}, from the ${input.matchedDate ? "matching" : "qualifying"} week (entitled to ${input.matchedDate ? "SAP" : "SMP or SPP"})`,
+    };
+  }
+  if (!input.careFirstDay) return primary;
+  const week = weekBeforeNeonatalCare(input.careFirstDay);
+  const fallback = await weeklyParentPayFromWeek({
+    userId: input.userId,
+    testWeek: week,
+    startDate: input.startDate,
+    payName,
+    testWeekName: "week before neonatal care began",
+  });
+  return {
+    ...fallback,
+    basis: fallback.eligible
+      ? `${fallback.basis}, from the week before neonatal care began`
+      : fallback.basis,
+    dateKnown: true,
   };
 }
 

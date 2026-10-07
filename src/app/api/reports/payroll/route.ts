@@ -6,7 +6,7 @@ import { countWorkingDays, type WorkingWeek } from "@/lib/working-week";
 import { getWorkingWeek } from "@/lib/working-week-server";
 import { sspDaysInPeriod } from "@/lib/ssp-period";
 import { birthPayKind, smpPayInPeriod } from "@/lib/smp-dates";
-import { computeShpp, computeSpp, isSharedParentalLeaveType } from "@/lib/smp-request";
+import { computeShpp, computeSncp, computeSpp, isSharedParentalLeaveType } from "@/lib/smp-request";
 import { sspRateFor } from "@/lib/leave-requests/ssp-spell";
 import { isSspAbsence } from "@/lib/ssp-scope";
 import { sspPay } from "@/lib/uk-compliance";
@@ -18,7 +18,6 @@ import {
 import { weeklyStatutoryPayFor } from "@/lib/smpCalculator";
 import {
   isNeonatalCareLeaveType,
-  calculateNeonatalWeeklyRate,
 } from "@/lib/neonatalPay";
 import { buildPayrollHolidayRateFields } from "@/lib/payroll-export";
 import {
@@ -200,22 +199,27 @@ export async function GET(request: Request) {
       // Neonatal Care Pay: a single weekly rate (lower of flat or 90% AWE) for
       // up to 12 weeks. Computed live from the employee's AWE; weeks-in-period
       // is the working days taken ÷ the days they work in a week.
+      // Statutory Neonatal Care Pay: calendar days in these dates at the
+      // weekly rate ÷ 7, the rate from the right week (src/lib/smp-request.ts).
       const neonatal =
         isNeonatalCareLeaveType(request.leaveType.name) && isUkBased
-          ? (() => {
-              const awe =
-                request.user.averageWeeklyEarnings === null
-                  ? null
-                  : Number(request.user.averageWeeklyEarnings);
-              const weeklyRate = calculateNeonatalWeeklyRate(awe);
-              const weeksTaken = Number((daysTaken / week.daysPerWeek).toFixed(2));
+          ? await (async () => {
+              const a = request.startDate > from ? request.startDate : from;
+              const b = request.endDate < to ? request.endDate : to;
+              const calendarDays = b < a ? 0 : Math.round((b.getTime() - a.getTime()) / 86_400_000) + 1;
+              const pay = await computeSncp({
+                userId: request.userId,
+                startDate: request.startDate,
+                expectedDueDate: request.expectedDueDate,
+                matchedDate: request.matchedDate,
+                childBirthDate: request.childBirthDate,
+                careFirstDay: request.neonatalCareFirstDay,
+              });
               return {
-                weeklyRate: weeklyRate > 0 ? weeklyRate : null,
-                weeksTaken,
-                estimatedPay:
-                  weeklyRate > 0
-                    ? Number((weeklyRate * weeksTaken).toFixed(2))
-                    : null,
+                weeklyRate: pay.weeklyRate,
+                calendarDays,
+                pay: pay.weeklyRate === null ? null : weeklyStatutoryPayFor(pay.weeklyRate, calendarDays),
+                basis: pay.basis,
               };
             })()
           : null;
@@ -386,6 +390,7 @@ export async function GET(request: Request) {
     totalSspPay: Number(rows.reduce((s, r) => s + (r.ssp?.pay ?? 0), 0).toFixed(2)),
     totalSppPay: Number(rows.reduce((s, r) => s + (r.spp?.pay ?? 0), 0).toFixed(2)),
     totalShppPay: Number(rows.reduce((s, r) => s + (r.shpp?.pay ?? 0), 0).toFixed(2)),
+    totalNeonatalPay: Number(rows.reduce((s, r) => s + (r.neonatal?.pay ?? 0), 0).toFixed(2)),
     totalSmpPay: Number(rows.reduce((s, r) => s + (r.smp?.kind === "SMP" ? (r.smp.pay ?? 0) : 0), 0).toFixed(2)),
     totalSapPay: Number(rows.reduce((s, r) => s + (r.smp?.kind === "SAP" ? (r.smp.pay ?? 0) : 0), 0).toFixed(2)),
   };

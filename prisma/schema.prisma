@@ -254,6 +254,11 @@ model LeaveRequest {
   /// 37, so some blocks are unpaid). The due date or matching date on the
   /// request sets the qualifying or matching week for the rate.
   shppClaimed              Boolean     @default(false)
+  /// Neonatal care leave: the first and last full days the baby spent in
+  /// neonatal care (last empty while still in care). Employers must record
+  /// these; they set the weeks of leave and pay (src/lib/neonatalPay.ts).
+  neonatalCareFirstDay     DateTime?   @db.Date
+  neonatalCareLastDay      DateTime?   @db.Date
   dailyHolidayPayRate      Decimal?    @db.Decimal(10, 2)
   sspDaysPaid              Int         @default(0)
   sspLimitReached          Boolean     @default(false)

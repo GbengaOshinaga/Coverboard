@@ -290,3 +290,84 @@ export function SppSummary({
     </div>
   );
 }
+
+/**
+ * Statutory Neonatal Care Pay on a neonatal care leave request: the weekly
+ * rate and which week it came from, the weeks of leave the time in care
+ * gives, and (while the baby is still in care) a place to add the last day.
+ */
+export function NeonatalSummary({
+  request,
+  onChanged,
+}: {
+  onChanged?: () => void;
+  request: {
+    id: string;
+    neonatal?: {
+      eligible: boolean;
+      weeklyRate: number | null;
+      basis: string;
+      weeksEntitled: number;
+      daysInCare: number;
+      stillInCare: boolean;
+    };
+  };
+}) {
+  const [lastDay, setLastDay] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const n = request.neonatal;
+  if (!n) return null;
+
+  async function saveLastDay() {
+    if (!lastDay) return;
+    setSaving(true);
+    setError("");
+    const res = await fetch(`/api/leave-requests/${request.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ neonatalCareLastDay: lastDay }),
+    });
+    const data = await res.json().catch(() => null);
+    setSaving(false);
+    if (!res.ok) {
+      setError(data?.error ?? "Couldn't save the date");
+      return;
+    }
+    onChanged?.();
+  }
+
+  return (
+    <div className="mt-2 rounded-md border border-purple-100 bg-purple-50/50 px-3 py-2 text-xs text-gray-700">
+      <p className="font-medium text-gray-900">Neonatal Care Pay</p>
+      <p className={n.weeklyRate === null ? "text-amber-700" : undefined}>
+        {n.weeklyRate === null ? `No neonatal care pay: ${n.basis}` : `${n.basis}.`}
+      </p>
+      <p>
+        {n.daysInCare} full day{n.daysInCare === 1 ? "" : "s"} in neonatal care
+        {n.stillInCare ? " so far" : ""}: {n.weeksEntitled} week{n.weeksEntitled === 1 ? "" : "s"} of leave and pay
+        {n.weeksEntitled === 12 ? " (the most)" : ""}.
+      </p>
+      {n.stillInCare && (
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <input
+            type="date"
+            aria-label="Last full day in neonatal care"
+            value={lastDay}
+            onChange={(e) => setLastDay(e.target.value)}
+            className="rounded border border-gray-300 bg-white px-2 py-1 text-xs"
+          />
+          <button
+            type="button"
+            disabled={!lastDay || saving}
+            onClick={saveLastDay}
+            className="rounded border border-purple-200 bg-white px-2 py-1 text-xs font-medium text-purple-700 hover:bg-purple-50 disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Add last day in care"}
+          </button>
+        </div>
+      )}
+      {error && <p className="text-red-700">{error}</p>}
+    </div>
+  );
+}

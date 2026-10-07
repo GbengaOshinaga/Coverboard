@@ -1680,6 +1680,7 @@ export default function ReportsPage() {
                           payrollReport.totals.totalSspPay +
                           payrollReport.totals.totalSppPay +
                           payrollReport.totals.totalShppPay +
+                          payrollReport.totals.totalNeonatalPay +
                           payrollReport.totals.totalSmpPay +
                           payrollReport.totals.totalSapPay
                         ).toLocaleString("en-GB", {
@@ -1693,6 +1694,7 @@ export default function ReportsPage() {
                         {formatGBP(payrollReport.totals.totalSmpPay)}
                         {payrollReport.totals.totalSapPay > 0 && <> · SAP {formatGBP(payrollReport.totals.totalSapPay)}</>}
                         {payrollReport.totals.totalShppPay > 0 && <> · ShPP {formatGBP(payrollReport.totals.totalShppPay)}</>}
+                        {payrollReport.totals.totalNeonatalPay > 0 && <> · Neonatal {formatGBP(payrollReport.totals.totalNeonatalPay)}</>}
                       </p>
                     </div>
                   </div>
@@ -1762,6 +1764,10 @@ export default function ReportsPage() {
                                 ? row.smp.weeklyRate == null
                                   ? "—"
                                   : `${formatGBP(row.smp.weeklyRate)}/wk ${row.smp.kind}`
+                                : row.neonatal
+                                ? row.neonatal.weeklyRate == null
+                                  ? "—"
+                                  : `${formatGBP(row.neonatal.weeklyRate)}/wk neonatal`
                                 : row.shpp
                                 ? row.shpp.weeklyRate == null
                                   ? row.shpp.pay === 0 ? "Unpaid" : "—"
@@ -1787,6 +1793,10 @@ export default function ReportsPage() {
                                 ? row.smp.pay == null
                                   ? "—"
                                   : formatGBP(row.smp.pay)
+                                : row.neonatal
+                                ? row.neonatal.pay == null
+                                  ? "—"
+                                  : formatGBP(row.neonatal.pay)
                                 : row.shpp
                                 ? row.shpp.pay == null
                                   ? "—"
@@ -1805,6 +1815,13 @@ export default function ReportsPage() {
                               {row.smp && (
                                 <div className="max-w-56 text-[11px] font-normal text-gray-500">
                                   {row.smp.daysInPeriod} days of {row.smp.kind} · {row.smp.label}
+                                </div>
+                              )}
+                              {row.neonatal && (
+                                <div className="max-w-56 text-[11px] font-normal text-gray-500">
+                                  {row.neonatal.weeklyRate == null
+                                    ? row.neonatal.basis
+                                    : `${row.neonatal.calendarDays} days of neonatal care pay`}
                                 </div>
                               )}
                               {row.shpp && (
