@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { countWorkingDays, type WorkingWeek } from "@/lib/working-week";
 import { getWorkingWeek } from "@/lib/working-week-server";
 import { sspDaysInPeriod } from "@/lib/ssp-period";
-import { smpPayInPeriod } from "@/lib/smp-dates";
+import { birthPayKind, smpPayInPeriod } from "@/lib/smp-dates";
 import { sspRateFor } from "@/lib/leave-requests/ssp-spell";
 import { isSspAbsence } from "@/lib/ssp-scope";
 import { sspPay } from "@/lib/uk-compliance";
@@ -17,7 +17,6 @@ import {
 import {
   calculatePaternityPay,
   getAweForUser,
-  isMaternityLeaveType,
   weeklyStatutoryPayFor,
 } from "@/lib/smpCalculator";
 import {
@@ -182,8 +181,10 @@ export async function GET(request: Request) {
       // correct weekly rate for each payslip in the export period.
       // SMP for the days of this pay period (not today's phase): calendar
       // days at the weekly rate ÷ 7, split across the 90% and flat-rate weeks.
+      // SMP (maternity) or SAP (adoption): the same phases and rates.
+      const payKind = birthPayKind(r.leaveType.name);
       const smpPhases =
-        isMaternityLeaveType(r.leaveType.name) && r.smpPhase1EndDate && r.smpPhase2EndDate
+        payKind && r.smpPhase1EndDate && r.smpPhase2EndDate
           ? { phase1End: r.smpPhase1EndDate, phase2End: r.smpPhase2EndDate }
           : null;
       const smpPeriod = smpPhases
@@ -257,8 +258,9 @@ export async function GET(request: Request) {
                 ? "recalculated"
                 : "not_applicable",
         }),
-        smp: smpPeriod && smpPhases
+        smp: smpPeriod && smpPhases && payKind
           ? {
+              kind: payKind,
               phase:
                 smpPeriod.phase1Days > 0 ? "phase_1" : smpPeriod.phase2Days > 0 ? "phase_2" : "ended",
               label:
@@ -353,7 +355,8 @@ export async function GET(request: Request) {
     ),
     totalSspPay: Number(rows.reduce((s, r) => s + (r.ssp?.pay ?? 0), 0).toFixed(2)),
     totalSppPay: Number(rows.reduce((s, r) => s + (r.spp?.pay ?? 0), 0).toFixed(2)),
-    totalSmpPay: Number(rows.reduce((s, r) => s + (r.smp?.pay ?? 0), 0).toFixed(2)),
+    totalSmpPay: Number(rows.reduce((s, r) => s + (r.smp?.kind === "SMP" ? (r.smp.pay ?? 0) : 0), 0).toFixed(2)),
+    totalSapPay: Number(rows.reduce((s, r) => s + (r.smp?.kind === "SAP" ? (r.smp.pay ?? 0) : 0), 0).toFixed(2)),
   };
 
   const format = parseExportFormat(searchParams.get("format"));

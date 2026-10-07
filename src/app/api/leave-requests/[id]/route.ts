@@ -8,12 +8,8 @@ import { emailApprovedLeaveCancelled } from "@/lib/email-notifications";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
-import {
-  calculateSMPPhaseDates,
-  calculateSMPPhaseRates,
-  getAweForUser,
-  isMaternityLeaveType,
-} from "@/lib/smpCalculator";
+import { birthPayKind } from "@/lib/smp-dates";
+import { computeSmpFields } from "@/lib/smp-request";
 import { reviewLeaveRequest } from "@/lib/leave-requests/review";
 import { changeSicknessEndDate } from "@/lib/leave-requests/change-end-date";
 import { isoDateSchema, isoDateToUtc } from "@/lib/validations";
@@ -28,6 +24,10 @@ const updateSchema = z.object({
   coverOverride: z.boolean().optional(),
   /** Sickness only: move the end date (off longer, or back early). */
   endDate: isoDateSchema.optional(),
+  /** Maternity: the due date, added or corrected after booking (sets the qualifying week). */
+  expectedDueDate: isoDateSchema.nullable().optional(),
+  /** Adoption: when they were told of the match (sets the matching week). */
+  matchedDate: isoDateSchema.nullable().optional(),
 });
 
 export async function PATCH(
@@ -78,6 +78,7 @@ export async function PATCH(
     }
 
     const { status, kitDaysUsed, splitDaysUsed, evidenceProvided, splCurtailmentConfirmed, coverOverride, endDate } = parsed.data;
+    const { expectedDueDate, matchedDate } = parsed.data;
 
     // Date changes stand alone so they can't be mixed with a status change.
     if (endDate !== undefined) {
@@ -223,7 +224,26 @@ export async function PATCH(
       }
     }
 
+    // The due date or matching date: the person on leave, or an admin or
+    // manager, can add it after booking (often only known later). Only on
+    // the leave type it belongs to.
+    const payKind = birthPayKind(leaveRequest.leaveType.name);
+    const datesChanging = expectedDueDate !== undefined || matchedDate !== undefined;
+    if (datesChanging) {
+      if (leaveRequest.userId !== userId && userRole !== "ADMIN" && userRole !== "MANAGER") {
+        return NextResponse.json({ error: "You can't change this request" }, { status: 403 });
+      }
+      if ((expectedDueDate !== undefined && payKind !== "SMP") || (matchedDate !== undefined && payKind !== "SAP")) {
+        return NextResponse.json(
+          { error: "A due date is for maternity leave, and a matching date for adoption leave." },
+          { status: 400 }
+        );
+      }
+    }
+
     const updateData: Record<string, unknown> = {};
+    if (expectedDueDate !== undefined) updateData.expectedDueDate = expectedDueDate ? isoDateToUtc(expectedDueDate) : null;
+    if (matchedDate !== undefined) updateData.matchedDate = matchedDate ? isoDateToUtc(matchedDate) : null;
     if (status === "CANCELLED") {
       updateData.status = "CANCELLED";
     }
@@ -232,30 +252,21 @@ export async function PATCH(
     if (evidenceProvided !== undefined) updateData.evidenceProvided = evidenceProvided;
     if (splCurtailmentConfirmed !== undefined) updateData.splCurtailmentConfirmed = splCurtailmentConfirmed;
 
-    // Back-fill SMP phase data for maternity requests created before the
-    // SMP phase-tracking feature landed; no-ops when fields are already set.
-    if (
-      isMaternityLeaveType(leaveRequest.leaveType.name) &&
-      leaveRequest.smpPhase1EndDate === null
-    ) {
-      const phases = calculateSMPPhaseDates(leaveRequest.startDate);
-      updateData.smpPhase1EndDate = phases.phase1EndDate;
-      updateData.smpPhase2EndDate = phases.phase2EndDate;
-      if (leaveRequest.smpAverageWeeklyEarnings === null) {
-        try {
-          const awe = await getAweForUser(
-            leaveRequest.userId,
-            leaveRequest.startDate
-          );
-          if (awe !== null) {
-            const rates = calculateSMPPhaseRates(awe);
-            updateData.smpAverageWeeklyEarnings = awe;
-            updateData.smpPhase1WeeklyRate = rates.phase1Weekly;
-            updateData.smpPhase2WeeklyRate = rates.phase2Weekly;
-          }
-        } catch (err) {
-          console.error("SMP backfill failed:", err);
-        }
+    // SMP or SAP: worked out again when its date changes, or filled in on
+    // requests from before pay was tracked (src/lib/smp-request.ts).
+    if (payKind && (datesChanging || leaveRequest.smpPhase1EndDate === null)) {
+      try {
+        const smp = await computeSmpFields({
+          userId: leaveRequest.userId,
+          startDate: leaveRequest.startDate,
+          expectedDueDate:
+            expectedDueDate !== undefined ? (expectedDueDate ? isoDateToUtc(expectedDueDate) : null) : leaveRequest.expectedDueDate,
+          matchedDate: matchedDate !== undefined ? (matchedDate ? isoDateToUtc(matchedDate) : null) : leaveRequest.matchedDate,
+          kind: payKind,
+        });
+        Object.assign(updateData, smp.fields);
+      } catch (err) {
+        console.error("SMP/SAP recalculation failed:", err);
       }
     }
 

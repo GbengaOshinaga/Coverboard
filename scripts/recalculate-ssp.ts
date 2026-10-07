@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { SICKNESS_LEAVE_TYPE } from "@/lib/ssp-scope";
 import { computeSmpFields } from "@/lib/smp-request";
+import { birthPayKind } from "@/lib/smp-dates";
 import { computeSspForSpell, recomputeAllSspSpells } from "@/lib/leave-requests/ssp-spell";
 
 /**
- * Also refreshes SMP on live maternity requests (earnings from the 8 weeks
- * up to the qualifying week).
+ * Also refreshes SMP on live maternity requests and SAP on live adoption
+ * requests (earnings from the 8 weeks up to the qualifying or matching week).
  *
  * Recalculates SSP on every live sickness absence of a UK worker (any
  * sickness leave type, not only "Statutory Sick Pay (SSP)"): payable days on each person's
@@ -71,11 +72,15 @@ async function main() {
     );
   }
 
-  // Maternity: SMP from the 8 weeks up to the qualifying week.
+  // Maternity and adoption: SMP or SAP from the 8 weeks up to the
+  // qualifying or matching week.
   const maternity = await prisma.leaveRequest.findMany({
     where: {
       status: { in: ["PENDING", "APPROVED"] },
-      leaveType: { name: { contains: "maternity", mode: "insensitive" } },
+      OR: [
+        { leaveType: { name: { contains: "maternity", mode: "insensitive" } } },
+        { leaveType: { name: { contains: "adoption", mode: "insensitive" } } },
+      ],
       user: { workCountry: "GB" },
     },
     select: {
@@ -84,6 +89,8 @@ async function main() {
       startDate: true,
       endDate: true,
       expectedDueDate: true,
+      matchedDate: true,
+      leaveType: { select: { name: true } },
       smpAverageWeeklyEarnings: true,
       smpPhase1WeeklyRate: true,
       user: { select: { name: true } },
@@ -92,11 +99,18 @@ async function main() {
   const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
   const smpChanges: Array<{ id: string; fields: Awaited<ReturnType<typeof computeSmpFields>>["fields"] }> = [];
   for (const m of maternity) {
-    const { fields } = await computeSmpFields({ userId: m.userId, startDate: m.startDate, expectedDueDate: m.expectedDueDate });
+    const kind = birthPayKind(m.leaveType.name) ?? "SMP";
+    const { fields } = await computeSmpFields({
+      userId: m.userId,
+      startDate: m.startDate,
+      expectedDueDate: m.expectedDueDate,
+      matchedDate: m.matchedDate,
+      kind,
+    });
     if (num(m.smpAverageWeeklyEarnings) === fields.smpAverageWeeklyEarnings && num(m.smpPhase1WeeklyRate) === fields.smpPhase1WeeklyRate) continue;
     smpChanges.push({ id: m.id, fields });
     console.log(
-      `${m.user.name} maternity from ${m.startDate.toISOString().slice(0, 10)}: average earnings ${
+      `${m.user.name} ${kind === "SAP" ? "adoption" : "maternity"} from ${m.startDate.toISOString().slice(0, 10)}: average earnings ${
         num(m.smpAverageWeeklyEarnings) ?? "none"
       } → ${fields.smpAverageWeeklyEarnings ?? "none recorded"}, first-6-weeks rate ${num(m.smpPhase1WeeklyRate) ?? "none"} → ${
         fields.smpPhase1WeeklyRate ?? "not eligible"
@@ -105,7 +119,7 @@ async function main() {
   }
 
   if (!apply) {
-    console.log(`\n${changes} of ${spells.length} SSP absences and ${smpChanges.length} of ${maternity.length} maternity requests would change. Run with --apply to write them.`);
+    console.log(`\n${changes} of ${spells.length} SSP absences and ${smpChanges.length} of ${maternity.length} maternity and adoption requests would change. Run with --apply to write them.`);
     return;
   }
 
@@ -116,7 +130,7 @@ async function main() {
   for (const c of smpChanges) {
     await prisma.leaveRequest.update({ where: { id: c.id }, data: c.fields });
   }
-  console.log(`\nUpdated ${written} of ${spells.length} SSP absences and ${smpChanges.length} of ${maternity.length} maternity requests.`);
+  console.log(`\nUpdated ${written} of ${spells.length} SSP absences and ${smpChanges.length} of ${maternity.length} maternity and adoption requests.`);
 }
 
 main()

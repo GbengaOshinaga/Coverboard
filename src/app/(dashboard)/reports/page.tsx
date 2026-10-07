@@ -1224,7 +1224,7 @@ export default function ReportsPage() {
                               {row.leaveType}
                               {row.smp && row.smp.phase1WeeklyRate !== null && (
                                 <span className="block text-[11px] text-gray-500">
-                                  SMP {formatGBP(row.smp.phase1WeeklyRate)} a week for 6 weeks, then{" "}
+                                  {row.smp.kind} {formatGBP(row.smp.phase1WeeklyRate)} a week for 6 weeks, then{" "}
                                   {row.smp.phase2WeeklyRate !== null ? formatGBP(row.smp.phase2WeeklyRate) : "—"} · {row.smp.label}
                                 </span>
                               )}
@@ -1670,7 +1670,8 @@ export default function ReportsPage() {
                         {(
                           payrollReport.totals.totalSspPay +
                           payrollReport.totals.totalSppPay +
-                          payrollReport.totals.totalSmpPay
+                          payrollReport.totals.totalSmpPay +
+                          payrollReport.totals.totalSapPay
                         ).toLocaleString("en-GB", {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
@@ -1680,6 +1681,7 @@ export default function ReportsPage() {
                         SSP {formatGBP(payrollReport.totals.totalSspPay)} · SPP{" "}
                         {formatGBP(payrollReport.totals.totalSppPay)} · SMP{" "}
                         {formatGBP(payrollReport.totals.totalSmpPay)}
+                        {payrollReport.totals.totalSapPay > 0 && <> · SAP {formatGBP(payrollReport.totals.totalSapPay)}</>}
                       </p>
                     </div>
                   </div>
@@ -1748,7 +1750,7 @@ export default function ReportsPage() {
                               {row.smp
                                 ? row.smp.weeklyRate == null
                                   ? "—"
-                                  : `${formatGBP(row.smp.weeklyRate)}/wk SMP`
+                                  : `${formatGBP(row.smp.weeklyRate)}/wk ${row.smp.kind}`
                                 : row.spp
                                 ? row.spp.weeklyRate == null
                                   ? "—"
@@ -1783,7 +1785,7 @@ export default function ReportsPage() {
                                   : formatGBP(row.estimatedPay)}
                               {row.smp && (
                                 <div className="max-w-56 text-[11px] font-normal text-gray-500">
-                                  {row.smp.daysInPeriod} days of SMP · {row.smp.label}
+                                  {row.smp.daysInPeriod} days of {row.smp.kind} · {row.smp.label}
                                 </div>
                               )}
                               {row.spp && (

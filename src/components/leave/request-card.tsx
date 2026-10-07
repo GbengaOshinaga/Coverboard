@@ -9,6 +9,7 @@ import { RegionalCoverPanel } from "./regional-cover-panel";
 import { RegionalCoverWarning } from "./regional-cover-warning";
 import { FitNoteSection, type FitNoteRow } from "./fit-note-section";
 import { SmpSummary } from "./smp-summary";
+import { birthPayKind } from "@/lib/smp-dates";
 import { formatDateRange, countWeekdays } from "@/lib/utils";
 import { Check, X, ChevronDown, ChevronRight, CalendarClock } from "lucide-react";
 import { isSicknessLeaveTypeName } from "@/lib/leave-requests/rules";
@@ -49,6 +50,7 @@ type LeaveRequest = {
   workingDays?: number;
   /** Maternity: stored SMP (recalculated when earnings change). */
   expectedDueDate?: string | null;
+  matchedDate?: string | null;
   smpAverageWeeklyEarnings?: string | number | null;
   smpPhase1WeeklyRate?: string | number | null;
   smpPhase2WeeklyRate?: string | number | null;
@@ -321,8 +323,8 @@ export function RequestCard({
         </div>
       )}
 
-      {/maternity/i.test(request.leaveType.name) && request.status !== "CANCELLED" && request.status !== "REJECTED" && (
-        <SmpSummary request={request} />
+      {birthPayKind(request.leaveType.name) && request.status !== "CANCELLED" && request.status !== "REJECTED" && (
+        <SmpSummary request={request} kind={birthPayKind(request.leaveType.name)!} onChanged={onUpdated} />
       )}
 
       {canChangeEnd && request.status === "APPROVED" && (

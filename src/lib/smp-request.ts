@@ -1,24 +1,30 @@
 import { prisma } from "@/lib/prisma";
 import { calculateSMPPhaseDates, calculateSmpEntitlement, getAweDetailForUser } from "@/lib/smpCalculator";
-import { smpEarningsCutoff } from "@/lib/smp-dates";
+import { birthPayKind, payTestWeek, smpEarningsCutoff, type BirthPayKind } from "@/lib/smp-dates";
 
 /**
- * SMP for a maternity request, from earnings in the 8 weeks up to the
- * qualifying week (src/lib/smp-dates.ts). Used at booking and again whenever
- * earnings change, because pay is often entered after leave is booked.
+ * SMP for a maternity request, or SAP for an adoption one, from earnings in
+ * the 8 weeks up to the qualifying or matching week (src/lib/smp-dates.ts).
+ * Same rates and phases; stored in the smp* fields. Used at booking and again
+ * whenever earnings change, because pay is often entered after leave is booked.
  */
 export async function computeSmpFields(input: {
   userId: string;
   startDate: Date;
   expectedDueDate: Date | null;
+  /** Adoption only. */
+  matchedDate?: Date | null;
+  kind?: BirthPayKind;
 }) {
+  const kind = input.kind ?? "SMP";
+  const matchedDate = input.matchedDate ?? null;
   const [{ awe, weeksCounted }, employee] = await Promise.all([
-    getAweDetailForUser(input.userId, smpEarningsCutoff(input)),
+    getAweDetailForUser(input.userId, smpEarningsCutoff({ ...input, kind, matchedDate })),
     prisma.user.findUnique({ where: { id: input.userId }, select: { serviceStartDate: true } }),
   ]);
   const entitlement = calculateSmpEntitlement(awe, {
     serviceStartDate: employee?.serviceStartDate ?? null,
-    expectedDueDate: input.expectedDueDate,
+    serviceTestWeek: payTestWeek({ kind, expectedDueDate: input.expectedDueDate, matchedDate }),
   });
   const phases = calculateSMPPhaseDates(input.startDate);
   return {
@@ -36,9 +42,10 @@ export async function computeSmpFields(input: {
 }
 
 /**
- * Maternity requests as shown: SMP worked out now from current earnings and
- * saved if it changed, so a request booked before pay was entered (or before
- * a fix) never shows a stale "no SMP". Adds how many of the 8 weeks had pay.
+ * Maternity and adoption requests as shown: SMP or SAP worked out now from
+ * current earnings and saved if it changed, so a request booked before pay
+ * was entered (or before a fix) never shows a stale "no pay". Adds how many
+ * of the 8 weeks had pay.
  */
 export async function withCurrentSmp<
   T extends {
@@ -47,6 +54,7 @@ export async function withCurrentSmp<
     status: string;
     startDate: Date;
     expectedDueDate: Date | null;
+    matchedDate?: Date | null;
     smpAverageWeeklyEarnings: unknown;
     smpPhase1WeeklyRate: unknown;
     smpPhase2WeeklyRate: unknown;
@@ -56,8 +64,15 @@ export async function withCurrentSmp<
   const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
   return Promise.all(
     requests.map(async (r) => {
-      if (!/maternity/i.test(r.leaveType.name) || r.status === "CANCELLED" || r.status === "REJECTED") return r;
-      const smp = await computeSmpFields({ userId: r.userId, startDate: r.startDate, expectedDueDate: r.expectedDueDate });
+      const kind = birthPayKind(r.leaveType.name);
+      if (!kind || r.status === "CANCELLED" || r.status === "REJECTED") return r;
+      const smp = await computeSmpFields({
+        userId: r.userId,
+        startDate: r.startDate,
+        expectedDueDate: r.expectedDueDate,
+        matchedDate: r.matchedDate ?? null,
+        kind,
+      });
       const changed =
         num(r.smpAverageWeeklyEarnings) !== smp.fields.smpAverageWeeklyEarnings ||
         num(r.smpPhase1WeeklyRate) !== smp.fields.smpPhase1WeeklyRate ||
@@ -68,18 +83,27 @@ export async function withCurrentSmp<
   );
 }
 
-/** After earnings change: recalculate SMP on their live maternity requests. */
+/** After earnings change: recalculate SMP and SAP on their live maternity and adoption requests. */
 export async function recomputeSmpAfterEarningsChange(userId: string): Promise<number> {
   const requests = await prisma.leaveRequest.findMany({
     where: {
       userId,
       status: { in: ["PENDING", "APPROVED"] },
-      leaveType: { name: { contains: "maternity", mode: "insensitive" } },
+      OR: [
+        { leaveType: { name: { contains: "maternity", mode: "insensitive" } } },
+        { leaveType: { name: { contains: "adoption", mode: "insensitive" } } },
+      ],
     },
-    select: { id: true, startDate: true, expectedDueDate: true },
+    select: { id: true, startDate: true, expectedDueDate: true, matchedDate: true, leaveType: { select: { name: true } } },
   });
   for (const r of requests) {
-    const { fields } = await computeSmpFields({ userId, startDate: r.startDate, expectedDueDate: r.expectedDueDate });
+    const { fields } = await computeSmpFields({
+      userId,
+      startDate: r.startDate,
+      expectedDueDate: r.expectedDueDate,
+      matchedDate: r.matchedDate,
+      kind: birthPayKind(r.leaveType.name) ?? "SMP",
+    });
     await prisma.leaveRequest.update({ where: { id: r.id }, data: fields });
   }
   return requests.length;

@@ -73,7 +73,9 @@ export type ParentalRow = {
     allowed: number;
     remaining: number;
   } | null;
+  /** SMP (maternity) or SAP (adoption). */
   smp: {
+    kind: "SMP" | "SAP";
     phase: SMPPhase;
     label: string;
     weeklyRate: number | null;
@@ -206,10 +208,11 @@ export const UK_COMPLIANCE_TABLES = {
       { key: (r) => r.keepingInTouch?.used ?? NOT_APPLICABLE, header: "KIT/SPLIT days used" },
       { key: (r) => r.keepingInTouch?.allowed ?? NOT_APPLICABLE, header: "KIT/SPLIT days allowed" },
       { key: (r) => r.keepingInTouch?.remaining ?? NOT_APPLICABLE, header: "KIT/SPLIT days remaining" },
-      { key: (r) => r.smp?.label ?? null, header: "SMP phase" },
+      { key: (r) => r.smp?.kind ?? null, header: "Maternity or adoption pay (SMP/SAP)" },
+      { key: (r) => r.smp?.label ?? null, header: "SMP/SAP phase" },
       // Both rates, even before pay starts ("Not started" is the phase).
-      { key: (r) => r.smp?.phase1WeeklyRate ?? null, header: "SMP first 6 weeks (£ a week)", format: "money" },
-      { key: (r) => r.smp?.phase2WeeklyRate ?? null, header: "SMP weeks 7–39 (£ a week)", format: "money" },
+      { key: (r) => r.smp?.phase1WeeklyRate ?? null, header: "SMP/SAP first 6 weeks (£ a week)", format: "money" },
+      { key: (r) => r.smp?.phase2WeeklyRate ?? null, header: "SMP/SAP weeks 7–39 (£ a week)", format: "money" },
     ],
   }),
   "right-to-work": table<RightToWorkRow>({

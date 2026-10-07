@@ -1,6 +1,7 @@
 /**
- * Maternity dates, defined once (client-safe: no database).
+ * Maternity and adoption pay dates, defined once (client-safe: no database).
  * https://www.gov.uk/employers-maternity-pay-leave
+ * https://www.gov.uk/employers-adoption-pay-leave
  *
  *  - Expected week of childbirth (EWC): the Sunday–Saturday week the baby is due.
  *  - Qualifying week: 15 weeks before the EWC. SMP needs 26 weeks' service by
@@ -18,14 +19,73 @@ export function qualifyingWeek(dueDate: Date): { start: Date; end: Date } {
   return { start, end: new Date(start.getTime() + 6 * DAY_MS) };
 }
 
+/** The Sunday–Saturday week containing a date (statutory pay weeks). */
+export function weekContaining(date: Date): { start: Date; end: Date } {
+  const day = utcDay(date);
+  const start = new Date(day.getTime() - day.getUTCDay() * DAY_MS);
+  return { start, end: new Date(start.getTime() + 6 * DAY_MS) };
+}
+
 /**
- * Earnings for SMP come from the 8 weeks before this date (exclusive): the
- * day after the qualifying week, or — with no due date — the leave start.
+ * Adoption: the matching week is the week the adopter was told they'd been
+ * matched with the child. Statutory Adoption Pay needs 26 weeks' service into
+ * it, and earnings come from the 8 weeks up to it, as SMP does with the
+ * qualifying week (SPP and SAP (General) Regulations 2002, reg 40).
+ * https://www.gov.uk/employers-adoption-pay-leave/eligibility
  */
-export function smpEarningsCutoff(input: { expectedDueDate: Date | null; startDate: Date }): Date {
-  return input.expectedDueDate
-    ? new Date(qualifyingWeek(input.expectedDueDate).end.getTime() + DAY_MS)
-    : utcDay(input.startDate);
+export const matchingWeek = weekContaining;
+
+/**
+ * The latest employment start that gives 26 weeks' continuous employment
+ * into a test week (qualifying or matching week): weeks run Sunday–Saturday
+ * and a week counts if they were employed for any part of it, so it's the
+ * Saturday 25 weeks before the test week.
+ */
+export function latestStartForService(testWeek: { start: Date; end: Date }): Date {
+  return new Date(testWeek.end.getTime() - 25 * 7 * DAY_MS);
+}
+
+/** SMP for maternity, SAP for adoption. */
+export type BirthPayKind = "SMP" | "SAP";
+
+export function birthPayKind(leaveTypeName: string | null | undefined): BirthPayKind | null {
+  if (!leaveTypeName) return null;
+  if (/maternity/i.test(leaveTypeName)) return "SMP";
+  if (/adoption/i.test(leaveTypeName)) return "SAP";
+  return null;
+}
+
+/**
+ * The week that sets the service test and the earnings period: the
+ * qualifying week (maternity, from the due date) or the matching week
+ * (adoption). null when the date isn't recorded.
+ */
+export function payTestWeek(input: {
+  kind: BirthPayKind;
+  expectedDueDate: Date | null;
+  matchedDate: Date | null;
+}): { start: Date; end: Date } | null {
+  if (input.kind === "SAP") return input.matchedDate ? matchingWeek(input.matchedDate) : null;
+  return input.expectedDueDate ? qualifyingWeek(input.expectedDueDate) : null;
+}
+
+/**
+ * Earnings for SMP or SAP come from the 8 weeks before this date
+ * (exclusive): the day after the qualifying or matching week, or — with no
+ * date recorded — the leave start.
+ */
+export function smpEarningsCutoff(input: {
+  kind?: BirthPayKind;
+  expectedDueDate: Date | null;
+  matchedDate?: Date | null;
+  startDate: Date;
+}): Date {
+  const week = payTestWeek({
+    kind: input.kind ?? "SMP",
+    expectedDueDate: input.expectedDueDate,
+    matchedDate: input.matchedDate ?? null,
+  });
+  return week ? new Date(week.end.getTime() + DAY_MS) : utcDay(input.startDate);
 }
 
 /** The last day maternity leave can run to: 52 weeks from the start. */

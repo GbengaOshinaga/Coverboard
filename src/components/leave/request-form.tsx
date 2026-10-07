@@ -90,6 +90,7 @@ export function RequestForm({
   const [hoursEdited, setHoursEdited] = useState(false);
   // Expected due date — maternity only, for the SMP service-test.
   const [expectedDueDate, setExpectedDueDate] = useState("");
+  const [matchedDate, setMatchedDate] = useState("");
 
   // Balances of whoever the leave is for.
   useEffect(() => {
@@ -134,6 +135,7 @@ export function RequestForm({
 
   const isSickness = /SSP|Sick/i.test(selectedLeaveType?.name ?? "");
   const isMaternityLeave = /maternity/i.test(selectedLeaveType?.name ?? "");
+  const isAdoptionLeave = /adoption/i.test(selectedLeaveType?.name ?? "");
   // Unpaid parental leave is per child, so the booking names the child.
   const isUnpaidParental = /unpaid parental/i.test(selectedLeaveType?.name ?? "");
   const { children, reload: reloadChildren } = useChildren(
@@ -251,6 +253,8 @@ export function RequestForm({
             isMaternityLeave && expectedDueDate
               ? new Date(expectedDueDate).toISOString()
               : undefined,
+          matchedDate:
+            isAdoptionLeave && matchedDate ? new Date(matchedDate).toISOString() : undefined,
           childId: isUnpaidParental ? childId || undefined : undefined,
           onBehalfOfUserId: forSomeoneElse ? subjectId : undefined,
         }),
@@ -271,12 +275,15 @@ export function RequestForm({
           "success"
         );
       }
-      // Maternity: SMP from the earnings in the 8 weeks before.
+      // Maternity or adoption: SMP or SAP from the earnings in the 8 weeks before.
       if (data.smpInfo) {
+        const kind = data.smpInfo.kind ?? "SMP";
         toast(
           data.smpInfo.eligible
-            ? `SMP: ${formatGBP(data.smpInfo.phase1Weekly)} a week for 6 weeks, then ${formatGBP(data.smpInfo.phase2Weekly)} a week for 33 weeks.`
-            : `No SMP: ${data.smpInfo.reason}. They may get Maternity Allowance instead (form SMP1).`,
+            ? `${kind}: ${formatGBP(data.smpInfo.phase1Weekly)} a week for 6 weeks, then ${formatGBP(data.smpInfo.phase2Weekly)} a week for 33 weeks.`
+            : kind === "SAP"
+              ? `No SAP: ${data.smpInfo.reason}. Give them form SAP1 explaining why.`
+              : `No SMP: ${data.smpInfo.reason}. They may get Maternity Allowance instead (form SMP1).`,
           data.smpInfo.eligible ? "success" : "error"
         );
       }
@@ -435,6 +442,27 @@ export function RequestForm({
           <p className="text-xs text-gray-500">
             Used to check Statutory Maternity Pay eligibility (26 weeks&apos;
             service by the qualifying week). Optional.
+          </p>
+        </div>
+      )}
+
+      {/* Matching date — adoption, for SAP (matching week) */}
+      {isAdoptionLeave && (
+        <div className="space-y-1">
+          <Input
+            id="matchedDate"
+            label="Date they were told of the match"
+            type="date"
+            value={matchedDate}
+            onChange={(e) => setMatchedDate(e.target.value)}
+          />
+          <p className="text-xs text-gray-500">
+            For a UK adoption: the date the agency told them they&apos;d been
+            matched with the child. Statutory Adoption Pay needs 26 weeks&apos;
+            service by that week, and is worked out from pay in the 8 weeks up
+            to it. Without it, pay is worked out from the 8 weeks before the
+            leave starts. Overseas adoptions and surrogacy have different dates:
+            work those out by hand.
           </p>
         </div>
       )}

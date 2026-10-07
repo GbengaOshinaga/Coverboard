@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { leaveYearBounds, leaveYearLabel, leaveYearOf, rolloverLeaveYear } from "@/lib/leave-year";
 import { getLeaveYearStart } from "@/lib/leave-year-server";
+import { birthPayKind } from "@/lib/smp-dates";
 import { countWorkingDays, resolveWorkingWeek, weekdaysFromPatterns } from "@/lib/working-week";
 import { bradfordForSickness } from "@/lib/sickness-spells";
 import { getServerSession } from "next-auth";
@@ -13,7 +14,6 @@ import {
 } from "@/lib/uk-compliance";
 import {
   getCurrentSMPPhase,
-  isMaternityLeaveType,
 } from "@/lib/smpCalculator";
 import {
   getUKWorkforceCounts,
@@ -230,8 +230,9 @@ export async function GET(request: Request) {
       .map((r): ParentalRow => {
         const kit = keepingInTouchRule(r.leaveType.name);
         const used = kit ? r[kit.field] : 0;
-        const isMaternity = isMaternityLeaveType(r.leaveType.name);
-        const smp = isMaternity
+        // SMP for maternity, SAP for adoption: the same phases and rates.
+        const payKind = birthPayKind(r.leaveType.name);
+        const smp = payKind
           ? getCurrentSMPPhase({
               startDate: r.startDate,
               phase1EndDate: r.smpPhase1EndDate,
@@ -264,8 +265,9 @@ export async function GET(request: Request) {
           keepingInTouch: kit
             ? { kind: kit.kind, used, allowed: kit.allowed, remaining: Math.max(0, kit.allowed - used) }
             : null,
-          smp: smp
+          smp: smp && payKind
             ? {
+                kind: payKind,
                 phase: smp.phase,
                 label: smp.label,
                 weeklyRate: smp.weeklyRate,

@@ -10,7 +10,7 @@ import { recordAudit, type AuditContext } from "@/lib/audit";
 import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
 import { getDailyHolidayPayRateForUser } from "@/lib/holidayPay";
-import { isMaternityLeaveType } from "@/lib/smpCalculator";
+import { birthPayKind, type BirthPayKind } from "@/lib/smp-dates";
 import { checkOnBehalf, isSicknessLeaveTypeName, noticeError } from "./rules";
 import { keepingInTouchError } from "@/lib/keeping-in-touch";
 import { uplError } from "@/lib/unpaid-parental";
@@ -52,6 +52,8 @@ export type CreateLeaveInput = {
   childBirthDate?: Date;
   /** Expected week of childbirth (due date) — maternity, for the SMP service test. */
   expectedDueDate?: Date;
+  /** Adoption: when they were told of the match, for the SAP matching week. */
+  matchedDate?: Date;
   splCurtailmentConfirmed?: boolean;
   /**
    * An admin/manager recording sickness for a team member (e.g. a phone call
@@ -70,10 +72,10 @@ export type CreateLeaveResult =
       request: Awaited<ReturnType<typeof createRequestRow>>;
       balanceWarning: string | null;
       sspInfo: SspInfo | null;
-      /** Maternity: SMP weekly rates, or why not eligible. */
+      /** Maternity or adoption: SMP or SAP weekly rates, or why not eligible. */
       smpInfo:
-        | { eligible: true; phase1Weekly: number; phase2Weekly: number }
-        | { eligible: false; reason: string }
+        | { kind: BirthPayKind; eligible: true; phase1Weekly: number; phase2Weekly: number }
+        | { kind: BirthPayKind; eligible: false; reason: string }
         | null;
       firstRequest: boolean;
       autoApproved: boolean;
@@ -118,6 +120,7 @@ export async function createLeaveRequest(
     splitDaysUsed,
     childBirthDate,
     expectedDueDate,
+    matchedDate,
     splCurtailmentConfirmed,
     onBehalfOfUserId,
     childId,
@@ -293,21 +296,33 @@ export async function createLeaveRequest(
   let smpPhase1EndDate: Date | null = null;
   let smpPhase2EndDate: Date | null = null;
   let smpInfo: Extract<CreateLeaveResult, { ok: true }>["smpInfo"] = null;
-  if (isMaternityLeaveType(leaveTypeConfig.name)) {
+  const payKind = birthPayKind(leaveTypeConfig.name);
+  if (payKind) {
     try {
       // Earnings from the 8 weeks up to the qualifying week (15 weeks before
-      // the due week), not before the leave starts. Maternity LEAVE is a
-      // day-one right, so the dates are recorded whatever the pay outcome;
-      // rates stay null when not eligible (Maternity Allowance instead).
-      const smp = await computeSmpFields({ userId, startDate, expectedDueDate: expectedDueDate ?? null });
+      // the due week) or, for adoption, the matching week; not before the
+      // leave starts. The LEAVE is a day-one right, so the dates are recorded
+      // whatever the pay outcome; rates stay null when not eligible.
+      const smp = await computeSmpFields({
+        userId,
+        startDate,
+        expectedDueDate: payKind === "SMP" ? (expectedDueDate ?? null) : null,
+        matchedDate: payKind === "SAP" ? (matchedDate ?? null) : null,
+        kind: payKind,
+      });
       smpAverageWeeklyEarnings = smp.fields.smpAverageWeeklyEarnings;
       smpPhase1WeeklyRate = smp.fields.smpPhase1WeeklyRate;
       smpPhase2WeeklyRate = smp.fields.smpPhase2WeeklyRate;
       smpPhase1EndDate = smp.fields.smpPhase1EndDate;
       smpPhase2EndDate = smp.fields.smpPhase2EndDate;
       smpInfo = smp.entitlement.eligible
-        ? { eligible: true, phase1Weekly: smp.entitlement.phase1Weekly, phase2Weekly: smp.entitlement.phase2Weekly }
-        : { eligible: false, reason: smp.entitlement.reason };
+        ? {
+            kind: payKind,
+            eligible: true,
+            phase1Weekly: smp.entitlement.phase1Weekly,
+            phase2Weekly: smp.entitlement.phase2Weekly,
+          }
+        : { kind: payKind, eligible: false, reason: smp.entitlement.reason };
     } catch (err) {
       console.error("SMP phase calculation failed:", err);
     }
@@ -362,6 +377,7 @@ export async function createLeaveRequest(
     childBirthDate: childBirthDate ?? undefined,
     childId: isUpl ? childId : undefined,
     expectedDueDate: expectedDueDate ?? undefined,
+    matchedDate: payKind === "SAP" ? (matchedDate ?? undefined) : undefined,
     splCurtailmentConfirmed: splCurtailmentConfirmed ?? false,
     dailyHolidayPayRate: dailyHolidayPayRate ?? undefined,
     sspDaysPaid,
