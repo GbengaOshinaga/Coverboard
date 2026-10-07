@@ -20,6 +20,7 @@ import {
   Mail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { HolidayOnLeavingCard } from "@/components/team/holiday-on-leaving-card";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
@@ -1034,6 +1035,9 @@ export default function EmployeeProfilePage({
           </Button>
         </div>
       </Dialog>
+
+      {/* Leaving: holiday built up and owed at their last day */}
+      {member.leftOn && canManage && <HolidayOnLeavingCard memberId={memberId} />}
 
       <WorkPatternCard memberId={memberId} canManage={canManage} />
 
