@@ -71,6 +71,8 @@ type LeaveRequest = {
     weeksEntitled: number;
     daysInCare: number;
     stillInCare: boolean;
+    needsCareDates?: boolean;
+    bookingProblem?: string | null;
   };
   smpAverageWeeklyEarnings?: string | number | null;
   smpPhase1WeeklyRate?: string | number | null;
