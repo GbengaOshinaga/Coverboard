@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import ExcelJS from "exceljs";
 import { toCsv, toExcel } from "./export-formats";
-import { PAYROLL_EXPORT_COLUMNS, type PayrollRow } from "./payroll-columns";
+import { PAYROLL_EXPORT_COLUMNS, PAYROLL_LEAVER_COLUMNS, type PayrollRow } from "./payroll-columns";
 
 const base: PayrollRow = {
   leaveRequestId: "lr_1",
@@ -122,4 +122,21 @@ test("SSP row: Brian's 6 days at HMRC's 4-decimal rate, paid £246.50", () => {
     ),
     row
   );
+});
+
+test("leavers table: holiday to pay, or taken over, with the rate and pay", () => {
+  const csv = toCsv(
+    [
+      { userId: "u_9", name: "Uma Leaver", email: "uma@example.com", department: null, lastDay: "2026-06-30", leaveYear: "2026", unit: "days", accrued: 13.88, carriedOver: 0, taken: 10, owed: 3.88, rate: 100, pay: 388 },
+      { userId: "u_8", name: "Tom Over", email: "tom@example.com", department: "Care", lastDay: "2026-03-31", leaveYear: "2026", unit: "days", accrued: 6.9, carriedOver: 0, taken: 20, owed: -13.1, rate: 100, pay: null },
+    ],
+    PAYROLL_LEAVER_COLUMNS,
+    { includeBom: false }
+  ).split("\r\n");
+  assert.equal(
+    csv[0],
+    "Employee ID,Employee,Email,Department,Last day,Leave year,Unit,Built up this year,Carried over and owed,Taken,Holiday to pay,Taken over the entitlement,\"Holiday pay rate (£, 52-week average)\",Holiday pay on leaving (£)"
+  );
+  assert.equal(csv[1], "u_9,Uma Leaver,uma@example.com,,2026-06-30,2026,Days,13.88,0,10,3.88,0,100.00,388.00");
+  assert.equal(csv[2], "u_8,Tom Over,tom@example.com,Care,2026-03-31,2026,Days,6.9,0,20,0,13.1,100.00,");
 });

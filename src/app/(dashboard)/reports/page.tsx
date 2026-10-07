@@ -1716,8 +1716,9 @@ export default function ReportsPage() {
                   <TableSkeleton rows={5} />
                 ) : payrollReport && payrollReport.rows.length === 0 ? (
                   <p className="py-4 text-center text-sm text-gray-400">
-                    No approved leave in these dates, so there&apos;s
-                    nothing to export. Change the dates and press Refresh.
+                    No approved leave in these dates
+                    {payrollReport.leavers.length > 0 ? " (leavers are below)" : ", so there's nothing to export"}.
+                    Change the dates and press Refresh.
                   </p>
                 ) : payrollReport ? (
                   <div className="overflow-x-auto">
@@ -1871,6 +1872,96 @@ export default function ReportsPage() {
                     </table>
                   </div>
                 ) : null}
+
+                {/* Leavers whose last day is in these dates: holiday owed in final pay */}
+                {!payrollLoading && payrollReport && payrollReport.leavers.length > 0 && (
+                  <div className="mt-6">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-semibold text-gray-900">Leavers in these dates</h3>
+                        <p className="text-xs text-gray-500">
+                          Untaken holiday built up by their last day goes in their final pay
+                          {payrollReport.totals.totalLeaverHolidayPay > 0
+                            ? ` (${formatGBP(payrollReport.totals.totalLeaverHolidayPay)} in all)`
+                            : ""}
+                          . Leave taken over the entitlement can only be taken back if agreed in
+                          writing beforehand. It&apos;s also on the Leavers sheet of the Excel export.
+                        </p>
+                      </div>
+                      <a
+                        href={`${payrollExportHref(payrollReport, "csv")}&table=leavers`}
+                        className="inline-flex shrink-0 items-center whitespace-nowrap rounded-md border border-gray-300 px-2.5 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                      >
+                        Leavers CSV
+                      </a>
+                    </div>
+                    <div className="mt-2 overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-100 text-left text-xs font-medium uppercase text-gray-500">
+                            <th className="pb-2 pr-4">Employee</th>
+                            <th className="pb-2 pr-4">Last day</th>
+                            <th className="pb-2 pr-4 text-right">Built up</th>
+                            <th className="pb-2 pr-4 text-right">Taken</th>
+                            <th className="pb-2 pr-4 text-right">To pay</th>
+                            <th className="pb-2 text-right">Holiday pay</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {payrollReport.leavers.map((l) => {
+                            const u = l.unit === "hours" ? "h" : "d";
+                            return (
+                              <tr key={l.userId} className="border-b border-gray-50">
+                                <td className="py-2 pr-4 font-medium text-gray-900">
+                                  <a href={`/team/${l.userId}`} className="hover:underline">
+                                    {l.name}
+                                  </a>
+                                </td>
+                                <td className="py-2 pr-4 text-gray-600">
+                                  {new Date(`${l.lastDay}T00:00:00Z`).toLocaleDateString("en-GB", { timeZone: "UTC" })}
+                                </td>
+                                <td className="py-2 pr-4 text-right font-mono text-gray-600">
+                                  {Math.round((l.accrued + l.carriedOver) * 100) / 100}
+                                  {u}
+                                  {l.carriedOver > 0 && (
+                                    <span className="block text-[11px] font-sans text-gray-400">
+                                      incl. {l.carriedOver}
+                                      {u} carried over
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-2 pr-4 text-right font-mono text-gray-600">
+                                  {l.taken}
+                                  {u}
+                                </td>
+                                <td className="py-2 pr-4 text-right font-mono">
+                                  {l.owed >= 0 ? (
+                                    <>
+                                      {l.owed}
+                                      {u}
+                                    </>
+                                  ) : (
+                                    <span className="text-amber-700">
+                                      {Math.abs(l.owed)}
+                                      {u} over
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-2 text-right font-medium text-gray-900">
+                                  {l.pay !== null
+                                    ? formatGBP(l.pay)
+                                    : l.owed > 0
+                                      ? <span className="text-xs font-normal text-gray-500">Add earnings for the rate</span>
+                                      : "—"}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
