@@ -113,7 +113,7 @@ test("neonatal bookings: within the weeks in care and 68 weeks of the birth", ()
   );
   // 68 weeks from 27 Feb 2027 ends Fri 16 Jun 2028.
   assert.equal(neonatalBookingError({ ...base, request: block("2028-06-12", "2028-06-16") }), null);
-  assert.match(neonatalBookingError({ ...base, request: block("2028-06-12", "2028-06-17") })!, /68 weeks of the birth \(by 2028-06-16\)/);
+  assert.match(neonatalBookingError({ ...base, request: block("2028-06-12", "2028-06-17") })!, /68 weeks of the birth \(by 16 Jun 2028\)/);
   assert.match(neonatalBookingError({ ...base, entitledWeeks: 0, ongoing: true, request: block("2027-03-01", "2027-03-05") })!, /once the baby has been in care for a week/);
 });
 

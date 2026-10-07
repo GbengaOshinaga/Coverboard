@@ -131,7 +131,8 @@ export function neonatalBookingError(input: {
   if (input.birthDate) {
     const deadline = new Date(utcDay(input.birthDate).getTime() + (NEONATAL_DEADLINE_WEEKS * 7 - 1) * DAY_MS);
     if (utcDay(input.request.endDate) > deadline) {
-      return `Neonatal care leave has to be taken within ${NEONATAL_DEADLINE_WEEKS} weeks of the birth (by ${deadline.toISOString().slice(0, 10)}).`;
+      const by = deadline.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+      return `Neonatal care leave has to be taken within ${NEONATAL_DEADLINE_WEEKS} weeks of the birth (by ${by}).`;
     }
   }
   if (input.entitledWeeks === 0) {
