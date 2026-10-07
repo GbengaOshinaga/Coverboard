@@ -20,6 +20,7 @@ import {
   Mail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { HolidayOnLeavingCard } from "@/components/team/holiday-on-leaving-card";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
@@ -661,6 +662,40 @@ export default function EmployeeProfilePage({
   const [resendInviteBusy, setResendInviteBusy] = useState(false);
   const [showRemoveMember, setShowRemoveMember] = useState(false);
   const [removeMemberBusy, setRemoveMemberBusy] = useState(false);
+  // Their last day: today by default; past if recorded late, ahead while they
+  // work their notice (src/lib/leavers.ts).
+  const [lastDay, setLastDay] = useState(() =>
+    new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date())
+  );
+  // What that date would cancel or cut short (src/lib/leavers.ts previewLeaving).
+  type LeavingRow = { leaveType: string; startDate: string; endDate: string };
+  const [leavingPreview, setLeavingPreview] = useState<{
+    leaveCancelled: LeavingRow[];
+    leaveCutShort: LeavingRow[];
+    coverWithdrawn: number;
+    inPast: boolean;
+  } | null>(null);
+  const [leavingPreviewError, setLeavingPreviewError] = useState("");
+  useEffect(() => {
+    if (!showRemoveMember || !lastDay) return;
+    let stale = false;
+    fetch(`/api/team-members/${memberId}/leaving-preview?lastDay=${encodeURIComponent(lastDay)}`)
+      .then(async (r) => {
+        const data = await r.json().catch(() => null);
+        if (stale) return;
+        if (r.ok) {
+          setLeavingPreview(data);
+          setLeavingPreviewError("");
+        } else {
+          setLeavingPreview(null);
+          setLeavingPreviewError(data?.error ?? "");
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      stale = true;
+    };
+  }, [showRemoveMember, lastDay, memberId]);
   const router = useRouter();
 
   const fetchData = useCallback(async () => {
@@ -776,6 +811,11 @@ export default function EmployeeProfilePage({
                       : ""}
                   </Badge>
                 )}
+                {member.isActive !== false && member.leftOn && (
+                  <Badge variant="warning">
+                    Leaving {new Date(member.leftOn).toLocaleDateString("en-GB", { timeZone: "UTC" })}
+                  </Badge>
+                )}
                 <Badge variant="outline">
                   Work country:{" "}
                   {member.workCountry
@@ -839,13 +879,41 @@ export default function EmployeeProfilePage({
                         toast(data.error ?? "Couldn't mark them as rejoined", "error");
                         return;
                       }
-                      toast(`${member.name} is back on the team. Set their working pattern again.`, "success");
+                      toast(
+                        `${member.name} is back on the team. Set their working pattern again, and rebook any leave that was cancelled when they left.`,
+                        "success"
+                      );
                       router.refresh();
                       window.location.reload();
                     }}
                     className="inline-flex h-8 items-center gap-1.5"
                   >
                     Mark as rejoined
+                  </Button>
+                ) : member.leftOn ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={removeMemberBusy}
+                    onClick={async () => {
+                      setRemoveMemberBusy(true);
+                      const res = await fetch(`/api/team-members/${memberId}/rejoin`, { method: "POST" });
+                      const data = (await res.json().catch(() => ({}))) as { error?: string };
+                      setRemoveMemberBusy(false);
+                      if (!res.ok) {
+                        toast(data.error ?? "Couldn't cancel their leaving date", "error");
+                        return;
+                      }
+                      toast(
+                        `${member.name} is staying. Add their working pattern again; leave cancelled for after the leaving date stays cancelled.`,
+                        "success"
+                      );
+                      window.location.reload();
+                    }}
+                    className="inline-flex h-8 items-center gap-1.5"
+                  >
+                    Cancel leaving date
                   </Button>
                 ) : (
                   <Button
@@ -923,12 +991,65 @@ export default function EmployeeProfilePage({
         onClose={() => {
           if (!removeMemberBusy) setShowRemoveMember(false);
         }}
-        title={`Mark ${member.name} as left?`}
+        title={`When is ${member.name}'s last day?`}
       >
-        <p className="text-sm text-gray-700">
-          From today, <strong>{member.name}</strong> can&apos;t sign in and won&apos;t appear on
-          the team or count towards cover. Their working pattern ends, and any leave or cover
-          booked after today is cancelled.
+        <Input
+          id="lastDay"
+          label="Last day of employment"
+          type="date"
+          value={lastDay}
+          onChange={(e) => setLastDay(e.target.value)}
+        />
+        {leavingPreviewError && <p className="mt-2 text-sm text-red-700">{leavingPreviewError}</p>}
+        {leavingPreview?.inPast && (
+          <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            This date is in the past, so {member.name} becomes former staff as soon as you save:
+            they can&apos;t sign in and leave from {new Date(`${lastDay}T00:00:00Z`).toLocaleDateString("en-GB", { timeZone: "UTC" })}{" "}
+            onwards is treated as after they left.
+          </p>
+        )}
+        {leavingPreview &&
+          (leavingPreview.leaveCancelled.length > 0 ||
+            leavingPreview.leaveCutShort.length > 0 ||
+            leavingPreview.coverWithdrawn > 0) && (
+            <div className="mt-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-700">
+              <p className="font-medium text-gray-900">This will also:</p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                {leavingPreview.leaveCancelled.map((r) => (
+                  <li key={`c${r.startDate}`}>
+                    Cancel {r.leaveType}, {new Date(`${r.startDate}T00:00:00Z`).toLocaleDateString("en-GB", { timeZone: "UTC" })} –{" "}
+                    {new Date(`${r.endDate}T00:00:00Z`).toLocaleDateString("en-GB", { timeZone: "UTC" })}
+                  </li>
+                ))}
+                {leavingPreview.leaveCutShort.map((r) => (
+                  <li key={`s${r.startDate}`}>
+                    End {r.leaveType} (from {new Date(`${r.startDate}T00:00:00Z`).toLocaleDateString("en-GB", { timeZone: "UTC" })}) on their last day
+                    {/sick/i.test(r.leaveType) ? ", and recalculate SSP" : ""}
+                  </li>
+                ))}
+                {leavingPreview.coverWithdrawn > 0 && (
+                  <li>
+                    Withdraw {leavingPreview.coverWithdrawn} cover shift{leavingPreview.coverWithdrawn === 1 ? "" : "s"} they&apos;d offered or accepted
+                  </li>
+                )}
+              </ul>
+              <p className="mt-1">Cancelled leave stays cancelled if they rejoin.</p>
+            </div>
+          )}
+        <p className="mt-3 text-sm text-gray-700">
+          {lastDay > new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date()) ? (
+            <>
+              <strong>{member.name}</strong> stays on the team until then, and is marked as left
+              the day after. Now: their working pattern ends after that day, leave and cover
+              booked after it are cancelled, and leave running past it is cut short.
+            </>
+          ) : (
+            <>
+              <strong>{member.name}</strong> can&apos;t sign in from now and won&apos;t appear on
+              the team or count towards cover. Their working pattern ends after their last day,
+              leave and cover after it are cancelled, and leave running past it is cut short.
+            </>
+          )}
         </p>
         <p className="mt-2 text-xs text-gray-600">
           Their records are kept: the law requires holiday and holiday pay records for 6 years.
@@ -949,19 +1070,28 @@ export default function EmployeeProfilePage({
             type="button"
             size="sm"
             variant="destructive"
-            disabled={removeMemberBusy}
+            disabled={removeMemberBusy || !!leavingPreviewError}
             onClick={async () => {
               setRemoveMemberBusy(true);
               try {
-                const res = await fetch(`/api/team-members/${memberId}`, { method: "DELETE" });
-                const data = (await res.json().catch(() => ({}))) as { error?: string };
+                const res = await fetch(`/api/team-members/${memberId}`, {
+                  method: "DELETE",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ lastDay }),
+                });
+                const data = (await res.json().catch(() => ({}))) as { error?: string; leftNow?: boolean };
                 if (!res.ok) {
                   toast(data.error ?? "Could not remove member", "error");
                   return;
                 }
-                toast(`${member.name} has been marked as left. Their records are kept.`, "success");
                 setShowRemoveMember(false);
-                router.push("/team");
+                if (data.leftNow) {
+                  toast(`${member.name} has been marked as left. Their records are kept.`, "success");
+                  router.push("/team");
+                } else {
+                  toast(`${member.name} is leaving on ${new Date(`${lastDay}T00:00:00Z`).toLocaleDateString("en-GB", { timeZone: "UTC" })}.`, "success");
+                  window.location.reload();
+                }
               } catch {
                 toast("Something went wrong", "error");
               } finally {
@@ -969,10 +1099,13 @@ export default function EmployeeProfilePage({
               }
             }}
           >
-            {removeMemberBusy ? "Saving…" : "Mark as left"}
+            {removeMemberBusy ? "Saving…" : "Save leaving date"}
           </Button>
         </div>
       </Dialog>
+
+      {/* Leaving: holiday built up and owed at their last day */}
+      {member.leftOn && canManage && <HolidayOnLeavingCard memberId={memberId} />}
 
       <WorkPatternCard memberId={memberId} canManage={canManage} />
 

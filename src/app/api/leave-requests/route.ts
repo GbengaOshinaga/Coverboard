@@ -136,6 +136,13 @@ const createSchema = z.object({
   hoursBooked: z.number().min(0).optional(),
   childBirthDate: z.string().transform((s) => new Date(s)).optional(),
   expectedDueDate: z.string().transform((s) => new Date(s)).optional(),
+  /** Adoption: when they were told of the match (sets the matching week). */
+  matchedDate: z.string().transform((s) => new Date(s)).optional(),
+  /** Shared parental leave: their notice claims ShPP for these weeks. */
+  shppClaimed: z.boolean().optional(),
+  /** Neonatal care leave: first and last full days in neonatal care. */
+  neonatalCareFirstDay: z.string().transform((s) => new Date(s)).optional(),
+  neonatalCareLastDay: z.string().transform((s) => new Date(s)).optional(),
   splCurtailmentConfirmed: z.boolean().optional(),
   onBehalfOfUserId: z.string().optional(),
   /** Unpaid parental leave: which of their children it's for. */
@@ -183,6 +190,9 @@ export async function POST(request: Request) {
         balanceWarning: result.balanceWarning,
         sspInfo: result.sspInfo,
         smpInfo: result.smpInfo,
+        shppInfo: result.shppInfo,
+        sppInfo: result.sppInfo,
+        sncpInfo: result.sncpInfo,
         firstRequest: result.firstRequest,
       },
       { status: 201 }

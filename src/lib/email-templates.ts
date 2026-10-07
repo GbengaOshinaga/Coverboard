@@ -542,6 +542,41 @@ export function leaveRequestStatusEmail(data: {
   };
 }
 
+// ─── Leave cancelled by an admin or manager (to the employee) ───────
+
+export function leaveCancelledForYouEmail(data: {
+  name: string;
+  cancellerName: string;
+  leaveTypeName: string;
+  startDate: Date;
+  endDate: Date;
+  dashboardUrl: string;
+}): { subject: string; html: string } {
+  return {
+    subject: `Your ${data.leaveTypeName} has been cancelled`,
+    html: layout(`
+      <h1 style="margin:0 0 8px;font-size:20px;color:#111827;">Leave cancelled</h1>
+      <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
+        Hi ${esc(data.name)}, ${esc(data.cancellerName)} has cancelled this leave for you.
+        If you didn&rsquo;t expect this, talk to them.
+      </p>
+      <div style="background-color:#f9fafb;border-radius:6px;padding:16px;margin-bottom:16px;">
+        <table cellpadding="0" cellspacing="0" style="width:100%;font-size:14px;">
+          <tr>
+            <td style="padding:4px 0;color:#6b7280;width:100px;">Type</td>
+            <td style="padding:4px 0;color:#111827;font-weight:600;">${esc(data.leaveTypeName)}</td>
+          </tr>
+          <tr>
+            <td style="padding:4px 0;color:#6b7280;">Dates</td>
+            <td style="padding:4px 0;color:#111827;">${formatDateRange(data.startDate, data.endDate)}</td>
+          </tr>
+        </table>
+      </div>
+      ${button("View your time off", data.dashboardUrl)}
+    `),
+  };
+}
+
 // ─── SSP 28-week cap reached (to admins) ────────────────────────────
 
 export function sspCapReachedEmail(data: {
@@ -619,7 +654,7 @@ export function founderOutreachEmail(data: {
  * `<a href=…>` would render as a link in a manager's inbox. Subject lines are
  * plain text and aren't escaped.
  */
-function esc(s: string): string {
+export function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 

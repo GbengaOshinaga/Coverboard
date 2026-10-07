@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  leaveCancelledForYouEmail,
   leaveRequestStatusEmail,
   leaveRequestSubmittedEmail,
   rightToWorkRecheckEmail,
@@ -79,4 +80,20 @@ test("right-to-work recheck email lists expired first and escapes names", () => 
   assert.ok(html.includes("Eve &lt;b&gt;"));
   assert.ok(html.includes("Permission expired 1 Oct 2026: recheck now"));
   assert.ok(html.includes("Recheck before 20 Nov 2026"));
+});
+
+test("leave cancelled by an approver: names and leave type are escaped", () => {
+  const { subject, html } = leaveCancelledForYouEmail({
+    name: "Ann <b>",
+    cancellerName: "<script>x</script>",
+    leaveTypeName: "Annual & Leave",
+    startDate: new Date("2027-03-01T00:00:00Z"),
+    endDate: new Date("2027-03-05T00:00:00Z"),
+    dashboardUrl: "https://example.test/my-time-off",
+  });
+  assert.equal(subject, "Your Annual & Leave has been cancelled");
+  assert.ok(!html.includes("<script>x</script>"));
+  assert.ok(html.includes("&lt;script&gt;x&lt;/script&gt;"));
+  assert.ok(html.includes("Annual &amp; Leave"));
+  assert.ok(html.includes("Ann &lt;b&gt;"));
 });

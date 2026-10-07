@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { leaveYearBounds, leaveYearLabel, leaveYearOf, rolloverLeaveYear } from "@/lib/leave-year";
 import { getLeaveYearStart } from "@/lib/leave-year-server";
+import { birthPayKind } from "@/lib/smp-dates";
+import { computeShpp, computeSncp, isSharedParentalLeaveType } from "@/lib/smp-request";
+import { isNeonatalCareLeaveType, neonatalWeeksEntitled } from "@/lib/neonatalPay";
 import { countWorkingDays, resolveWorkingWeek, weekdaysFromPatterns } from "@/lib/working-week";
 import { bradfordForSickness } from "@/lib/sickness-spells";
 import { getServerSession } from "next-auth";
@@ -13,7 +16,6 @@ import {
 } from "@/lib/uk-compliance";
 import {
   getCurrentSMPPhase,
-  isMaternityLeaveType,
 } from "@/lib/smpCalculator";
 import {
   getUKWorkforceCounts,
@@ -35,6 +37,7 @@ import {
   type RightToWorkRow,
   type SspLiabilityRow,
   type UkComplianceReport,
+  PARENTAL_TRACKER_LEAVE_TYPES,
 } from "@/lib/uk-compliance-columns";
 import type { AnyPlan } from "@/lib/plans";
 import {
@@ -220,18 +223,14 @@ export async function GET(request: Request) {
     user.leaveRequests
       .filter(
         (r) =>
-          [
-            "Statutory Maternity Leave",
-            "Statutory Paternity Leave",
-            "Shared Parental Leave (SPL)",
-            "Adoption Leave",
-          ].includes(r.leaveType.name) && r.endDate >= today
+          (PARENTAL_TRACKER_LEAVE_TYPES as readonly string[]).includes(r.leaveType.name) && r.endDate >= today
       )
       .map((r): ParentalRow => {
         const kit = keepingInTouchRule(r.leaveType.name);
         const used = kit ? r[kit.field] : 0;
-        const isMaternity = isMaternityLeaveType(r.leaveType.name);
-        const smp = isMaternity
+        // SMP for maternity, SAP for adoption: the same phases and rates.
+        const payKind = birthPayKind(r.leaveType.name);
+        const smp = payKind
           ? getCurrentSMPPhase({
               startDate: r.startDate,
               phase1EndDate: r.smpPhase1EndDate,
@@ -264,8 +263,9 @@ export async function GET(request: Request) {
           keepingInTouch: kit
             ? { kind: kit.kind, used, allowed: kit.allowed, remaining: Math.max(0, kit.allowed - used) }
             : null,
-          smp: smp
+          smp: smp && payKind
             ? {
+                kind: payKind,
                 phase: smp.phase,
                 label: smp.label,
                 weeklyRate: smp.weeklyRate,
@@ -288,6 +288,49 @@ export async function GET(request: Request) {
         };
       })
   );
+
+  // Neonatal care pay and the weeks the time in care gives.
+  const neonatalRequests = new Map(
+    users.flatMap((u) => u.leaveRequests).filter((r) => isNeonatalCareLeaveType(r.leaveType.name)).map((r) => [r.id, r])
+  );
+  for (const row of parental) {
+    const r = neonatalRequests.get(row.requestId);
+    if (!r) continue;
+    const pay = await computeSncp({
+      userId: r.userId,
+      startDate: r.startDate,
+      expectedDueDate: r.expectedDueDate,
+      matchedDate: r.matchedDate,
+      childBirthDate: r.childBirthDate,
+      careFirstDay: r.neonatalCareFirstDay,
+    });
+    row.neonatal = {
+      weeklyRate: pay.weeklyRate,
+      weeksEntitled: r.neonatalCareFirstDay
+        ? neonatalWeeksEntitled({ firstFullDay: r.neonatalCareFirstDay, lastFullDay: r.neonatalCareLastDay }).weeks
+        : 0,
+    };
+  }
+
+  // Shared Parental Pay for SPL rows: worked out from the booking's dates.
+  const splRequests = new Map(
+    users.flatMap((u) => u.leaveRequests).filter((r) => isSharedParentalLeaveType(r.leaveType.name)).map((r) => [r.id, r])
+  );
+  for (const row of parental) {
+    const r = splRequests.get(row.requestId);
+    if (!r) continue;
+    if (!r.shppClaimed) {
+      row.shpp = { claimed: false, weeklyRate: null };
+      continue;
+    }
+    const pay = await computeShpp({
+      userId: r.userId,
+      startDate: r.startDate,
+      expectedDueDate: r.matchedDate ? null : r.expectedDueDate,
+      matchedDate: r.matchedDate,
+    });
+    row.shpp = { claimed: true, weeklyRate: pay.weeklyRate };
+  }
 
   const rightToWorkUsers = await prisma.user.findMany({
     where: { organizationId: orgId, workCountry: "GB", isActive: true },

@@ -35,8 +35,12 @@ export type PayrollRow = {
   dailyHolidayPayRate?: number | null;
   estimatedPay?: number | null;
   rateSource?: PayrollRateSource;
-  /** SMP for the days of this pay period (src/lib/smp-dates.ts smpPayInPeriod). */
+  /**
+   * SMP (maternity) or SAP (adoption) for the days of this pay period
+   * (src/lib/smp-dates.ts smpPayInPeriod): the same phases and rates.
+   */
   smp: {
+    kind: "SMP" | "SAP";
     phase: SMPPhase;
     label: string;
     /** The rate for these days (the 90% rate if any fall in the first 6 weeks). */
@@ -50,10 +54,15 @@ export type PayrollRow = {
     phase1WeeklyRate: number | null;
     phase2WeeklyRate: number | null;
   } | null;
+  /**
+   * Statutory Neonatal Care Pay within the pay period: like SPP, calendar
+   * days at the weekly rate ÷ 7 (src/lib/smp-request.ts computeSncp).
+   */
   neonatal: {
     weeklyRate: number | null;
-    weeksTaken: number;
-    estimatedPay: number | null;
+    calendarDays: number;
+    pay: number | null;
+    basis: string;
   } | null;
   /**
    * Statutory Paternity Pay within the pay period (paternity leave, UK):
@@ -61,6 +70,17 @@ export type PayrollRow = {
    * days in these dates, pay, and why.
    */
   spp: {
+    weeklyRate: number | null;
+    calendarDays: number;
+    pay: number | null;
+    basis: string;
+  } | null;
+  /**
+   * Statutory Shared Parental Pay within the pay period (shared parental
+   * leave, UK): as SPP, for blocks their notice claims pay for; unpaid
+   * blocks show £0 and say so.
+   */
+  shpp: {
     weeklyRate: number | null;
     calendarDays: number;
     pay: number | null;
@@ -94,7 +114,10 @@ export type PayrollReport = {
     totalEstimatedPay: number;
     totalSspPay: number;
     totalSppPay: number;
+    totalShppPay: number;
+    totalNeonatalPay: number;
     totalSmpPay: number;
+    totalSapPay: number;
   };
 };
 
@@ -127,12 +150,18 @@ export const PAYROLL_EXPORT_COLUMNS: ExportColumn<PayrollRow>[] = [
   { key: (r) => r.spp?.weeklyRate ?? null, header: "SPP weekly rate (£)", format: "money" },
   { key: (r) => r.spp?.pay ?? null, header: "SPP pay (£)", format: "money" },
   { key: (r) => r.spp?.basis ?? null, header: "SPP basis" },
-  { key: (r) => r.smp?.label ?? null, header: "SMP phase" },
-  { key: (r) => r.smp?.weeklyRate ?? null, header: "SMP weekly rate (£)", format: "money" },
-  { key: (r) => r.smp?.daysInPeriod ?? null, header: "SMP days" },
-  { key: (r) => r.smp?.pay ?? null, header: "SMP pay (£)", format: "money" },
-  { key: (r) => r.smp?.averageWeeklyEarnings ?? null, header: "SMP average weekly earnings (£)", format: "money" },
-  { key: (r) => r.neonatal?.weeksTaken ?? null, header: "Neonatal weeks" },
+  { key: (r) => r.shpp?.weeklyRate ?? null, header: "ShPP weekly rate (£)", format: "money" },
+  { key: (r) => r.shpp?.pay ?? null, header: "ShPP pay (£)", format: "money" },
+  { key: (r) => r.shpp?.basis ?? null, header: "ShPP basis" },
+  // SMP and SAP share these columns; this one says which (HMRC reports them separately).
+  { key: (r) => r.smp?.kind ?? null, header: "Maternity or adoption pay (SMP/SAP)" },
+  { key: (r) => r.smp?.label ?? null, header: "SMP/SAP phase" },
+  { key: (r) => r.smp?.weeklyRate ?? null, header: "SMP/SAP weekly rate (£)", format: "money" },
+  { key: (r) => r.smp?.daysInPeriod ?? null, header: "SMP/SAP days" },
+  { key: (r) => r.smp?.pay ?? null, header: "SMP/SAP pay (£)", format: "money" },
+  { key: (r) => r.smp?.averageWeeklyEarnings ?? null, header: "SMP/SAP average weekly earnings (£)", format: "money" },
+  { key: (r) => r.neonatal?.calendarDays ?? null, header: "Neonatal pay days" },
   { key: (r) => r.neonatal?.weeklyRate ?? null, header: "Neonatal weekly rate (£)", format: "money" },
-  { key: (r) => r.neonatal?.estimatedPay ?? null, header: "Neonatal estimated pay (£)", format: "money" },
+  { key: (r) => r.neonatal?.pay ?? null, header: "Neonatal pay (£)", format: "money" },
+  { key: (r) => r.neonatal?.basis ?? null, header: "Neonatal pay basis" },
 ];

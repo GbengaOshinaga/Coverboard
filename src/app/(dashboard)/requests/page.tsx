@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { RequestCard } from "@/components/leave/request-card";
 import {
   ApproveCoverModal,
@@ -127,6 +128,8 @@ export default function RequestsPage() {
     });
   }, [requests, isReviewer, userId, userBalances]);
 
+  const [cancelTarget, setCancelTarget] = useState<(typeof requests)[number] | null>(null);
+  const [cancelBusy, setCancelBusy] = useState(false);
   const [overrideTarget, setOverrideTarget] = useState<{
     id: string;
     requesterName: string;
@@ -158,6 +161,12 @@ export default function RequestsPage() {
   }
 
   async function handleAction(id: string, status: string) {
+    // Cancelling asks first (and says who'll be emailed).
+    if (status === "CANCELLED") {
+      const target = requests.find((r) => r.id === id);
+      if (target) setCancelTarget(target);
+      return;
+    }
     if (status !== "APPROVED") {
       const label =
         status === "REJECTED" ? "rejected" : "cancelled";
@@ -275,7 +284,9 @@ export default function RequestsPage() {
                   isReviewer &&
                   (request.user.id !== userId || soleApprover)
                 }
-                canCancel={request.user.id === userId}
+                // Their own leave, or (admins and managers) approved leave
+                // for someone else; pending requests are rejected instead.
+                canCancel={request.user.id === userId || (isReviewer && request.status === "APPROVED")}
                 regionsEnabled={regionsEnabled}
                 onAction={handleAction}
                 onUpdated={() => fetchRequests({ silent: true })}
@@ -285,6 +296,53 @@ export default function RequestsPage() {
           })}
         </div>
       )}
+
+      <Dialog
+        open={!!cancelTarget}
+        onClose={() => {
+          if (!cancelBusy) setCancelTarget(null);
+        }}
+        title={
+          cancelTarget && cancelTarget.user.id !== userId
+            ? `Cancel ${cancelTarget.user.name}'s leave?`
+            : "Cancel your leave?"
+        }
+      >
+        {cancelTarget && (
+          <>
+            <p className="text-sm text-gray-700">
+              {cancelTarget.leaveType.name},{" "}
+              {new Date(cancelTarget.startDate).toLocaleDateString("en-GB", { timeZone: "UTC" })} –{" "}
+              {new Date(cancelTarget.endDate).toLocaleDateString("en-GB", { timeZone: "UTC" })}.
+            </p>
+            <p className="mt-2 text-sm text-gray-700">
+              {cancelTarget.user.id !== userId
+                ? `${cancelTarget.user.name} will be emailed that you cancelled it.`
+                : "Your approvers will be told if it was already approved."}{" "}
+              This can&apos;t be undone; it would need booking again.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button type="button" variant="outline" size="sm" disabled={cancelBusy} onClick={() => setCancelTarget(null)}>
+                Keep it
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                disabled={cancelBusy}
+                onClick={async () => {
+                  setCancelBusy(true);
+                  await patchStatus(cancelTarget.id, { status: "CANCELLED" }, "cancelled", "info");
+                  setCancelBusy(false);
+                  setCancelTarget(null);
+                }}
+              >
+                {cancelBusy ? "Cancelling…" : "Cancel leave"}
+              </Button>
+            </div>
+          </>
+        )}
+      </Dialog>
 
       <ApproveCoverModal
         open={!!overrideTarget}

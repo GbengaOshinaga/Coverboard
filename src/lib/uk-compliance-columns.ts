@@ -51,6 +51,18 @@ export type SspLiabilityRow = {
   belowLel: boolean | null;
 };
 
+/**
+ * Leave on the parental tracker and the compliance pack's parental sheet,
+ * defined once (the UK seed names).
+ */
+export const PARENTAL_TRACKER_LEAVE_TYPES = [
+  "Statutory Maternity Leave",
+  "Statutory Paternity Leave",
+  "Shared Parental Leave (SPL)",
+  "Adoption Leave",
+  "Neonatal Care Leave",
+] as const;
+
 export type ParentalRow = {
   requestId: string;
   userId: string;
@@ -73,7 +85,13 @@ export type ParentalRow = {
     allowed: number;
     remaining: number;
   } | null;
+  /** Neonatal care leave: the weekly rate and weeks the time in care gives. */
+  neonatal?: { weeklyRate: number | null; weeksEntitled: number } | null;
+  /** Shared parental leave: whether pay is claimed, and the ShPP weekly rate. */
+  shpp?: { claimed: boolean; weeklyRate: number | null } | null;
+  /** SMP (maternity) or SAP (adoption). */
   smp: {
+    kind: "SMP" | "SAP";
     phase: SMPPhase;
     label: string;
     weeklyRate: number | null;
@@ -206,10 +224,18 @@ export const UK_COMPLIANCE_TABLES = {
       { key: (r) => r.keepingInTouch?.used ?? NOT_APPLICABLE, header: "KIT/SPLIT days used" },
       { key: (r) => r.keepingInTouch?.allowed ?? NOT_APPLICABLE, header: "KIT/SPLIT days allowed" },
       { key: (r) => r.keepingInTouch?.remaining ?? NOT_APPLICABLE, header: "KIT/SPLIT days remaining" },
-      { key: (r) => r.smp?.label ?? null, header: "SMP phase" },
+      { key: (r) => r.smp?.kind ?? null, header: "Maternity or adoption pay (SMP/SAP)" },
+      { key: (r) => r.smp?.label ?? null, header: "SMP/SAP phase" },
       // Both rates, even before pay starts ("Not started" is the phase).
-      { key: (r) => r.smp?.phase1WeeklyRate ?? null, header: "SMP first 6 weeks (£ a week)", format: "money" },
-      { key: (r) => r.smp?.phase2WeeklyRate ?? null, header: "SMP weeks 7–39 (£ a week)", format: "money" },
+      { key: (r) => r.smp?.phase1WeeklyRate ?? null, header: "SMP/SAP first 6 weeks (£ a week)", format: "money" },
+      { key: (r) => r.smp?.phase2WeeklyRate ?? null, header: "SMP/SAP weeks 7–39 (£ a week)", format: "money" },
+      {
+        key: (r) => (r.shpp ? (r.shpp.claimed ? r.shpp.weeklyRate : "Unpaid") : null),
+        header: "ShPP (£ a week)",
+        format: "money",
+      },
+      { key: (r) => r.neonatal?.weeklyRate ?? null, header: "Neonatal care pay (£ a week)", format: "money" },
+      { key: (r) => r.neonatal?.weeksEntitled ?? null, header: "Neonatal weeks from time in care" },
     ],
   }),
   "right-to-work": table<RightToWorkRow>({

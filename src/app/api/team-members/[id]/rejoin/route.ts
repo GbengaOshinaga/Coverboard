@@ -25,6 +25,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     prisma.user.count({ where: { organizationId: orgId, isActive: true } }),
   ]);
   if (!target) return NextResponse.json({ error: "Team member not found" }, { status: 404 });
+  // Still here with a leaving date ahead: cancel the leaving date. Leave and
+  // cover already cancelled stay cancelled, and their working pattern needs
+  // adding again.
+  if (target.isActive && target.leftOn) {
+    await prisma.user.update({ where: { id }, data: { leftOn: null } });
+    recordAudit({
+      organizationId: orgId,
+      action: "team_member.updated",
+      resource: "team_member",
+      resourceId: id,
+      actor: { id: u.id as string, email: session.user.email ?? null, role: u.role as string },
+      metadata: { event: "team_member.leaving_cancelled", leavingDate: target.leftOn.toISOString().slice(0, 10) },
+      context: requestAuditContext(request),
+    });
+    return NextResponse.json({ success: true, leavingCancelled: true });
+  }
   if (target.isActive) return NextResponse.json({ error: `${target.name} is already on the team` }, { status: 409 });
   const max = org ? maxEmployeesForPlan(org.plan) : Infinity;
   if (Number.isFinite(max) && activeCount >= max) {

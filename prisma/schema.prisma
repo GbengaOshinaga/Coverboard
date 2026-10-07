@@ -244,7 +244,21 @@ model LeaveRequest {
   // Expected week of childbirth (due date) for maternity — drives the SMP
   // 26-week continuous-service / qualifying-week eligibility test.
   expectedDueDate          DateTime?   @db.Date
+  /// Adoption: the date the adopter was told they'd been matched with the
+  /// child. Its Sunday–Saturday week (the matching week) drives the SAP
+  /// service test and earnings period (src/lib/smp-dates.ts).
+  matchedDate              DateTime?   @db.Date
   splCurtailmentConfirmed  Boolean     @default(false)
+  /// Shared parental leave: the employee's notice claims Statutory Shared
+  /// Parental Pay for these weeks (SPL can be up to 50 weeks, ShPP at most
+  /// 37, so some blocks are unpaid). The due date or matching date on the
+  /// request sets the qualifying or matching week for the rate.
+  shppClaimed              Boolean     @default(false)
+  /// Neonatal care leave: the first and last full days the baby spent in
+  /// neonatal care (last empty while still in care). Employers must record
+  /// these; they set the weeks of leave and pay (src/lib/neonatalPay.ts).
+  neonatalCareFirstDay     DateTime?   @db.Date
+  neonatalCareLastDay      DateTime?   @db.Date
   dailyHolidayPayRate      Decimal?    @db.Decimal(10, 2)
   sspDaysPaid              Int         @default(0)
   sspLimitReached          Boolean     @default(false)
@@ -255,6 +269,8 @@ model LeaveRequest {
   /// before the absence); null when no pay was recorded, so the flat rate
   /// applied.
   sspAverageWeeklyEarnings Decimal?    @db.Decimal(10, 2)
+  /// SMP for maternity, SAP for adoption (same rates and phases); which one
+  /// follows the leave type (birthPayKind in src/lib/smp-dates.ts).
   smpAverageWeeklyEarnings Decimal?    @db.Decimal(8, 2)
   smpPhase1EndDate         DateTime?   @db.Date
   smpPhase2EndDate         DateTime?   @db.Date

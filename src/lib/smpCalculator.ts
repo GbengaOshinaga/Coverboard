@@ -21,6 +21,8 @@
  */
 
 import { UK_LEL_WEEKLY } from "@/lib/uk-compliance";
+import { formatGBP } from "@/lib/money";
+import { latestStartForService, qualifyingWeek } from "@/lib/smp-dates";
 
 const DEFAULT_SMP_FLAT_RATE = 194.32;
 
@@ -97,20 +99,22 @@ export type SmpEntitlementOpts = {
   serviceStartDate?: Date | null;
   /** Expected week of childbirth (due date), for the qualifying week. */
   expectedDueDate?: Date | null;
+  /**
+   * The week service is tested into, when not the qualifying week from the
+   * due date: the matching week for adoption (src/lib/smp-dates.ts).
+   */
+  serviceTestWeek?: { start: Date; end: Date } | null;
 };
-
-/** Days from the expected due date back to the start of the qualifying week
- *  (15 weeks) plus the 26 weeks of required continuous service. */
-const SMP_SERVICE_DAYS_BEFORE_DUE = (15 + 26) * 7; // 287
 
 /**
  * SMP eligibility. Two statutory limbs:
  *  1. Earnings test — AWE must be at least the Lower Earnings Limit (£129 for
  *     2026/27). Below it the employee claims Maternity Allowance instead (SMP1).
  *  2. Continuous-service test — 26 weeks' continuous employment into the
- *     qualifying week (15 weeks before the expected due date). Only checked when
- *     BOTH `serviceStartDate` and `expectedDueDate` are supplied; otherwise the
- *     service limb is skipped (earnings-only) and left for the employer.
+ *     qualifying week (15 weeks before the expected due date), or the
+ *     matching week for adoption. Sunday–Saturday weeks; any part of a week
+ *     counts. Only checked when the start date and the week are known;
+ *     otherwise the service limb is left for the employer.
  */
 export function calculateSmpEntitlement(
   averageWeeklyEarnings: number | null | undefined,
@@ -126,12 +130,10 @@ export function calculateSmpEntitlement(
     return { eligible: false, reason: "Below Lower Earnings Limit" };
   }
 
-  if (opts.serviceStartDate && opts.expectedDueDate) {
-    // Must have started on/before (due date − 41 weeks) to have 26 weeks'
-    // continuous service into the qualifying week (due date − 15 weeks).
-    const mustStartBy = new Date(opts.expectedDueDate);
-    mustStartBy.setUTCDate(mustStartBy.getUTCDate() - SMP_SERVICE_DAYS_BEFORE_DUE);
-    if (opts.serviceStartDate > mustStartBy) {
+  const testWeek =
+    opts.serviceTestWeek ?? (opts.expectedDueDate ? qualifyingWeek(opts.expectedDueDate) : null);
+  if (opts.serviceStartDate && testWeek) {
+    if (opts.serviceStartDate > latestStartForService(testWeek)) {
       return {
         eligible: false,
         reason: "Less than 26 weeks' continuous service",
@@ -161,19 +163,24 @@ export type PaternityPay =
 
 export function calculatePaternityPay(
   averageWeeklyEarnings: number | null | undefined,
-  opts: SmpEntitlementOpts = {}
+  opts: SmpEntitlementOpts & {
+    /** For messages: "paternity pay" (default) or "shared parental pay". */
+    payName?: string;
+    /** For messages: "qualifying week" (default) or "matching week". */
+    testWeekName?: string;
+  } = {}
 ): PaternityPay {
   const flat = opts.flatRate ?? SPP_FLAT_RATE;
   const lel = opts.lelWeekly ?? UK_LEL_WEEKLY;
-  const money = (n: number) => `£${n.toFixed(2)}`;
+  const money = formatGBP;
   const e = calculateSmpEntitlement(averageWeeklyEarnings, { ...opts, flatRate: flat });
   if (!e.eligible) {
     const basis =
       e.reason === "Missing average weekly earnings"
-        ? "No pay recorded in the 8 weeks before, so paternity pay can't be worked out. Add their earnings."
+        ? `No pay recorded in the 8 weeks before, so ${opts.payName ?? "paternity pay"} can't be worked out. Add their earnings.`
         : e.reason === "Below Lower Earnings Limit"
           ? `Not eligible: average weekly earnings of ${money(Number(averageWeeklyEarnings))} are below the ${money(lel)} Lower Earnings Limit.`
-          : "Not eligible: less than 26 weeks' continuous service by the qualifying week.";
+          : `Not eligible: less than 26 weeks' continuous service by the ${opts.testWeekName ?? "qualifying week"}.`;
     return { eligible: false, weeklyRate: null, basis };
   }
   const weeklyRate = e.phase2Weekly;

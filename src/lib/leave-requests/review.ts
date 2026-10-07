@@ -5,12 +5,8 @@ import { emailRequestStatusChange } from "@/lib/email-notifications";
 import { recordAudit, type AuditContext, type AuditAction } from "@/lib/audit";
 import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
-import {
-  calculateSMPPhaseDates,
-  calculateSMPPhaseRates,
-  getAweForUser,
-  isMaternityLeaveType,
-} from "@/lib/smpCalculator";
+import { birthPayKind } from "@/lib/smp-dates";
+import { computeSmpFields } from "@/lib/smp-request";
 import { countWeekdays } from "@/lib/utils";
 
 /**
@@ -135,30 +131,21 @@ export async function reviewLeaveRequest(
     reviewedAt: new Date(),
   };
 
-  // Back-fill SMP phase data for maternity requests created before the
-  // SMP phase-tracking feature landed. No-ops when fields are already set.
-  if (
-    isMaternityLeaveType(leaveRequest.leaveType.name) &&
-    leaveRequest.smpPhase1EndDate === null
-  ) {
-    const phases = calculateSMPPhaseDates(leaveRequest.startDate);
-    updateData.smpPhase1EndDate = phases.phase1EndDate;
-    updateData.smpPhase2EndDate = phases.phase2EndDate;
-    if (leaveRequest.smpAverageWeeklyEarnings === null) {
-      try {
-        const awe = await getAweForUser(
-          leaveRequest.userId,
-          leaveRequest.startDate
-        );
-        if (awe !== null) {
-          const rates = calculateSMPPhaseRates(awe);
-          updateData.smpAverageWeeklyEarnings = awe;
-          updateData.smpPhase1WeeklyRate = rates.phase1Weekly;
-          updateData.smpPhase2WeeklyRate = rates.phase2Weekly;
-        }
-      } catch (err) {
-        console.error("SMP backfill failed:", err);
-      }
+  // SMP or SAP for requests from before pay was tracked: the shared
+  // calculation (qualifying or matching week, both eligibility tests).
+  const payKind = birthPayKind(leaveRequest.leaveType.name);
+  if (payKind && leaveRequest.smpPhase1EndDate === null) {
+    try {
+      const smp = await computeSmpFields({
+        userId: leaveRequest.userId,
+        startDate: leaveRequest.startDate,
+        expectedDueDate: leaveRequest.expectedDueDate,
+        matchedDate: leaveRequest.matchedDate,
+        kind: payKind,
+      });
+      Object.assign(updateData, smp.fields);
+    } catch (err) {
+      console.error("SMP/SAP backfill failed:", err);
     }
   }
 

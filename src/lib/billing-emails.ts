@@ -3,6 +3,7 @@
  * helper in lib/email.ts (Resend) and falls back to console.log when
  * RESEND_API_KEY is absent.
  */
+import { esc } from "@/lib/email-templates";
 import { sendEmail } from "@/lib/email";
 import { getAppBaseUrl } from "@/lib/app-url";
 
@@ -129,7 +130,7 @@ export async function emailDeletionComplete({
     subject: "Your Coverboard data has been deleted",
     html: base(`
       <h2 style="margin:0 0 12px">Data deletion complete</h2>
-      <p>The Coverboard account for <strong>${organizationName}</strong> has
+      <p>The Coverboard account for <strong>${esc(organizationName)}</strong> has
       been permanently deleted. All team data, leave records, and billing
       information have been removed in line with GDPR requirements.</p>
       <p>A record of this deletion is retained for regulatory purposes but no

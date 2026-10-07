@@ -4,16 +4,12 @@ import { recomputeBradfordScore } from "@/lib/leave-requests/bradford";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { emailApprovedLeaveCancelled } from "@/lib/email-notifications";
+import { emailApprovedLeaveCancelled, emailLeaveCancelledForYou } from "@/lib/email-notifications";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
-import {
-  calculateSMPPhaseDates,
-  calculateSMPPhaseRates,
-  getAweForUser,
-  isMaternityLeaveType,
-} from "@/lib/smpCalculator";
+import { birthPayKind, shppClaimError } from "@/lib/smp-dates";
+import { computeSmpFields, isSharedParentalLeaveType, shppPoolForChild } from "@/lib/smp-request";
 import { reviewLeaveRequest } from "@/lib/leave-requests/review";
 import { changeSicknessEndDate } from "@/lib/leave-requests/change-end-date";
 import { isoDateSchema, isoDateToUtc } from "@/lib/validations";
@@ -28,6 +24,14 @@ const updateSchema = z.object({
   coverOverride: z.boolean().optional(),
   /** Sickness only: move the end date (off longer, or back early). */
   endDate: isoDateSchema.optional(),
+  /** Maternity: the due date, added or corrected after booking (sets the qualifying week). */
+  expectedDueDate: isoDateSchema.nullable().optional(),
+  /** Adoption: when they were told of the match (sets the matching week). */
+  matchedDate: isoDateSchema.nullable().optional(),
+  /** Shared parental leave: whether their notice claims ShPP for these weeks. */
+  shppClaimed: z.boolean().optional(),
+  /** Neonatal care leave: the last full day in care, once the baby leaves. */
+  neonatalCareLastDay: isoDateSchema.nullable().optional(),
 });
 
 export async function PATCH(
@@ -78,6 +82,7 @@ export async function PATCH(
     }
 
     const { status, kitDaysUsed, splitDaysUsed, evidenceProvided, splCurtailmentConfirmed, coverOverride, endDate } = parsed.data;
+    const { expectedDueDate, matchedDate, shppClaimed, neonatalCareLastDay } = parsed.data;
 
     // Date changes stand alone so they can't be mixed with a status change.
     if (endDate !== undefined) {
@@ -181,10 +186,13 @@ export async function PATCH(
       );
     }
 
+    // The person on leave can cancel it, and so can admins and managers (who
+    // can approve anyone's leave), e.g. leave they recorded by mistake.
+    const cancelledBySomeoneElse = status === "CANCELLED" && leaveRequest.userId !== userId;
     if (status === "CANCELLED") {
-      if (leaveRequest.userId !== userId) {
+      if (cancelledBySomeoneElse && userRole !== "ADMIN" && userRole !== "MANAGER") {
         return NextResponse.json(
-          { error: "Only the requester can cancel their leave" },
+          { error: "Only the person on leave, an admin or a manager can cancel it" },
           { status: 403 }
         );
       }
@@ -223,7 +231,85 @@ export async function PATCH(
       }
     }
 
+    // The due date or matching date: the person on leave, or an admin or
+    // manager, can add it after booking (often only known later). Only on
+    // the leave type it belongs to.
+    const payKind = birthPayKind(leaveRequest.leaveType.name);
+    const isSpl = isSharedParentalLeaveType(leaveRequest.leaveType.name);
+    const isPaternity = /paternity/i.test(leaveRequest.leaveType.name);
+    const isNeonatal = /neonatal/i.test(leaveRequest.leaveType.name);
+    if (neonatalCareLastDay !== undefined) {
+      if (leaveRequest.userId !== userId && userRole !== "ADMIN" && userRole !== "MANAGER") {
+        return NextResponse.json({ error: "You can't change this request" }, { status: 403 });
+      }
+      if (!isNeonatal) {
+        return NextResponse.json({ error: "Days in neonatal care are for neonatal care leave." }, { status: 400 });
+      }
+      if (
+        neonatalCareLastDay &&
+        leaveRequest.neonatalCareFirstDay &&
+        isoDateToUtc(neonatalCareLastDay) < leaveRequest.neonatalCareFirstDay
+      ) {
+        return NextResponse.json({ error: "The last day in neonatal care can't be before the first." }, { status: 400 });
+      }
+    }
+    const datesChanging = expectedDueDate !== undefined || matchedDate !== undefined;
+    if (datesChanging || shppClaimed !== undefined) {
+      if (leaveRequest.userId !== userId && userRole !== "ADMIN" && userRole !== "MANAGER") {
+        return NextResponse.json({ error: "You can't change this request" }, { status: 403 });
+      }
+      // SPL, paternity and neonatal can be for a birth (due date) or an adoption (matching date).
+      if (
+        !isSpl &&
+        !isPaternity &&
+        !isNeonatal &&
+        ((expectedDueDate !== undefined && payKind !== "SMP") || (matchedDate !== undefined && payKind !== "SAP"))
+      ) {
+        return NextResponse.json(
+          { error: "A due date is for maternity leave, and a matching date for adoption leave." },
+          { status: 400 }
+        );
+      }
+      if (shppClaimed !== undefined && !isSpl) {
+        return NextResponse.json({ error: "Shared Parental Pay is only for shared parental leave." }, { status: 400 });
+      }
+    }
+    // Claiming ShPP: within the 37 weeks for the child.
+    if (isSpl && (shppClaimed === true || (datesChanging && leaveRequest.shppClaimed))) {
+      const due = expectedDueDate !== undefined ? (expectedDueDate ? isoDateToUtc(expectedDueDate) : null) : leaveRequest.expectedDueDate;
+      const matched = matchedDate !== undefined ? (matchedDate ? isoDateToUtc(matchedDate) : null) : leaveRequest.matchedDate;
+      if (!due && !matched) {
+        return NextResponse.json(
+          { error: "Add the baby's due date (birth) or the matching date (adoption) to claim Shared Parental Pay." },
+          { status: 400 }
+        );
+      }
+      const otherClaims = await prisma.leaveRequest.findMany({
+        where: {
+          userId: leaveRequest.userId,
+          id: { not: leaveRequest.id },
+          shppClaimed: true,
+          status: { in: ["PENDING", "APPROVED"] },
+          ...(matched ? { matchedDate: matched } : { expectedDueDate: due }),
+        },
+        select: { startDate: true, endDate: true },
+      });
+      const pool = await shppPoolForChild({
+        userId: leaveRequest.userId,
+        expectedDueDate: matched ? null : due,
+        matchedDate: matched,
+      });
+      const capError = shppClaimError({ request: leaveRequest, otherClaims, poolWeeks: pool.poolWeeks });
+      if (capError) return NextResponse.json({ error: capError }, { status: 400 });
+    }
+
     const updateData: Record<string, unknown> = {};
+    if (expectedDueDate !== undefined) updateData.expectedDueDate = expectedDueDate ? isoDateToUtc(expectedDueDate) : null;
+    if (matchedDate !== undefined) updateData.matchedDate = matchedDate ? isoDateToUtc(matchedDate) : null;
+    if (shppClaimed !== undefined) updateData.shppClaimed = shppClaimed;
+    if (neonatalCareLastDay !== undefined) {
+      updateData.neonatalCareLastDay = neonatalCareLastDay ? isoDateToUtc(neonatalCareLastDay) : null;
+    }
     if (status === "CANCELLED") {
       updateData.status = "CANCELLED";
     }
@@ -232,30 +318,21 @@ export async function PATCH(
     if (evidenceProvided !== undefined) updateData.evidenceProvided = evidenceProvided;
     if (splCurtailmentConfirmed !== undefined) updateData.splCurtailmentConfirmed = splCurtailmentConfirmed;
 
-    // Back-fill SMP phase data for maternity requests created before the
-    // SMP phase-tracking feature landed; no-ops when fields are already set.
-    if (
-      isMaternityLeaveType(leaveRequest.leaveType.name) &&
-      leaveRequest.smpPhase1EndDate === null
-    ) {
-      const phases = calculateSMPPhaseDates(leaveRequest.startDate);
-      updateData.smpPhase1EndDate = phases.phase1EndDate;
-      updateData.smpPhase2EndDate = phases.phase2EndDate;
-      if (leaveRequest.smpAverageWeeklyEarnings === null) {
-        try {
-          const awe = await getAweForUser(
-            leaveRequest.userId,
-            leaveRequest.startDate
-          );
-          if (awe !== null) {
-            const rates = calculateSMPPhaseRates(awe);
-            updateData.smpAverageWeeklyEarnings = awe;
-            updateData.smpPhase1WeeklyRate = rates.phase1Weekly;
-            updateData.smpPhase2WeeklyRate = rates.phase2Weekly;
-          }
-        } catch (err) {
-          console.error("SMP backfill failed:", err);
-        }
+    // SMP or SAP: worked out again when its date changes, or filled in on
+    // requests from before pay was tracked (src/lib/smp-request.ts).
+    if (payKind && (datesChanging || leaveRequest.smpPhase1EndDate === null)) {
+      try {
+        const smp = await computeSmpFields({
+          userId: leaveRequest.userId,
+          startDate: leaveRequest.startDate,
+          expectedDueDate:
+            expectedDueDate !== undefined ? (expectedDueDate ? isoDateToUtc(expectedDueDate) : null) : leaveRequest.expectedDueDate,
+          matchedDate: matchedDate !== undefined ? (matchedDate ? isoDateToUtc(matchedDate) : null) : leaveRequest.matchedDate,
+          kind: payKind,
+        });
+        Object.assign(updateData, smp.fields);
+      } catch (err) {
+        console.error("SMP/SAP recalculation failed:", err);
       }
     }
 
@@ -277,9 +354,25 @@ export async function PATCH(
 
     // When someone cancels leave that was already approved, let the other
     // approvers know — it frees up coverage they'd planned around.
+    // Someone else cancelled it: tell the person whose leave it was.
+    const cancellerName = cancelledBySomeoneElse
+      ? ((await prisma.user.findUnique({ where: { id: userId }, select: { name: true } }))?.name ?? "An approver")
+      : updated.user.name;
+    if (cancelledBySomeoneElse && leaveRequest.user.isActive) {
+      emailLeaveCancelledForYou({
+        to: leaveRequest.user.email,
+        name: leaveRequest.user.name,
+        cancellerName,
+        leaveTypeName: updated.leaveType.name,
+        startDate: updated.startDate,
+        endDate: updated.endDate,
+      }).catch((err) => console.error("Cancellation email to employee failed:", err));
+    }
+
     if (status === "CANCELLED" && leaveRequest.status === "APPROVED") {
       emailApprovedLeaveCancelled({
-        cancellerName: updated.user.name,
+        employeeName: cancelledBySomeoneElse ? updated.user.name : null,
+        cancellerName,
         cancellerUserId: userId,
         leaveTypeName: updated.leaveType.name,
         startDate: updated.startDate,

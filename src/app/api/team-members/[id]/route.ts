@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { dbDate, endWorkPatternOps, ukToday } from "@/lib/workPattern";
+import { ukToday } from "@/lib/workPattern";
+import { leavingDateError, recordLeaving } from "@/lib/leavers";
 import { getWorkingWeek, qualifyingDaysFor, syncDaysFromPattern } from "@/lib/working-week-server";
 import { recomputeCurrentSspSpells } from "@/lib/leave-requests/ssp-spell";
 import { ftesFor } from "@/lib/fte-server";
@@ -268,7 +269,8 @@ export async function PATCH(
 }
 
 /**
- * Someone leaving: marked as left, not deleted. Holiday records (leave,
+ * Someone leaving (last day today, in the past, or ahead while they work
+ * their notice; src/lib/leavers.ts): marked as left, not deleted. Holiday records (leave,
  * carry-over, holiday pay) must be kept for 6 years from when they were made
  * (Employment Rights Act 2025, from 6 April 2026), so their history stays.
  * They can't sign in, they're off the team list, their working pattern ends
@@ -304,11 +306,17 @@ export async function DELETE(
     );
   }
 
+  // Their last day: today unless given (past = recorded late, future =
+  // working their notice; src/lib/leavers.ts).
+  const body = await request.json().catch(() => ({}));
+  const today = ukToday();
+  const lastDay: string = typeof body?.lastDay === "string" && body.lastDay ? body.lastDay : today;
+
   try {
     // Only people in your own team.
     const target = await prisma.user.findFirst({
       where: { id, organizationId: orgId },
-      select: { email: true, name: true, isActive: true },
+      select: { email: true, name: true, isActive: true, serviceStartDate: true },
     });
     if (!target) {
       return NextResponse.json({ error: "Team member not found" }, { status: 404 });
@@ -316,23 +324,10 @@ export async function DELETE(
     if (!target.isActive) {
       return NextResponse.json({ error: `${target.name} has already left` }, { status: 409 });
     }
+    const dateProblem = leavingDateError({ lastDay, today, serviceStartDate: target.serviceStartDate });
+    if (dateProblem) return NextResponse.json({ error: dateProblem }, { status: 400 });
 
-    const today = ukToday();
-    const lastDay = dbDate(today);
-    const dayAfter = new Date(lastDay.getTime() + 24 * 60 * 60 * 1000);
-    const [, , cancelledLeave, cancelledCover] = await prisma.$transaction([
-      prisma.user.update({ where: { id }, data: { isActive: false, leftOn: lastDay } }),
-      // Patterns run to today; cover from tomorrow no longer counts them.
-      ...endWorkPatternOps(id, dayAfter),
-      prisma.leaveRequest.updateMany({
-        where: { userId: id, status: { in: ["PENDING", "APPROVED"] }, startDate: { gt: lastDay } },
-        data: { status: "CANCELLED" },
-      }),
-      prisma.coverOffer.updateMany({
-        where: { userId: id, status: { in: ["PENDING", "ACCEPTED"] }, date: { gt: lastDay } },
-        data: { status: "WITHDRAWN" },
-      }),
-    ]);
+    const result = await recordLeaving({ userId: id, lastDay, today });
 
     recordAudit({
       organizationId: orgId,
@@ -345,17 +340,18 @@ export async function DELETE(
         role: userRole,
       },
       metadata: {
-        event: "team_member.left",
+        event: result.leftNow ? "team_member.left" : "team_member.leaving_date_set",
         name: target.name,
         email: target.email,
-        leftOn: today,
-        futureLeaveCancelled: cancelledLeave.count,
-        futureCoverWithdrawn: cancelledCover.count,
+        leftOn: lastDay,
+        futureLeaveCancelled: result.futureLeaveCancelled,
+        futureCoverWithdrawn: result.futureCoverWithdrawn,
+        leaveCutShort: result.leaveCutShort,
       },
       context: requestAuditContext(request),
     });
 
-    return NextResponse.json({ success: true, leftOn: today });
+    return NextResponse.json({ success: true, leftOn: lastDay, ...result });
   } catch (error) {
     console.error("Mark as left error:", error);
     return NextResponse.json(

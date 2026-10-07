@@ -10,12 +10,20 @@ import { recordAudit, type AuditContext } from "@/lib/audit";
 import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
 import { getDailyHolidayPayRateForUser } from "@/lib/holidayPay";
-import { isMaternityLeaveType } from "@/lib/smpCalculator";
+import { birthPayKind, shppClaimError, type BirthPayKind } from "@/lib/smp-dates";
 import { checkOnBehalf, isSicknessLeaveTypeName, noticeError } from "./rules";
 import { keepingInTouchError } from "@/lib/keeping-in-touch";
 import { uplError } from "@/lib/unpaid-parental";
 import { leaveYearForOrg } from "@/lib/leave-year-server";
-import { computeSmpFields } from "@/lib/smp-request";
+import {
+  computeShpp,
+  computeSmpFields,
+  computeSncp,
+  computeSpp,
+  isSharedParentalLeaveType,
+  shppPoolForChild,
+} from "@/lib/smp-request";
+import { isNeonatalCareLeaveType, neonatalBookingError, neonatalWeeksEntitled } from "@/lib/neonatalPay";
 import { sicknessOverlapError } from "./sickness-overlap";
 import { computeSspForSpell, type SspInfo } from "./ssp-spell";
 
@@ -52,6 +60,13 @@ export type CreateLeaveInput = {
   childBirthDate?: Date;
   /** Expected week of childbirth (due date) — maternity, for the SMP service test. */
   expectedDueDate?: Date;
+  /** Adoption (or SPL for an adoption): when they were told of the match, for the matching week. */
+  matchedDate?: Date;
+  /** Shared parental leave: their notice claims ShPP for these weeks. */
+  shppClaimed?: boolean;
+  /** Neonatal care leave: first and last full days in neonatal care (last empty while still in care). */
+  neonatalCareFirstDay?: Date;
+  neonatalCareLastDay?: Date;
   splCurtailmentConfirmed?: boolean;
   /**
    * An admin/manager recording sickness for a team member (e.g. a phone call
@@ -70,11 +85,17 @@ export type CreateLeaveResult =
       request: Awaited<ReturnType<typeof createRequestRow>>;
       balanceWarning: string | null;
       sspInfo: SspInfo | null;
-      /** Maternity: SMP weekly rates, or why not eligible. */
+      /** Maternity or adoption: SMP or SAP weekly rates, or why not eligible. */
       smpInfo:
-        | { eligible: true; phase1Weekly: number; phase2Weekly: number }
-        | { eligible: false; reason: string }
+        | { kind: BirthPayKind; eligible: true; phase1Weekly: number; phase2Weekly: number }
+        | { kind: BirthPayKind; eligible: false; reason: string }
         | null;
+      /** Shared parental leave claiming ShPP: the weekly rate, or why not. */
+      shppInfo: { eligible: boolean; weeklyRate: number | null; basis: string } | null;
+      /** Paternity leave: the SPP weekly rate, or why not. */
+      sppInfo: { eligible: boolean; weeklyRate: number | null; basis: string } | null;
+      /** Neonatal care leave: the weekly rate, weeks the time in care gives, or why not. */
+      sncpInfo: { eligible: boolean; weeklyRate: number | null; basis: string; weeksEntitled: number } | null;
       firstRequest: boolean;
       autoApproved: boolean;
       daysRequested: number;
@@ -118,6 +139,10 @@ export async function createLeaveRequest(
     splitDaysUsed,
     childBirthDate,
     expectedDueDate,
+    matchedDate,
+    shppClaimed,
+    neonatalCareFirstDay,
+    neonatalCareLastDay,
     splCurtailmentConfirmed,
     onBehalfOfUserId,
     childId,
@@ -293,21 +318,138 @@ export async function createLeaveRequest(
   let smpPhase1EndDate: Date | null = null;
   let smpPhase2EndDate: Date | null = null;
   let smpInfo: Extract<CreateLeaveResult, { ok: true }>["smpInfo"] = null;
-  if (isMaternityLeaveType(leaveTypeConfig.name)) {
+  const payKind = birthPayKind(leaveTypeConfig.name);
+  const isSpl = isSharedParentalLeaveType(leaveTypeConfig.name);
+  const isPaternity = /paternity/i.test(leaveTypeConfig.name);
+
+  // Neonatal care leave: needs the days in care (employers must record
+  // them); one week per 7 full days, up to 12, within 68 weeks of birth.
+  const isNeonatal = isNeonatalCareLeaveType(leaveTypeConfig.name);
+  let sncpInfo: Extract<CreateLeaveResult, { ok: true }>["sncpInfo"] = null;
+  if (isNeonatal) {
+    if (!neonatalCareFirstDay) {
+      return { ok: false, status: 400, error: "Add the first full day the baby spent in neonatal care." };
+    }
+    if (neonatalCareLastDay && neonatalCareLastDay < neonatalCareFirstDay) {
+      return { ok: false, status: 400, error: "The last day in neonatal care can't be before the first." };
+    }
+    const entitlement = neonatalWeeksEntitled({ firstFullDay: neonatalCareFirstDay, lastFullDay: neonatalCareLastDay ?? null });
+    const otherBookings = await prisma.leaveRequest.findMany({
+      where: {
+        userId,
+        neonatalCareFirstDay,
+        status: { in: ["PENDING", "APPROVED"] },
+        leaveType: { name: { contains: "neonatal", mode: "insensitive" } },
+      },
+      select: { startDate: true, endDate: true },
+    });
+    const neonatalProblem = neonatalBookingError({
+      request: { startDate, endDate },
+      otherBookings,
+      entitledWeeks: entitlement.weeks,
+      ongoing: entitlement.ongoing,
+      birthDate: childBirthDate ?? null,
+    });
+    if (neonatalProblem) return { ok: false, status: 400, error: neonatalProblem };
+    try {
+      const pay = await computeSncp({
+        userId,
+        startDate,
+        expectedDueDate: expectedDueDate ?? null,
+        matchedDate: matchedDate ?? null,
+        childBirthDate: childBirthDate ?? null,
+        careFirstDay: neonatalCareFirstDay,
+      });
+      sncpInfo = { eligible: pay.eligible, weeklyRate: pay.weeklyRate, basis: pay.basis, weeksEntitled: entitlement.weeks };
+    } catch (err) {
+      console.error("Neonatal care pay calculation failed:", err);
+    }
+  }
+
+  // Paternity pay from the qualifying (or matching) week; shown on booking.
+  let sppInfo: Extract<CreateLeaveResult, { ok: true }>["sppInfo"] = null;
+  if (isPaternity) {
+    try {
+      const pay = await computeSpp({
+        userId,
+        startDate,
+        expectedDueDate: expectedDueDate ?? null,
+        matchedDate: matchedDate ?? null,
+        childBirthDate: childBirthDate ?? null,
+      });
+      sppInfo = { eligible: pay.eligible, weeklyRate: pay.weeklyRate, basis: pay.basis };
+    } catch (err) {
+      console.error("SPP calculation failed:", err);
+    }
+  }
+  const splClaimsPay = isSpl && !!shppClaimed;
+
+  // ShPP: at most 37 weeks of pay for a child across this person's bookings
+  // (the child is identified by the due or matching date).
+  let shppInfo: Extract<CreateLeaveResult, { ok: true }>["shppInfo"] = null;
+  if (splClaimsPay) {
+    if (!expectedDueDate && !matchedDate) {
+      return {
+        ok: false,
+        status: 400,
+        error: "Add the baby's due date (birth) or the matching date (adoption) to claim Shared Parental Pay.",
+      };
+    }
+    const otherClaims = await prisma.leaveRequest.findMany({
+      where: {
+        userId,
+        shppClaimed: true,
+        status: { in: ["PENDING", "APPROVED"] },
+        ...(matchedDate ? { matchedDate } : { expectedDueDate }),
+      },
+      select: { startDate: true, endDate: true },
+    });
+    // The pool is 39 weeks less their own SMP/SAP weeks for the child, if held.
+    const pool = await shppPoolForChild({
+      userId,
+      expectedDueDate: matchedDate ? null : (expectedDueDate ?? null),
+      matchedDate: matchedDate ?? null,
+    });
+    const capError = shppClaimError({ request: { startDate, endDate }, otherClaims, poolWeeks: pool.poolWeeks });
+    if (capError) return { ok: false, status: 400, error: capError };
+    try {
+      const pay = await computeShpp({
+        userId,
+        startDate,
+        expectedDueDate: matchedDate ? null : (expectedDueDate ?? null),
+        matchedDate: matchedDate ?? null,
+      });
+      shppInfo = { eligible: pay.eligible, weeklyRate: pay.weeklyRate, basis: pay.basis };
+    } catch (err) {
+      console.error("ShPP calculation failed:", err);
+    }
+  }
+  if (payKind) {
     try {
       // Earnings from the 8 weeks up to the qualifying week (15 weeks before
-      // the due week), not before the leave starts. Maternity LEAVE is a
-      // day-one right, so the dates are recorded whatever the pay outcome;
-      // rates stay null when not eligible (Maternity Allowance instead).
-      const smp = await computeSmpFields({ userId, startDate, expectedDueDate: expectedDueDate ?? null });
+      // the due week) or, for adoption, the matching week; not before the
+      // leave starts. The LEAVE is a day-one right, so the dates are recorded
+      // whatever the pay outcome; rates stay null when not eligible.
+      const smp = await computeSmpFields({
+        userId,
+        startDate,
+        expectedDueDate: payKind === "SMP" ? (expectedDueDate ?? null) : null,
+        matchedDate: payKind === "SAP" ? (matchedDate ?? null) : null,
+        kind: payKind,
+      });
       smpAverageWeeklyEarnings = smp.fields.smpAverageWeeklyEarnings;
       smpPhase1WeeklyRate = smp.fields.smpPhase1WeeklyRate;
       smpPhase2WeeklyRate = smp.fields.smpPhase2WeeklyRate;
       smpPhase1EndDate = smp.fields.smpPhase1EndDate;
       smpPhase2EndDate = smp.fields.smpPhase2EndDate;
       smpInfo = smp.entitlement.eligible
-        ? { eligible: true, phase1Weekly: smp.entitlement.phase1Weekly, phase2Weekly: smp.entitlement.phase2Weekly }
-        : { eligible: false, reason: smp.entitlement.reason };
+        ? {
+            kind: payKind,
+            eligible: true,
+            phase1Weekly: smp.entitlement.phase1Weekly,
+            phase2Weekly: smp.entitlement.phase2Weekly,
+          }
+        : { kind: payKind, eligible: false, reason: smp.entitlement.reason };
     } catch (err) {
       console.error("SMP phase calculation failed:", err);
     }
@@ -362,6 +504,10 @@ export async function createLeaveRequest(
     childBirthDate: childBirthDate ?? undefined,
     childId: isUpl ? childId : undefined,
     expectedDueDate: expectedDueDate ?? undefined,
+    matchedDate: payKind === "SAP" || isSpl || isPaternity || isNeonatal ? (matchedDate ?? undefined) : undefined,
+    neonatalCareFirstDay: isNeonatal ? neonatalCareFirstDay : undefined,
+    neonatalCareLastDay: isNeonatal ? (neonatalCareLastDay ?? undefined) : undefined,
+    shppClaimed: splClaimsPay,
     splCurtailmentConfirmed: splCurtailmentConfirmed ?? false,
     dailyHolidayPayRate: dailyHolidayPayRate ?? undefined,
     sspDaysPaid,
@@ -522,6 +668,9 @@ export async function createLeaveRequest(
     balanceWarning,
     sspInfo,
     smpInfo,
+    shppInfo,
+    sppInfo,
+    sncpInfo,
     firstRequest,
     autoApproved: autoApprove,
     daysRequested,

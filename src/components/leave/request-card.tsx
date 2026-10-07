@@ -8,7 +8,9 @@ import { CoverageWarning } from "./coverage-warning";
 import { RegionalCoverPanel } from "./regional-cover-panel";
 import { RegionalCoverWarning } from "./regional-cover-warning";
 import { FitNoteSection, type FitNoteRow } from "./fit-note-section";
-import { SmpSummary } from "./smp-summary";
+import { NeonatalSummary, ShppSummary, SmpSummary, SppSummary } from "./smp-summary";
+import { birthPayKind } from "@/lib/smp-dates";
+import type { PayWeek } from "@/lib/smp-request";
 import { formatDateRange, countWeekdays } from "@/lib/utils";
 import { Check, X, ChevronDown, ChevronRight, CalendarClock } from "lucide-react";
 import { isSicknessLeaveTypeName } from "@/lib/leave-requests/rules";
@@ -49,6 +51,27 @@ type LeaveRequest = {
   workingDays?: number;
   /** Maternity: stored SMP (recalculated when earnings change). */
   expectedDueDate?: string | null;
+  matchedDate?: string | null;
+  shpp?: {
+    claimed: boolean;
+    eligible: boolean;
+    weeklyRate: number | null;
+    basis: string;
+    dateKnown: boolean;
+    testWeek?: PayWeek | null;
+    weeksLeft?: number | null;
+    poolWeeks?: number;
+    smpWeeksUsed?: number | null;
+  };
+  spp?: { eligible: boolean; weeklyRate: number | null; basis: string; dateKnown: boolean; testWeek?: PayWeek | null };
+  neonatal?: {
+    eligible: boolean;
+    weeklyRate: number | null;
+    basis: string;
+    weeksEntitled: number;
+    daysInCare: number;
+    stillInCare: boolean;
+  };
   smpAverageWeeklyEarnings?: string | number | null;
   smpPhase1WeeklyRate?: string | number | null;
   smpPhase2WeeklyRate?: string | number | null;
@@ -321,8 +344,17 @@ export function RequestCard({
         </div>
       )}
 
-      {/maternity/i.test(request.leaveType.name) && request.status !== "CANCELLED" && request.status !== "REJECTED" && (
-        <SmpSummary request={request} />
+      {birthPayKind(request.leaveType.name) && request.status !== "CANCELLED" && request.status !== "REJECTED" && (
+        <SmpSummary request={request} kind={birthPayKind(request.leaveType.name)!} onChanged={onUpdated} />
+      )}
+      {request.neonatal && request.status !== "CANCELLED" && request.status !== "REJECTED" && (
+        <NeonatalSummary request={request} onChanged={onUpdated} />
+      )}
+      {request.spp && request.status !== "CANCELLED" && request.status !== "REJECTED" && (
+        <SppSummary request={request} onChanged={onUpdated} />
+      )}
+      {request.shpp && request.status !== "CANCELLED" && request.status !== "REJECTED" && (
+        <ShppSummary request={request} onChanged={onUpdated} />
       )}
 
       {canChangeEnd && request.status === "APPROVED" && (
