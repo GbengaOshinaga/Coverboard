@@ -6,7 +6,7 @@ import {
   getAweDetailForUser,
 } from "@/lib/smpCalculator";
 import { neonatalWeeksEntitled, weekBeforeNeonatalCare } from "@/lib/neonatalPay";
-import { birthPayKind, parentPayDates, payTestWeek, smpEarningsCutoff, type BirthPayKind } from "@/lib/smp-dates";
+import { SHPP_MAX_WEEKS, birthPayKind, parentPayDates, payTestWeek, smpEarningsCutoff, type BirthPayKind } from "@/lib/smp-dates";
 
 /**
  * SMP for a maternity request, or SAP for an adoption one, from earnings in
@@ -77,9 +77,18 @@ export async function withCurrentSmp<
     T & {
       smpEarningsWeeks?: number;
       /** Shared parental leave: ShPP worked out now (not stored). */
-      shpp?: { claimed: boolean; eligible: boolean; weeklyRate: number | null; basis: string; dateKnown: boolean };
+      shpp?: {
+        claimed: boolean;
+        eligible: boolean;
+        weeklyRate: number | null;
+        basis: string;
+        dateKnown: boolean;
+        testWeek?: PayWeek | null;
+        /** Weeks of ShPP left for this child after this person's claims (of 37). */
+        weeksLeft?: number | null;
+      };
       /** Paternity leave: SPP worked out now (not stored). */
-      spp?: { eligible: boolean; weeklyRate: number | null; basis: string; dateKnown: boolean };
+      spp?: { eligible: boolean; weeklyRate: number | null; basis: string; dateKnown: boolean; testWeek?: PayWeek | null };
       /** Neonatal care leave: pay and the weeks the time in care gives (not stored). */
       neonatal?: {
         eligible: boolean;
@@ -131,7 +140,10 @@ export async function withCurrentSmp<
           matchedDate: r.matchedDate ?? null,
           childBirthDate: r.childBirthDate ?? null,
         });
-        return { ...r, spp: { eligible: pay.eligible, weeklyRate: pay.weeklyRate, basis: pay.basis, dateKnown: pay.dateKnown } };
+        return {
+          ...r,
+          spp: { eligible: pay.eligible, weeklyRate: pay.weeklyRate, basis: pay.basis, dateKnown: pay.dateKnown, testWeek: pay.testWeek },
+        };
       }
       if (isSharedParentalLeaveType(r.leaveType.name)) {
         if (!r.shppClaimed) {
@@ -143,7 +155,34 @@ export async function withCurrentSmp<
           expectedDueDate: r.matchedDate ? null : r.expectedDueDate,
           matchedDate: r.matchedDate ?? null,
         });
-        return { ...r, shpp: { claimed: true, eligible: pay.eligible, weeklyRate: pay.weeklyRate, basis: pay.basis, dateKnown: pay.dateKnown } };
+        // Weeks left for the child: 37 less this person's ShPP claims for it
+        // (the real figure can be lower: see shppClaimError).
+        let weeksLeft: number | null = null;
+        if (r.matchedDate || r.expectedDueDate) {
+          const claims = await prisma.leaveRequest.findMany({
+            where: {
+              userId: r.userId,
+              shppClaimed: true,
+              status: { in: ["PENDING", "APPROVED"] },
+              ...(r.matchedDate ? { matchedDate: r.matchedDate } : { expectedDueDate: r.expectedDueDate }),
+            },
+            select: { startDate: true, endDate: true },
+          });
+          const days = claims.reduce((sum, c) => sum + Math.round((c.endDate.getTime() - c.startDate.getTime()) / 86_400_000) + 1, 0);
+          weeksLeft = Math.max(0, Math.round(((SHPP_MAX_WEEKS * 7 - days) / 7) * 10) / 10);
+        }
+        return {
+          ...r,
+          shpp: {
+            claimed: true,
+            eligible: pay.eligible,
+            weeklyRate: pay.weeklyRate,
+            basis: pay.basis,
+            dateKnown: pay.dateKnown,
+            testWeek: pay.testWeek,
+            weeksLeft,
+          },
+        };
       }
       const kind = birthPayKind(r.leaveType.name);
       if (!kind) return r;
@@ -250,7 +289,33 @@ async function weeklyParentPayFromWeek(input: {
     payName: input.payName,
     testWeekName: input.testWeekName,
   });
-  return { ...pay, averageWeeklyEarnings: awe, weeksCounted };
+  return {
+    ...pay,
+    averageWeeklyEarnings: awe,
+    weeksCounted,
+    /** The week earnings and service were taken up to, for showing on cards. */
+    testWeek: input.testWeek
+      ? {
+          name: input.testWeekName,
+          start: input.testWeek.start.toISOString().slice(0, 10),
+          end: input.testWeek.end.toISOString().slice(0, 10),
+        }
+      : null,
+  };
+}
+
+export type PayWeek = { name: string; start: string; end: string };
+
+/** "the qualifying week (19–25 Jul 2026)" for pay explanations. */
+function weekPhrase(week: { name: string; start: string; end: string }): string {
+  const f = (iso: string, withYear: boolean) =>
+    new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      ...(withYear ? { year: "numeric" } : {}),
+      timeZone: "UTC",
+    });
+  return `the ${week.name} (${f(week.start, false)} – ${f(week.end, true)})`;
 }
 
 /**
@@ -274,7 +339,7 @@ export async function computeSncp(input: {
   if (primary.dateKnown && primary.eligible) {
     return {
       ...primary,
-      basis: `${primary.basis.replace(/\.$/, "")}, from the ${input.matchedDate ? "matching" : "qualifying"} week (entitled to ${input.matchedDate ? "SAP" : "SMP or SPP"})`,
+      basis: `${primary.basis.replace(/\.$/, "")}, from ${primary.testWeek ? weekPhrase(primary.testWeek) : `the ${input.matchedDate ? "matching" : "qualifying"} week`}, as they're entitled to ${input.matchedDate ? "SAP" : "SMP or SPP"}`,
     };
   }
   if (!input.careFirstDay) return primary;
@@ -288,9 +353,7 @@ export async function computeSncp(input: {
   });
   return {
     ...fallback,
-    basis: fallback.eligible
-      ? `${fallback.basis}, from the week before neonatal care began`
-      : fallback.basis,
+    basis: fallback.eligible && fallback.testWeek ? `${fallback.basis}, from ${weekPhrase(fallback.testWeek)}` : fallback.basis,
     dateKnown: true,
   };
 }

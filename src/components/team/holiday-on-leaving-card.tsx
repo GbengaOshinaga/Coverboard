@@ -59,12 +59,12 @@ export function HolidayOnLeavingCard({ memberId }: { memberId: string }) {
                     </td>
                   </tr>
                 )}
-                {report.carriedOver > 0 && (
-                  <tr>
-                    <td className="py-1 text-gray-500">Carried over and still owed</td>
-                    <td className="py-1 text-right font-mono">+ {n(report.carriedOver)}</td>
-                  </tr>
-                )}
+                <tr>
+                  <td className="py-1 text-gray-500">Carried over from earlier years and still owed</td>
+                  <td className="py-1 text-right font-mono">
+                    {report.carriedOver > 0 ? `+ ${n(report.carriedOver)}` : "none"}
+                  </td>
+                </tr>
                 <tr>
                   <td className="py-1 text-gray-500">
                     Taken{report.bankHolidaysOnTop ? ` (with ${report.bankHolidaysOnTop.byLastDay} bank holidays)` : ""}

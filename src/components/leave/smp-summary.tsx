@@ -16,6 +16,19 @@ const num = (v: Stored) => (v === null || v === undefined ? null : Number(v));
 const fmt = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 const money = formatGBP;
 
+type PayWeek = { name: string; start: string; end: string };
+
+/** "Qualifying week 19 Jul – 25 Jul 2026" */
+function WeekLine({ week }: { week?: PayWeek | null }) {
+  if (!week) return null;
+  const name = week.name.charAt(0).toUpperCase() + week.name.slice(1);
+  return (
+    <p>
+      {name} {fmt(new Date(`${week.start}T00:00:00Z`))} – {fmt(new Date(`${week.end}T00:00:00Z`))}
+    </p>
+  );
+}
+
 /**
  * Statutory Maternity Pay on a maternity request, or Statutory Adoption Pay
  * on an adoption one: the qualifying or matching week, the earnings it's
@@ -164,7 +177,15 @@ export function ShppSummary({
   onChanged?: () => void;
   request: {
     id: string;
-    shpp?: { claimed: boolean; eligible: boolean; weeklyRate: number | null; basis: string; dateKnown: boolean };
+    shpp?: {
+      claimed: boolean;
+      eligible: boolean;
+      weeklyRate: number | null;
+      basis: string;
+      dateKnown: boolean;
+      testWeek?: PayWeek | null;
+      weeksLeft?: number | null;
+    };
   };
 }) {
   const [saving, setSaving] = useState(false);
@@ -199,6 +220,14 @@ export function ShppSummary({
       ) : (
         <p className="text-amber-700">No ShPP: {shpp.basis}</p>
       )}
+      {shpp.claimed && <WeekLine week={shpp.testWeek} />}
+      {shpp.claimed && shpp.weeksLeft != null && (
+        <p>
+          {shpp.weeksLeft} of 37 weeks of Shared Parental Pay left for this child after their bookings
+          (less if the other parent claims some, or the mother or adopter used more than 2 weeks of
+          maternity or adoption pay).
+        </p>
+      )}
       <button
         type="button"
         disabled={saving}
@@ -224,7 +253,7 @@ export function SppSummary({
   onChanged?: () => void;
   request: {
     id: string;
-    spp?: { eligible: boolean; weeklyRate: number | null; basis: string; dateKnown: boolean };
+    spp?: { eligible: boolean; weeklyRate: number | null; basis: string; dateKnown: boolean; testWeek?: PayWeek | null };
   };
 }) {
   const [dateFor, setDateFor] = useState<"birth" | "adoption">("birth");
@@ -255,6 +284,7 @@ export function SppSummary({
   return (
     <div className="mt-2 rounded-md border border-purple-100 bg-purple-50/50 px-3 py-2 text-xs text-gray-700">
       <p className="font-medium text-gray-900">Statutory Paternity Pay</p>
+      <WeekLine week={spp.testWeek} />
       <p className={spp.weeklyRate === null ? "text-amber-700" : undefined}>
         {spp.weeklyRate === null ? `No SPP: ${spp.basis}` : `${spp.basis}.`}
       </p>

@@ -107,3 +107,29 @@ export async function deactivateLeaversDue(today: string): Promise<number> {
   });
   return result.count;
 }
+
+/** What recordLeaving would do for a last day, without doing it (for the dialog). */
+export async function previewLeaving(input: { userId: string; lastDay: string }) {
+  const lastDay = dbDate(input.lastDay);
+  const live = { userId: input.userId, status: { in: ["PENDING", "APPROVED"] as ("PENDING" | "APPROVED")[] } };
+  const [cancelled, cutShort, cover] = await Promise.all([
+    prisma.leaveRequest.findMany({
+      where: { ...live, startDate: { gt: lastDay } },
+      orderBy: { startDate: "asc" },
+      select: { startDate: true, endDate: true, leaveType: { select: { name: true } } },
+    }),
+    prisma.leaveRequest.findMany({
+      where: { ...live, startDate: { lte: lastDay }, endDate: { gt: lastDay } },
+      select: { startDate: true, endDate: true, leaveType: { select: { name: true } } },
+    }),
+    prisma.coverOffer.count({
+      where: { userId: input.userId, status: { in: ["PENDING", "ACCEPTED"] }, date: { gt: lastDay } },
+    }),
+  ]);
+  const row = (r: { startDate: Date; endDate: Date; leaveType: { name: string } }) => ({
+    leaveType: r.leaveType.name,
+    startDate: r.startDate.toISOString().slice(0, 10),
+    endDate: r.endDate.toISOString().slice(0, 10),
+  });
+  return { leaveCancelled: cancelled.map(row), leaveCutShort: cutShort.map(row), coverWithdrawn: cover };
+}

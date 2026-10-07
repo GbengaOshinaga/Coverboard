@@ -1,3 +1,4 @@
+import { PARENTAL_TRACKER_LEAVE_TYPES } from "@/lib/uk-compliance-columns";
 import { prisma } from "@/lib/prisma";
 import { createSetPasswordLink, INVITE_LINK_DAYS } from "@/lib/invite-links";
 import { sendEmail, resend, getFromAddress } from "@/lib/email";
@@ -274,7 +275,7 @@ export async function sendUpcomingParentalReturnAlerts(): Promise<number> {
     where: {
       status: "APPROVED",
       endDate: { gte: windowStart, lte: windowEnd },
-      leaveType: { name: { in: ["Statutory Maternity Leave", "Statutory Paternity Leave", "Shared Parental Leave (SPL)", "Adoption Leave", "Unpaid Parental Leave"] } },
+      leaveType: { name: { in: [...PARENTAL_TRACKER_LEAVE_TYPES, "Unpaid Parental Leave"] } },
     },
     include: {
       user: { select: { name: true, organizationId: true } },

@@ -51,6 +51,18 @@ export type SspLiabilityRow = {
   belowLel: boolean | null;
 };
 
+/**
+ * Leave on the parental tracker and the compliance pack's parental sheet,
+ * defined once (the UK seed names).
+ */
+export const PARENTAL_TRACKER_LEAVE_TYPES = [
+  "Statutory Maternity Leave",
+  "Statutory Paternity Leave",
+  "Shared Parental Leave (SPL)",
+  "Adoption Leave",
+  "Neonatal Care Leave",
+] as const;
+
 export type ParentalRow = {
   requestId: string;
   userId: string;
@@ -73,6 +85,8 @@ export type ParentalRow = {
     allowed: number;
     remaining: number;
   } | null;
+  /** Neonatal care leave: the weekly rate and weeks the time in care gives. */
+  neonatal?: { weeklyRate: number | null; weeksEntitled: number } | null;
   /** Shared parental leave: whether pay is claimed, and the ShPP weekly rate. */
   shpp?: { claimed: boolean; weeklyRate: number | null } | null;
   /** SMP (maternity) or SAP (adoption). */
@@ -220,6 +234,8 @@ export const UK_COMPLIANCE_TABLES = {
         header: "ShPP (£ a week)",
         format: "money",
       },
+      { key: (r) => r.neonatal?.weeklyRate ?? null, header: "Neonatal care pay (£ a week)", format: "money" },
+      { key: (r) => r.neonatal?.weeksEntitled ?? null, header: "Neonatal weeks from time in care" },
     ],
   }),
   "right-to-work": table<RightToWorkRow>({

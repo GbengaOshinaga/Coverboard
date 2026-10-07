@@ -1222,6 +1222,14 @@ export default function ReportsPage() {
                             </td>
                             <td className="py-2.5 pr-4 text-gray-600">
                               {row.leaveType}
+                              {row.neonatal && (
+                                <span className="block text-[11px] text-gray-500">
+                                  {row.neonatal.weeklyRate !== null
+                                    ? `Neonatal care pay ${formatGBP(row.neonatal.weeklyRate)} a week`
+                                    : "No neonatal care pay (see the request)"}
+                                  {` · ${row.neonatal.weeksEntitled} week${row.neonatal.weeksEntitled === 1 ? "" : "s"} from time in care`}
+                                </span>
+                              )}
                               {row.shpp && (
                                 <span className="block text-[11px] text-gray-500">
                                   {row.shpp.claimed

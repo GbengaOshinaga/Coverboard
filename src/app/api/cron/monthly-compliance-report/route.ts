@@ -1,3 +1,4 @@
+import { PARENTAL_TRACKER_LEAVE_TYPES } from "@/lib/uk-compliance-columns";
 import { NextResponse } from "next/server";
 import { rightToWorkAtRiskWhere } from "@/lib/right-to-work";
 import { prisma } from "@/lib/prisma";
@@ -102,14 +103,7 @@ async function runMonthlyReport(now: Date): Promise<{
           status: "APPROVED",
           endDate: { gte: now },
           leaveType: {
-            name: {
-              in: [
-                "Statutory Maternity Leave",
-                "Statutory Paternity Leave",
-                "Shared Parental Leave (SPL)",
-                "Adoption Leave",
-              ],
-            },
+            name: { in: [...PARENTAL_TRACKER_LEAVE_TYPES] },
           },
         },
         select: {

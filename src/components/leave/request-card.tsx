@@ -10,6 +10,7 @@ import { RegionalCoverWarning } from "./regional-cover-warning";
 import { FitNoteSection, type FitNoteRow } from "./fit-note-section";
 import { NeonatalSummary, ShppSummary, SmpSummary, SppSummary } from "./smp-summary";
 import { birthPayKind } from "@/lib/smp-dates";
+import type { PayWeek } from "@/lib/smp-request";
 import { formatDateRange, countWeekdays } from "@/lib/utils";
 import { Check, X, ChevronDown, ChevronRight, CalendarClock } from "lucide-react";
 import { isSicknessLeaveTypeName } from "@/lib/leave-requests/rules";
@@ -51,8 +52,16 @@ type LeaveRequest = {
   /** Maternity: stored SMP (recalculated when earnings change). */
   expectedDueDate?: string | null;
   matchedDate?: string | null;
-  shpp?: { claimed: boolean; eligible: boolean; weeklyRate: number | null; basis: string; dateKnown: boolean };
-  spp?: { eligible: boolean; weeklyRate: number | null; basis: string; dateKnown: boolean };
+  shpp?: {
+    claimed: boolean;
+    eligible: boolean;
+    weeklyRate: number | null;
+    basis: string;
+    dateKnown: boolean;
+    testWeek?: PayWeek | null;
+    weeksLeft?: number | null;
+  };
+  spp?: { eligible: boolean; weeklyRate: number | null; basis: string; dateKnown: boolean; testWeek?: PayWeek | null };
   neonatal?: {
     eligible: boolean;
     weeklyRate: number | null;
