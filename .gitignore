@@ -42,3 +42,7 @@ next-env.d.ts
 # Claude Code (local / wizard artifacts)
 .claude/
 posthog-setup-report.md
+
+# Feature guide build
+docs/guide/.venv/
+docs/guide/__pycache__/
