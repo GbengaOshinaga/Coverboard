@@ -275,7 +275,9 @@ export default function RequestsPage() {
                   isReviewer &&
                   (request.user.id !== userId || soleApprover)
                 }
-                canCancel={request.user.id === userId}
+                // Their own leave, or (admins and managers) approved leave
+                // for someone else; pending requests are rejected instead.
+                canCancel={request.user.id === userId || (isReviewer && request.status === "APPROVED")}
                 regionsEnabled={regionsEnabled}
                 onAction={handleAction}
                 onUpdated={() => fetchRequests({ silent: true })}

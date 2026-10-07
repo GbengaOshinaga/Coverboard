@@ -4,7 +4,7 @@ import { recomputeBradfordScore } from "@/lib/leave-requests/bradford";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { emailApprovedLeaveCancelled } from "@/lib/email-notifications";
+import { emailApprovedLeaveCancelled, emailLeaveCancelledForYou } from "@/lib/email-notifications";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
@@ -186,10 +186,13 @@ export async function PATCH(
       );
     }
 
+    // The person on leave can cancel it, and so can admins and managers (who
+    // can approve anyone's leave), e.g. leave they recorded by mistake.
+    const cancelledBySomeoneElse = status === "CANCELLED" && leaveRequest.userId !== userId;
     if (status === "CANCELLED") {
-      if (leaveRequest.userId !== userId) {
+      if (cancelledBySomeoneElse && userRole !== "ADMIN" && userRole !== "MANAGER") {
         return NextResponse.json(
-          { error: "Only the requester can cancel their leave" },
+          { error: "Only the person on leave, an admin or a manager can cancel it" },
           { status: 403 }
         );
       }
@@ -346,9 +349,25 @@ export async function PATCH(
 
     // When someone cancels leave that was already approved, let the other
     // approvers know — it frees up coverage they'd planned around.
+    // Someone else cancelled it: tell the person whose leave it was.
+    const cancellerName = cancelledBySomeoneElse
+      ? ((await prisma.user.findUnique({ where: { id: userId }, select: { name: true } }))?.name ?? "An approver")
+      : updated.user.name;
+    if (cancelledBySomeoneElse && leaveRequest.user.isActive) {
+      emailLeaveCancelledForYou({
+        to: leaveRequest.user.email,
+        name: leaveRequest.user.name,
+        cancellerName,
+        leaveTypeName: updated.leaveType.name,
+        startDate: updated.startDate,
+        endDate: updated.endDate,
+      }).catch((err) => console.error("Cancellation email to employee failed:", err));
+    }
+
     if (status === "CANCELLED" && leaveRequest.status === "APPROVED") {
       emailApprovedLeaveCancelled({
-        cancellerName: updated.user.name,
+        employeeName: cancelledBySomeoneElse ? updated.user.name : null,
+        cancellerName,
         cancellerUserId: userId,
         leaveTypeName: updated.leaveType.name,
         startDate: updated.startDate,

@@ -7,7 +7,9 @@ import {
   signupWelcomeEmail,
   leaveRequestSubmittedEmail,
   leaveRequestStatusEmail,
+  leaveCancelledForYouEmail,
   sspCapReachedEmail,
+  esc,
 } from "@/lib/email-templates";
 import { countWeekdays } from "@/lib/utils";
 
@@ -133,6 +135,8 @@ export async function emailNewRequest(data: {
 // ─── Approved Leave Cancelled (notify the other approvers) ───────────
 
 export async function emailApprovedLeaveCancelled(data: {
+  /** Whose leave it was, when an approver cancelled someone else's. */
+  employeeName?: string | null;
   cancellerName: string;
   cancellerUserId: string;
   leaveTypeName: string;
@@ -157,10 +161,14 @@ export async function emailApprovedLeaveCancelled(data: {
 
   const days = countWeekdays(data.startDate, data.endDate);
   const range = `${data.startDate.toLocaleDateString("en-GB")} – ${data.endDate.toLocaleDateString("en-GB")}`;
-  const subject = `${data.cancellerName} cancelled approved leave`;
+  const whose = data.employeeName ? `${data.employeeName}'s` : "their";
+  const subject = data.employeeName
+    ? `${data.cancellerName} cancelled ${data.employeeName}'s approved leave`
+    : `${data.cancellerName} cancelled approved leave`;
+  // Names and leave types are user-entered: escaped for the HTML.
   const html = `
-    <p>${data.cancellerName} has cancelled leave that was previously approved:</p>
-    <p><strong>${data.leaveTypeName}</strong><br/>${range} (${days} day${days !== 1 ? "s" : ""})</p>
+    <p>${esc(data.cancellerName)} has cancelled ${esc(whose)} leave that was previously approved:</p>
+    <p><strong>${esc(data.leaveTypeName)}</strong><br/>${range} (${days} day${days !== 1 ? "s" : ""})</p>
     <p>The time has been freed up — you may want to review team coverage.</p>
     <p><a href="${getAppBaseUrl()}/requests">View requests</a></p>
   `;
@@ -168,6 +176,22 @@ export async function emailApprovedLeaveCancelled(data: {
   await Promise.all(
     approvers.map((m) => sendEmail({ to: m.email, subject, html }))
   );
+}
+
+/** An admin or manager cancelled someone's leave: tell them. */
+export async function emailLeaveCancelledForYou(data: {
+  to: string;
+  name: string;
+  cancellerName: string;
+  leaveTypeName: string;
+  startDate: Date;
+  endDate: Date;
+}) {
+  const { subject, html } = leaveCancelledForYouEmail({
+    ...data,
+    dashboardUrl: `${getAppBaseUrl()}/my-time-off`,
+  });
+  await sendEmail({ to: data.to, subject, html });
 }
 
 // ─── Leave Request Status Change (notify requester) ──────────────────
@@ -226,7 +250,7 @@ export async function emailParentalLeaveReturnAlert(data: {
     year: "numeric",
   });
   const subject = `Return from ${data.leaveTypeName}: ${data.employeeName} returns on ${returnStr}`;
-  const html = `<p>${data.employeeName} is due to return from ${data.leaveTypeName} on <strong>${returnStr}</strong>.</p>
+  const html = `<p>${esc(data.employeeName)} is due to return from ${esc(data.leaveTypeName)} on <strong>${returnStr}</strong>.</p>
 <p>Please ensure their role and workspace are ready and that any flexible working requests are processed in advance.</p>
 <p><a href="${getAppBaseUrl()}/team">View team calendar</a></p>`;
 
