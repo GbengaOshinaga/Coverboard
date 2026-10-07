@@ -15,7 +15,14 @@ import { checkOnBehalf, isSicknessLeaveTypeName, noticeError } from "./rules";
 import { keepingInTouchError } from "@/lib/keeping-in-touch";
 import { uplError } from "@/lib/unpaid-parental";
 import { leaveYearForOrg } from "@/lib/leave-year-server";
-import { computeShpp, computeSmpFields, computeSncp, computeSpp, isSharedParentalLeaveType } from "@/lib/smp-request";
+import {
+  computeShpp,
+  computeSmpFields,
+  computeSncp,
+  computeSpp,
+  isSharedParentalLeaveType,
+  shppPoolForChild,
+} from "@/lib/smp-request";
 import { isNeonatalCareLeaveType, neonatalBookingError, neonatalWeeksEntitled } from "@/lib/neonatalPay";
 import { sicknessOverlapError } from "./sickness-overlap";
 import { computeSspForSpell, type SspInfo } from "./ssp-spell";
@@ -397,7 +404,13 @@ export async function createLeaveRequest(
       },
       select: { startDate: true, endDate: true },
     });
-    const capError = shppClaimError({ request: { startDate, endDate }, otherClaims });
+    // The pool is 39 weeks less their own SMP/SAP weeks for the child, if held.
+    const pool = await shppPoolForChild({
+      userId,
+      expectedDueDate: matchedDate ? null : (expectedDueDate ?? null),
+      matchedDate: matchedDate ?? null,
+    });
+    const capError = shppClaimError({ request: { startDate, endDate }, otherClaims, poolWeeks: pool.poolWeeks });
     if (capError) return { ok: false, status: 400, error: capError };
     try {
       const pay = await computeShpp({

@@ -8,6 +8,8 @@ import {
   matchingWeek,
   parentPayDates,
   shppClaimError,
+  shppPoolWeeks,
+  smpWeeksUsed,
   maternityLeaveLatestEnd,
   qualifyingWeek,
   smpEarningsCutoff,
@@ -113,7 +115,7 @@ test("ShPP: at most 37 weeks (259 days) of pay for a child, across bookings", ()
   // One more day is over.
   assert.match(
     shppClaimError({ otherClaims: thirty, request: block("2027-08-02", "2027-09-20") })!,
-    /more than 37 weeks .* 49 days of pay left/
+    /more than the 37 weeks .* 49 days of pay left/
   );
 });
 
@@ -127,4 +129,23 @@ test("paternity and shared parental pay: matching date, else due date, else birt
   assert.equal(fromBirth.expectedDueDate, born);
   assert.match(fromBirth.note!, /birth date/);
   assert.match(parentPayDates({ expectedDueDate: null, matchedDate: null }).note!, /before the leave starts/);
+});
+
+test("ShPP pool: 39 weeks less the mother's SMP weeks (at least 2)", () => {
+  // Chloe: maternity 1–28 Feb = 4 weeks of SMP → 35 weeks to share.
+  const used = smpWeeksUsed([{ startDate: d("2027-02-01"), endDate: d("2027-02-28") }]);
+  assert.equal(used, 4);
+  assert.equal(shppPoolWeeks(used), 35);
+  // A part week counts as a week used.
+  assert.equal(smpWeeksUsed([{ startDate: d("2027-02-01"), endDate: d("2027-03-01") }]), 5);
+  // Fewer than 2: the 2 compulsory weeks still come off.
+  assert.equal(shppPoolWeeks(1), 37);
+  // Not held in the app (the other parent's employer pays it): 37, the most.
+  assert.equal(shppPoolWeeks(null), 37);
+  // The cap uses the pool: 35 weeks = 245 days.
+  const block = (a: string, b: string) => ({ startDate: d(a), endDate: d(b) });
+  assert.match(
+    shppClaimError({ poolWeeks: 35, otherClaims: [], request: block("2027-03-01", "2027-11-01") })!,
+    /more than the 35 weeks .* \(245 days\)/
+  );
 });

@@ -6,7 +6,7 @@ import {
   getAweDetailForUser,
 } from "@/lib/smpCalculator";
 import { neonatalWeeksEntitled, weekBeforeNeonatalCare } from "@/lib/neonatalPay";
-import { SHPP_MAX_WEEKS, birthPayKind, parentPayDates, payTestWeek, smpEarningsCutoff, type BirthPayKind } from "@/lib/smp-dates";
+import { SHPP_MAX_WEEKS, birthPayKind, parentPayDates, shppPoolWeeks, smpWeeksUsed, payTestWeek, smpEarningsCutoff, type BirthPayKind } from "@/lib/smp-dates";
 
 /**
  * SMP for a maternity request, or SAP for an adoption one, from earnings in
@@ -84,8 +84,11 @@ export async function withCurrentSmp<
         basis: string;
         dateKnown: boolean;
         testWeek?: PayWeek | null;
-        /** Weeks of ShPP left for this child after this person's claims (of 37). */
+        /** Weeks of ShPP left for this child after this person's claims (of poolWeeks). */
         weeksLeft?: number | null;
+        poolWeeks?: number;
+        /** Their own SMP/SAP weeks for the child, when the app holds them. */
+        smpWeeksUsed?: number | null;
       };
       /** Paternity leave: SPP worked out now (not stored). */
       spp?: { eligible: boolean; weeklyRate: number | null; basis: string; dateKnown: boolean; testWeek?: PayWeek | null };
@@ -158,6 +161,11 @@ export async function withCurrentSmp<
         // Weeks left for the child: 37 less this person's ShPP claims for it
         // (the real figure can be lower: see shppClaimError).
         let weeksLeft: number | null = null;
+        const pool = await shppPoolForChild({
+          userId: r.userId,
+          expectedDueDate: r.matchedDate ? null : r.expectedDueDate,
+          matchedDate: r.matchedDate ?? null,
+        });
         if (r.matchedDate || r.expectedDueDate) {
           const claims = await prisma.leaveRequest.findMany({
             where: {
@@ -169,7 +177,7 @@ export async function withCurrentSmp<
             select: { startDate: true, endDate: true },
           });
           const days = claims.reduce((sum, c) => sum + Math.round((c.endDate.getTime() - c.startDate.getTime()) / 86_400_000) + 1, 0);
-          weeksLeft = Math.max(0, Math.round(((SHPP_MAX_WEEKS * 7 - days) / 7) * 10) / 10);
+          weeksLeft = Math.max(0, Math.round(((pool.poolWeeks * 7 - days) / 7) * 10) / 10);
         }
         return {
           ...r,
@@ -181,6 +189,8 @@ export async function withCurrentSmp<
             dateKnown: pay.dateKnown,
             testWeek: pay.testWeek,
             weeksLeft,
+            poolWeeks: pool.poolWeeks,
+            smpWeeksUsed: pool.smpWeeksUsed,
           },
         };
       }
@@ -377,4 +387,30 @@ export function computeSpp(input: {
   childBirthDate: Date | null;
 }) {
   return computeWeeklyParentPay({ ...input, payName: "paternity pay" });
+}
+
+/**
+ * Weeks of Shared Parental Pay for a child for this employee: 39 less the
+ * SMP or SAP weeks of their own maternity or adoption leave for the same
+ * child (same due or matching date) when the app holds it, else 37.
+ */
+export async function shppPoolForChild(input: {
+  userId: string;
+  expectedDueDate: Date | null;
+  matchedDate: Date | null;
+}): Promise<{ poolWeeks: number; smpWeeksUsed: number | null; kind: BirthPayKind }> {
+  const kind: BirthPayKind = input.matchedDate ? "SAP" : "SMP";
+  if (!input.expectedDueDate && !input.matchedDate) return { poolWeeks: SHPP_MAX_WEEKS, smpWeeksUsed: null, kind };
+  const leave = await prisma.leaveRequest.findMany({
+    where: {
+      userId: input.userId,
+      status: { in: ["PENDING", "APPROVED"] },
+      ...(input.matchedDate
+        ? { matchedDate: input.matchedDate, leaveType: { name: { contains: "adoption", mode: "insensitive" } } }
+        : { expectedDueDate: input.expectedDueDate, leaveType: { name: { contains: "maternity", mode: "insensitive" } } }),
+    },
+    select: { startDate: true, endDate: true },
+  });
+  const used = leave.length > 0 ? smpWeeksUsed(leave) : null;
+  return { poolWeeks: shppPoolWeeks(used), smpWeeksUsed: used, kind };
 }

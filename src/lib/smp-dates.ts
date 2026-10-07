@@ -153,24 +153,49 @@ export function lastDayBefore(exclusiveEnd: Date): Date {
 export const SHPP_MAX_WEEKS = 37;
 
 /**
- * Checks a new ShPP claim against the 37 weeks for one child: the employee's
- * other ShPP-claimed bookings for the same child plus this one, in calendar
- * days (pay weeks are 7 calendar days). The real limit is often lower (39
- * weeks less the mother's or adopter's SMP/SAP/MA weeks, shared between the
- * parents as their notices say); the app only knows this employee's claims.
+ * Weeks of Shared Parental Pay for a child: the 39 weeks of SMP or SAP less
+ * the weeks the mother or adopter used (at least the 2 compulsory weeks), so
+ * 37 at most. `smpWeeksUsed` is null when the app doesn't hold them (the
+ * other parent's employer pays them): then 37, the most it can be.
+ */
+export function shppPoolWeeks(smpWeeksUsed: number | null): number {
+  if (smpWeeksUsed === null) return SHPP_MAX_WEEKS;
+  return Math.max(0, 39 - Math.max(2, smpWeeksUsed));
+}
+
+/**
+ * SMP or SAP weeks used: paid weeks are 7 calendar days, so a part week of
+ * leave counts as a week used (the rest of it can't be shared).
+ */
+export function smpWeeksUsed(leave: Array<{ startDate: Date; endDate: Date }>): number {
+  const days = leave.reduce(
+    (s, r) => s + Math.max(0, Math.round((utcDay(r.endDate).getTime() - utcDay(r.startDate).getTime()) / DAY_MS) + 1),
+    0
+  );
+  return Math.min(39, Math.ceil(days / 7));
+}
+
+/**
+ * Checks a new ShPP claim against the weeks of pay for one child: the
+ * employee's other ShPP-claimed bookings for the same child plus this one, in
+ * calendar days (pay weeks are 7 calendar days), within `poolWeeks`
+ * (shppPoolWeeks). The other parent's claims share the same pool; the app only
+ * sees this employee's.
  */
 export function shppClaimError(input: {
   request: { startDate: Date; endDate: Date };
   otherClaims: Array<{ startDate: Date; endDate: Date }>;
+  poolWeeks?: number;
 }): string | null {
   const days = (r: { startDate: Date; endDate: Date }) =>
     Math.max(0, Math.round((utcDay(r.endDate).getTime() - utcDay(r.startDate).getTime()) / DAY_MS) + 1);
+  const pool = input.poolWeeks ?? SHPP_MAX_WEEKS;
   const used = input.otherClaims.reduce((s, r) => s + days(r), 0);
   const total = used + days(input.request);
-  const max = SHPP_MAX_WEEKS * 7;
+  const max = pool * 7;
   if (total <= max) return null;
   const left = Math.max(0, max - used);
-  return `That's more than ${SHPP_MAX_WEEKS} weeks of Shared Parental Pay for this child (${max} days). ${left} day${left === 1 ? "" : "s"} of pay left; book the rest as unpaid shared parental leave.`;
+  return `That's more than the ${pool} weeks of Shared Parental Pay for this child (${max} days). ${left} day${left === 1 ? "" : "s"} of pay left; book the rest as unpaid shared parental leave.`;
 }
 
 /**

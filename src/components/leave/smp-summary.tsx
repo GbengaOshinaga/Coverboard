@@ -185,6 +185,8 @@ export function ShppSummary({
       dateKnown: boolean;
       testWeek?: PayWeek | null;
       weeksLeft?: number | null;
+      poolWeeks?: number;
+      smpWeeksUsed?: number | null;
     };
   };
 }) {
@@ -223,9 +225,11 @@ export function ShppSummary({
       {shpp.claimed && <WeekLine week={shpp.testWeek} />}
       {shpp.claimed && shpp.weeksLeft != null && (
         <p>
-          {shpp.weeksLeft} of 37 weeks of Shared Parental Pay left for this child after their bookings
-          (less if the other parent claims some, or the mother or adopter used more than 2 weeks of
-          maternity or adoption pay).
+          {shpp.weeksLeft} of {shpp.poolWeeks ?? 37} weeks of Shared Parental Pay left for this child after their
+          bookings
+          {shpp.smpWeeksUsed != null
+            ? ` (39 less their ${shpp.smpWeeksUsed} week${shpp.smpWeeksUsed === 1 ? "" : "s"} of ${shpp.testWeek?.name === "matching week" ? "adoption" : "maternity"} pay${shpp.smpWeeksUsed < 2 ? ", counted as the 2 compulsory weeks" : ""}; less if the other parent claims some).`
+            : " (less if the other parent claims some, or the mother or adopter used more than 2 weeks of maternity or adoption pay)."}
         </p>
       )}
       <button

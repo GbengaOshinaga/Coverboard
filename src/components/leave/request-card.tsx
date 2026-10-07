@@ -60,6 +60,8 @@ type LeaveRequest = {
     dateKnown: boolean;
     testWeek?: PayWeek | null;
     weeksLeft?: number | null;
+    poolWeeks?: number;
+    smpWeeksUsed?: number | null;
   };
   spp?: { eligible: boolean; weeklyRate: number | null; basis: string; dateKnown: boolean; testWeek?: PayWeek | null };
   neonatal?: {

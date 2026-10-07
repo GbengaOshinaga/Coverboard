@@ -9,7 +9,7 @@ import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
 import { birthPayKind, shppClaimError } from "@/lib/smp-dates";
-import { computeSmpFields, isSharedParentalLeaveType } from "@/lib/smp-request";
+import { computeSmpFields, isSharedParentalLeaveType, shppPoolForChild } from "@/lib/smp-request";
 import { reviewLeaveRequest } from "@/lib/leave-requests/review";
 import { changeSicknessEndDate } from "@/lib/leave-requests/change-end-date";
 import { isoDateSchema, isoDateToUtc } from "@/lib/validations";
@@ -294,7 +294,12 @@ export async function PATCH(
         },
         select: { startDate: true, endDate: true },
       });
-      const capError = shppClaimError({ request: leaveRequest, otherClaims });
+      const pool = await shppPoolForChild({
+        userId: leaveRequest.userId,
+        expectedDueDate: matched ? null : due,
+        matchedDate: matched,
+      });
+      const capError = shppClaimError({ request: leaveRequest, otherClaims, poolWeeks: pool.poolWeeks });
       if (capError) return NextResponse.json({ error: capError }, { status: 400 });
     }
 
