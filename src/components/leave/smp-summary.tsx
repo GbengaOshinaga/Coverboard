@@ -151,3 +151,142 @@ export function SmpSummary({
     </div>
   );
 }
+
+/**
+ * Shared Parental Pay on a shared parental leave request: the weekly rate
+ * (lower of the flat rate and 90% of earnings), or why there's none, and
+ * whether their notice claims pay for these weeks.
+ */
+export function ShppSummary({
+  request,
+  onChanged,
+}: {
+  onChanged?: () => void;
+  request: {
+    id: string;
+    shpp?: { claimed: boolean; eligible: boolean; weeklyRate: number | null; basis: string; dateKnown: boolean };
+  };
+}) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const shpp = request.shpp;
+  if (!shpp) return null;
+
+  async function setClaimed(claimed: boolean) {
+    setSaving(true);
+    setError("");
+    const res = await fetch(`/api/leave-requests/${request.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ shppClaimed: claimed }),
+    });
+    const data = await res.json().catch(() => null);
+    setSaving(false);
+    if (!res.ok) {
+      setError(data?.error ?? "Couldn't save");
+      return;
+    }
+    onChanged?.();
+  }
+
+  return (
+    <div className="mt-2 rounded-md border border-purple-100 bg-purple-50/50 px-3 py-2 text-xs text-gray-700">
+      <p className="font-medium text-gray-900">Shared Parental Pay</p>
+      {!shpp.claimed ? (
+        <p>Unpaid: their notice doesn&apos;t claim Shared Parental Pay for these weeks.</p>
+      ) : shpp.weeklyRate !== null ? (
+        <p>{shpp.basis}.</p>
+      ) : (
+        <p className="text-amber-700">No ShPP: {shpp.basis}</p>
+      )}
+      <button
+        type="button"
+        disabled={saving}
+        onClick={() => setClaimed(!shpp.claimed)}
+        className="mt-1 rounded border border-purple-200 bg-white px-2 py-1 text-xs font-medium text-purple-700 hover:bg-purple-50 disabled:opacity-50"
+      >
+        {saving ? "Saving…" : shpp.claimed ? "Mark these weeks as unpaid" : "Claiming ShPP for these weeks"}
+      </button>
+      {error && <p className="text-red-700">{error}</p>}
+    </div>
+  );
+}
+
+/**
+ * Statutory Paternity Pay on a paternity leave request: the weekly rate and
+ * how it was worked out, or why there's none. Without a due or matching
+ * date, it can be added here.
+ */
+export function SppSummary({
+  request,
+  onChanged,
+}: {
+  onChanged?: () => void;
+  request: {
+    id: string;
+    spp?: { eligible: boolean; weeklyRate: number | null; basis: string; dateKnown: boolean };
+  };
+}) {
+  const [dateFor, setDateFor] = useState<"birth" | "adoption">("birth");
+  const [dateDraft, setDateDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const spp = request.spp;
+  if (!spp) return null;
+
+  async function saveDate() {
+    if (!dateDraft) return;
+    setSaving(true);
+    setError("");
+    const res = await fetch(`/api/leave-requests/${request.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(dateFor === "adoption" ? { matchedDate: dateDraft } : { expectedDueDate: dateDraft }),
+    });
+    const data = await res.json().catch(() => null);
+    setSaving(false);
+    if (!res.ok) {
+      setError(data?.error ?? "Couldn't save the date");
+      return;
+    }
+    onChanged?.();
+  }
+
+  return (
+    <div className="mt-2 rounded-md border border-purple-100 bg-purple-50/50 px-3 py-2 text-xs text-gray-700">
+      <p className="font-medium text-gray-900">Statutory Paternity Pay</p>
+      <p className={spp.weeklyRate === null ? "text-amber-700" : undefined}>
+        {spp.weeklyRate === null ? `No SPP: ${spp.basis}` : `${spp.basis}.`}
+      </p>
+      {!spp.dateKnown && (
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <select
+            aria-label="Birth or adoption"
+            value={dateFor}
+            onChange={(e) => setDateFor(e.target.value as "birth" | "adoption")}
+            className="rounded border border-gray-300 bg-white px-2 py-1 text-xs"
+          >
+            <option value="birth">Due date</option>
+            <option value="adoption">Matching date (adoption)</option>
+          </select>
+          <input
+            type="date"
+            aria-label={dateFor === "adoption" ? "Date they were told of the match" : "Baby's due date"}
+            value={dateDraft}
+            onChange={(e) => setDateDraft(e.target.value)}
+            className="rounded border border-gray-300 bg-white px-2 py-1 text-xs"
+          />
+          <button
+            type="button"
+            disabled={!dateDraft || saving}
+            onClick={saveDate}
+            className="rounded border border-purple-200 bg-white px-2 py-1 text-xs font-medium text-purple-700 hover:bg-purple-50 disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Add date"}
+          </button>
+        </div>
+      )}
+      {error && <p className="text-red-700">{error}</p>}
+    </div>
+  );
+}

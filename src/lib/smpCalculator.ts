@@ -21,6 +21,7 @@
  */
 
 import { UK_LEL_WEEKLY } from "@/lib/uk-compliance";
+import { formatGBP } from "@/lib/money";
 import { latestStartForService, qualifyingWeek } from "@/lib/smp-dates";
 
 const DEFAULT_SMP_FLAT_RATE = 194.32;
@@ -162,19 +163,24 @@ export type PaternityPay =
 
 export function calculatePaternityPay(
   averageWeeklyEarnings: number | null | undefined,
-  opts: SmpEntitlementOpts = {}
+  opts: SmpEntitlementOpts & {
+    /** For messages: "paternity pay" (default) or "shared parental pay". */
+    payName?: string;
+    /** For messages: "qualifying week" (default) or "matching week". */
+    testWeekName?: string;
+  } = {}
 ): PaternityPay {
   const flat = opts.flatRate ?? SPP_FLAT_RATE;
   const lel = opts.lelWeekly ?? UK_LEL_WEEKLY;
-  const money = (n: number) => `£${n.toFixed(2)}`;
+  const money = formatGBP;
   const e = calculateSmpEntitlement(averageWeeklyEarnings, { ...opts, flatRate: flat });
   if (!e.eligible) {
     const basis =
       e.reason === "Missing average weekly earnings"
-        ? "No pay recorded in the 8 weeks before, so paternity pay can't be worked out. Add their earnings."
+        ? `No pay recorded in the 8 weeks before, so ${opts.payName ?? "paternity pay"} can't be worked out. Add their earnings.`
         : e.reason === "Below Lower Earnings Limit"
           ? `Not eligible: average weekly earnings of ${money(Number(averageWeeklyEarnings))} are below the ${money(lel)} Lower Earnings Limit.`
-          : "Not eligible: less than 26 weeks' continuous service by the qualifying week.";
+          : `Not eligible: less than 26 weeks' continuous service by the ${opts.testWeekName ?? "qualifying week"}.`;
     return { eligible: false, weeklyRate: null, basis };
   }
   const weeklyRate = e.phase2Weekly;

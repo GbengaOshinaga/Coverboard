@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { leaveYearBounds, leaveYearLabel, leaveYearOf, rolloverLeaveYear } from "@/lib/leave-year";
 import { getLeaveYearStart } from "@/lib/leave-year-server";
 import { birthPayKind } from "@/lib/smp-dates";
+import { computeShpp, isSharedParentalLeaveType } from "@/lib/smp-request";
 import { countWorkingDays, resolveWorkingWeek, weekdaysFromPatterns } from "@/lib/working-week";
 import { bradfordForSickness } from "@/lib/sickness-spells";
 import { getServerSession } from "next-auth";
@@ -290,6 +291,26 @@ export async function GET(request: Request) {
         };
       })
   );
+
+  // Shared Parental Pay for SPL rows: worked out from the booking's dates.
+  const splRequests = new Map(
+    users.flatMap((u) => u.leaveRequests).filter((r) => isSharedParentalLeaveType(r.leaveType.name)).map((r) => [r.id, r])
+  );
+  for (const row of parental) {
+    const r = splRequests.get(row.requestId);
+    if (!r) continue;
+    if (!r.shppClaimed) {
+      row.shpp = { claimed: false, weeklyRate: null };
+      continue;
+    }
+    const pay = await computeShpp({
+      userId: r.userId,
+      startDate: r.startDate,
+      expectedDueDate: r.matchedDate ? null : r.expectedDueDate,
+      matchedDate: r.matchedDate,
+    });
+    row.shpp = { claimed: true, weeklyRate: pay.weeklyRate };
+  }
 
   const rightToWorkUsers = await prisma.user.findMany({
     where: { organizationId: orgId, workCountry: "GB", isActive: true },

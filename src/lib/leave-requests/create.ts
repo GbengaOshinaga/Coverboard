@@ -10,12 +10,12 @@ import { recordAudit, type AuditContext } from "@/lib/audit";
 import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
 import { getDailyHolidayPayRateForUser } from "@/lib/holidayPay";
-import { birthPayKind, type BirthPayKind } from "@/lib/smp-dates";
+import { birthPayKind, shppClaimError, type BirthPayKind } from "@/lib/smp-dates";
 import { checkOnBehalf, isSicknessLeaveTypeName, noticeError } from "./rules";
 import { keepingInTouchError } from "@/lib/keeping-in-touch";
 import { uplError } from "@/lib/unpaid-parental";
 import { leaveYearForOrg } from "@/lib/leave-year-server";
-import { computeSmpFields } from "@/lib/smp-request";
+import { computeShpp, computeSmpFields, computeSpp, isSharedParentalLeaveType } from "@/lib/smp-request";
 import { sicknessOverlapError } from "./sickness-overlap";
 import { computeSspForSpell, type SspInfo } from "./ssp-spell";
 
@@ -52,8 +52,10 @@ export type CreateLeaveInput = {
   childBirthDate?: Date;
   /** Expected week of childbirth (due date) — maternity, for the SMP service test. */
   expectedDueDate?: Date;
-  /** Adoption: when they were told of the match, for the SAP matching week. */
+  /** Adoption (or SPL for an adoption): when they were told of the match, for the matching week. */
   matchedDate?: Date;
+  /** Shared parental leave: their notice claims ShPP for these weeks. */
+  shppClaimed?: boolean;
   splCurtailmentConfirmed?: boolean;
   /**
    * An admin/manager recording sickness for a team member (e.g. a phone call
@@ -77,6 +79,10 @@ export type CreateLeaveResult =
         | { kind: BirthPayKind; eligible: true; phase1Weekly: number; phase2Weekly: number }
         | { kind: BirthPayKind; eligible: false; reason: string }
         | null;
+      /** Shared parental leave claiming ShPP: the weekly rate, or why not. */
+      shppInfo: { eligible: boolean; weeklyRate: number | null; basis: string } | null;
+      /** Paternity leave: the SPP weekly rate, or why not. */
+      sppInfo: { eligible: boolean; weeklyRate: number | null; basis: string } | null;
       firstRequest: boolean;
       autoApproved: boolean;
       daysRequested: number;
@@ -121,6 +127,7 @@ export async function createLeaveRequest(
     childBirthDate,
     expectedDueDate,
     matchedDate,
+    shppClaimed,
     splCurtailmentConfirmed,
     onBehalfOfUserId,
     childId,
@@ -297,6 +304,61 @@ export async function createLeaveRequest(
   let smpPhase2EndDate: Date | null = null;
   let smpInfo: Extract<CreateLeaveResult, { ok: true }>["smpInfo"] = null;
   const payKind = birthPayKind(leaveTypeConfig.name);
+  const isSpl = isSharedParentalLeaveType(leaveTypeConfig.name);
+  const isPaternity = /paternity/i.test(leaveTypeConfig.name);
+
+  // Paternity pay from the qualifying (or matching) week; shown on booking.
+  let sppInfo: Extract<CreateLeaveResult, { ok: true }>["sppInfo"] = null;
+  if (isPaternity) {
+    try {
+      const pay = await computeSpp({
+        userId,
+        startDate,
+        expectedDueDate: expectedDueDate ?? null,
+        matchedDate: matchedDate ?? null,
+        childBirthDate: childBirthDate ?? null,
+      });
+      sppInfo = { eligible: pay.eligible, weeklyRate: pay.weeklyRate, basis: pay.basis };
+    } catch (err) {
+      console.error("SPP calculation failed:", err);
+    }
+  }
+  const splClaimsPay = isSpl && !!shppClaimed;
+
+  // ShPP: at most 37 weeks of pay for a child across this person's bookings
+  // (the child is identified by the due or matching date).
+  let shppInfo: Extract<CreateLeaveResult, { ok: true }>["shppInfo"] = null;
+  if (splClaimsPay) {
+    if (!expectedDueDate && !matchedDate) {
+      return {
+        ok: false,
+        status: 400,
+        error: "Add the baby's due date (birth) or the matching date (adoption) to claim Shared Parental Pay.",
+      };
+    }
+    const otherClaims = await prisma.leaveRequest.findMany({
+      where: {
+        userId,
+        shppClaimed: true,
+        status: { in: ["PENDING", "APPROVED"] },
+        ...(matchedDate ? { matchedDate } : { expectedDueDate }),
+      },
+      select: { startDate: true, endDate: true },
+    });
+    const capError = shppClaimError({ request: { startDate, endDate }, otherClaims });
+    if (capError) return { ok: false, status: 400, error: capError };
+    try {
+      const pay = await computeShpp({
+        userId,
+        startDate,
+        expectedDueDate: matchedDate ? null : (expectedDueDate ?? null),
+        matchedDate: matchedDate ?? null,
+      });
+      shppInfo = { eligible: pay.eligible, weeklyRate: pay.weeklyRate, basis: pay.basis };
+    } catch (err) {
+      console.error("ShPP calculation failed:", err);
+    }
+  }
   if (payKind) {
     try {
       // Earnings from the 8 weeks up to the qualifying week (15 weeks before
@@ -377,7 +439,8 @@ export async function createLeaveRequest(
     childBirthDate: childBirthDate ?? undefined,
     childId: isUpl ? childId : undefined,
     expectedDueDate: expectedDueDate ?? undefined,
-    matchedDate: payKind === "SAP" ? (matchedDate ?? undefined) : undefined,
+    matchedDate: payKind === "SAP" || isSpl || isPaternity ? (matchedDate ?? undefined) : undefined,
+    shppClaimed: splClaimsPay,
     splCurtailmentConfirmed: splCurtailmentConfirmed ?? false,
     dailyHolidayPayRate: dailyHolidayPayRate ?? undefined,
     sspDaysPaid,
@@ -538,6 +601,8 @@ export async function createLeaveRequest(
     balanceWarning,
     sspInfo,
     smpInfo,
+    shppInfo,
+    sppInfo,
     firstRequest,
     autoApproved: autoApprove,
     daysRequested,

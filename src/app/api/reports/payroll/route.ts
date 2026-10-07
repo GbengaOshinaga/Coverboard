@@ -6,6 +6,7 @@ import { countWorkingDays, type WorkingWeek } from "@/lib/working-week";
 import { getWorkingWeek } from "@/lib/working-week-server";
 import { sspDaysInPeriod } from "@/lib/ssp-period";
 import { birthPayKind, smpPayInPeriod } from "@/lib/smp-dates";
+import { computeShpp, computeSpp, isSharedParentalLeaveType } from "@/lib/smp-request";
 import { sspRateFor } from "@/lib/leave-requests/ssp-spell";
 import { isSspAbsence } from "@/lib/ssp-scope";
 import { sspPay } from "@/lib/uk-compliance";
@@ -14,11 +15,7 @@ import {
   getHourlyHolidayPayRateForUser,
   isAnnualLeaveType,
 } from "@/lib/holidayPay";
-import {
-  calculatePaternityPay,
-  getAweForUser,
-  weeklyStatutoryPayFor,
-} from "@/lib/smpCalculator";
+import { weeklyStatutoryPayFor } from "@/lib/smpCalculator";
 import {
   isNeonatalCareLeaveType,
   calculateNeonatalWeeklyRate,
@@ -141,33 +138,33 @@ export async function GET(request: Request) {
   }
 
   const rows = await Promise.all(
-    requests.map(async (r): Promise<PayrollRow> => {
-      const week = await workingWeek(r.userId, r.startDate);
+    requests.map(async (request): Promise<PayrollRow> => {
+      const week = await workingWeek(request.userId, request.startDate);
       const daysTaken = countWorkingDays(
-        r.startDate > from ? r.startDate : from,
-        r.endDate < to ? r.endDate : to,
+        request.startDate > from ? request.startDate : from,
+        request.endDate < to ? request.endDate : to,
         week.weekdays
       );
 
-      const isAnnual = isAnnualLeaveType(r.leaveType.name);
-      const isUkBased = r.user.workCountry === "GB";
+      const isAnnual = isAnnualLeaveType(request.leaveType.name);
+      const isUkBased = request.user.workCountry === "GB";
 
       // Hours-booked annual leave (irregular/zero-hours workers): pay is the
       // hourly rate × hours, not a daily rate × days.
-      const hoursTaken = r.hoursBooked ?? null;
+      const hoursTaken = request.hoursBooked ?? null;
       const isHoursRow = hoursTaken !== null && isAnnual && isUkBased;
 
       // Prisma Decimal → number, preserving null when absent.
       let dailyRate: number | null =
-        r.dailyHolidayPayRate === null
+        request.dailyHolidayPayRate === null
           ? null
-          : Number(r.dailyHolidayPayRate);
+          : Number(request.dailyHolidayPayRate);
 
       if (dailyRate === null && isAnnual && isUkBased && !isHoursRow) {
-        dailyRate = await liveRate(r.userId);
+        dailyRate = await liveRate(request.userId);
       }
 
-      const hourly = isHoursRow ? await hourlyRate(r.userId) : null;
+      const hourly = isHoursRow ? await hourlyRate(request.userId) : null;
 
       const estimatedPay = isHoursRow
         ? hourly !== null
@@ -182,19 +179,19 @@ export async function GET(request: Request) {
       // SMP for the days of this pay period (not today's phase): calendar
       // days at the weekly rate ÷ 7, split across the 90% and flat-rate weeks.
       // SMP (maternity) or SAP (adoption): the same phases and rates.
-      const payKind = birthPayKind(r.leaveType.name);
+      const payKind = birthPayKind(request.leaveType.name);
       const smpPhases =
-        payKind && r.smpPhase1EndDate && r.smpPhase2EndDate
-          ? { phase1End: r.smpPhase1EndDate, phase2End: r.smpPhase2EndDate }
+        payKind && request.smpPhase1EndDate && request.smpPhase2EndDate
+          ? { phase1End: request.smpPhase1EndDate, phase2End: request.smpPhase2EndDate }
           : null;
       const smpPeriod = smpPhases
         ? smpPayInPeriod({
-            leaveStart: r.startDate,
-            leaveEnd: r.endDate,
+            leaveStart: request.startDate,
+            leaveEnd: request.endDate,
             phase1End: smpPhases.phase1End,
             phase2End: smpPhases.phase2End,
-            phase1Weekly: r.smpPhase1WeeklyRate === null ? null : Number(r.smpPhase1WeeklyRate),
-            phase2Weekly: r.smpPhase2WeeklyRate === null ? null : Number(r.smpPhase2WeeklyRate),
+            phase1Weekly: request.smpPhase1WeeklyRate === null ? null : Number(request.smpPhase1WeeklyRate),
+            phase2Weekly: request.smpPhase2WeeklyRate === null ? null : Number(request.smpPhase2WeeklyRate),
             from,
             to,
           })
@@ -204,12 +201,12 @@ export async function GET(request: Request) {
       // up to 12 weeks. Computed live from the employee's AWE; weeks-in-period
       // is the working days taken ÷ the days they work in a week.
       const neonatal =
-        isNeonatalCareLeaveType(r.leaveType.name) && isUkBased
+        isNeonatalCareLeaveType(request.leaveType.name) && isUkBased
           ? (() => {
               const awe =
-                r.user.averageWeeklyEarnings === null
+                request.user.averageWeeklyEarnings === null
                   ? null
-                  : Number(r.user.averageWeeklyEarnings);
+                  : Number(request.user.averageWeeklyEarnings);
               const weeklyRate = calculateNeonatalWeeklyRate(awe);
               const weeksTaken = Number((daysTaken / week.daysPerWeek).toFixed(2));
               return {
@@ -224,22 +221,22 @@ export async function GET(request: Request) {
           : null;
 
       return {
-        leaveRequestId: r.id,
-        userId: r.userId,
-        name: r.user.name,
-        email: r.user.email,
-        department: r.user.department,
-        workCountry: r.user.workCountry,
-        employmentType: r.user.employmentType,
-        leaveType: r.leaveType.name,
-        leaveCategory: r.leaveType.category,
-        isPaid: r.leaveType.isPaid,
-        startDate: r.startDate.toISOString(),
-        endDate: r.endDate.toISOString(),
+        leaveRequestId: request.id,
+        userId: request.userId,
+        name: request.user.name,
+        email: request.user.email,
+        department: request.user.department,
+        workCountry: request.user.workCountry,
+        employmentType: request.user.employmentType,
+        leaveType: request.leaveType.name,
+        leaveCategory: request.leaveType.category,
+        isPaid: request.leaveType.isPaid,
+        startDate: request.startDate.toISOString(),
+        endDate: request.endDate.toISOString(),
         daysTaken,
         calendarDays: (() => {
-          const a = r.startDate > from ? r.startDate : from;
-          const b = r.endDate < to ? r.endDate : to;
+          const a = request.startDate > from ? request.startDate : from;
+          const b = request.endDate < to ? request.endDate : to;
           return b < a ? 0 : Math.round((b.getTime() - a.getTime()) / 86_400_000) + 1;
         })(),
         hoursTaken,
@@ -252,7 +249,7 @@ export async function GET(request: Request) {
             ? hourly !== null
               ? "recalculated"
               : "not_applicable"
-            : r.dailyHolidayPayRate !== null
+            : request.dailyHolidayPayRate !== null
               ? "captured_at_booking"
               : isAnnual && dailyRate !== null
                 ? "recalculated"
@@ -273,38 +270,71 @@ export async function GET(request: Request) {
                       : "Outside the SMP weeks",
               weeklyRate:
                 smpPeriod.phase1Days > 0
-                  ? r.smpPhase1WeeklyRate === null ? null : Number(r.smpPhase1WeeklyRate)
-                  : r.smpPhase2WeeklyRate === null ? null : Number(r.smpPhase2WeeklyRate),
+                  ? request.smpPhase1WeeklyRate === null ? null : Number(request.smpPhase1WeeklyRate)
+                  : request.smpPhase2WeeklyRate === null ? null : Number(request.smpPhase2WeeklyRate),
               daysInPeriod: smpPeriod.phase1Days + smpPeriod.phase2Days,
               pay: smpPeriod.pay,
               averageWeeklyEarnings:
-                r.smpAverageWeeklyEarnings === null
+                request.smpAverageWeeklyEarnings === null
                   ? null
-                  : Number(r.smpAverageWeeklyEarnings),
+                  : Number(request.smpAverageWeeklyEarnings),
               phase1EndDate: smpPhases.phase1End.toISOString(),
               phase2EndDate: smpPhases.phase2End.toISOString(),
               phase1WeeklyRate:
-                r.smpPhase1WeeklyRate === null
+                request.smpPhase1WeeklyRate === null
                   ? null
-                  : Number(r.smpPhase1WeeklyRate),
+                  : Number(request.smpPhase1WeeklyRate),
               phase2WeeklyRate:
-                r.smpPhase2WeeklyRate === null
+                request.smpPhase2WeeklyRate === null
                   ? null
-                  : Number(r.smpPhase2WeeklyRate),
+                  : Number(request.smpPhase2WeeklyRate),
             }
           : null,
         neonatal,
+        // Statutory Shared Parental Pay for the blocks their notice claims pay
+        // for: the same weekly rate every week, 7 calendar days a week.
+        shpp:
+          isUkBased && isSharedParentalLeaveType(request.leaveType.name)
+            ? await (async () => {
+                const periodStart = request.startDate > from ? request.startDate : from;
+                const periodEnd = request.endDate < to ? request.endDate : to;
+                const calendarDays =
+                  periodEnd < periodStart
+                    ? 0
+                    : Math.round((periodEnd.getTime() - periodStart.getTime()) / 86_400_000) + 1;
+                if (!request.shppClaimed) {
+                  return { weeklyRate: null, calendarDays, pay: 0, basis: "Unpaid shared parental leave: no ShPP claimed for these weeks" };
+                }
+                const pay = await computeShpp({
+                  userId: request.userId,
+                  startDate: request.startDate,
+                  expectedDueDate: request.matchedDate ? null : request.expectedDueDate,
+                  matchedDate: request.matchedDate,
+                });
+                return {
+                  weeklyRate: pay.weeklyRate,
+                  calendarDays,
+                  pay: pay.weeklyRate === null ? null : weeklyStatutoryPayFor(pay.weeklyRate, calendarDays),
+                  basis: pay.basis,
+                };
+              })()
+            : null,
         // Statutory Paternity Pay for the paternity leave in these dates: a
         // weekly payment for 7 calendar days a week.
         spp:
-          isUkBased && /paternity/i.test(r.leaveType.name)
+          isUkBased && /paternity/i.test(request.leaveType.name)
             ? await (async () => {
-                const pay = calculatePaternityPay(await getAweForUser(r.userId, r.startDate), {
-                  serviceStartDate: r.user.serviceStartDate,
-                  expectedDueDate: r.childBirthDate,
+                // Earnings from the 8 weeks up to the qualifying (or matching)
+                // week, not before the leave (src/lib/smp-request.ts).
+                const pay = await computeSpp({
+                  userId: request.userId,
+                  startDate: request.startDate,
+                  expectedDueDate: request.expectedDueDate,
+                  matchedDate: request.matchedDate,
+                  childBirthDate: request.childBirthDate,
                 });
-                const periodStart = r.startDate > from ? r.startDate : from;
-                const periodEnd = r.endDate < to ? r.endDate : to;
+                const periodStart = request.startDate > from ? request.startDate : from;
+                const periodEnd = request.endDate < to ? request.endDate : to;
                 const calendarDays =
                   periodEnd < periodStart
                     ? 0
@@ -317,19 +347,19 @@ export async function GET(request: Request) {
                 };
               })()
             : null,
-        ssp: isSspAbsence(r.leaveType.name, r.user.workCountry)
+        ssp: isSspAbsence(request.leaveType.name, request.user.workCountry)
           ? await (async () => {
               const days = sspDaysInPeriod({
-                startDate: r.startDate,
-                endDate: r.endDate,
-                sspDaysPaid: r.sspDaysPaid,
+                startDate: request.startDate,
+                endDate: request.endDate,
+                sspDaysPaid: request.sspDaysPaid,
                 weekdays: week.weekdays,
                 from,
                 to,
               });
               // Stored at booking; worked out now for absences booked before
               // rates were stored, so payroll always has a figure to pay.
-              const rate = await sspRateFor(r);
+              const rate = await sspRateFor(request);
               const dailyRate = rate?.dailyRate ?? null;
               return {
                 daysInPeriod: days,
@@ -355,6 +385,7 @@ export async function GET(request: Request) {
     ),
     totalSspPay: Number(rows.reduce((s, r) => s + (r.ssp?.pay ?? 0), 0).toFixed(2)),
     totalSppPay: Number(rows.reduce((s, r) => s + (r.spp?.pay ?? 0), 0).toFixed(2)),
+    totalShppPay: Number(rows.reduce((s, r) => s + (r.shpp?.pay ?? 0), 0).toFixed(2)),
     totalSmpPay: Number(rows.reduce((s, r) => s + (r.smp?.kind === "SMP" ? (r.smp.pay ?? 0) : 0), 0).toFixed(2)),
     totalSapPay: Number(rows.reduce((s, r) => s + (r.smp?.kind === "SAP" ? (r.smp.pay ?? 0) : 0), 0).toFixed(2)),
   };

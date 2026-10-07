@@ -73,6 +73,8 @@ export type ParentalRow = {
     allowed: number;
     remaining: number;
   } | null;
+  /** Shared parental leave: whether pay is claimed, and the ShPP weekly rate. */
+  shpp?: { claimed: boolean; weeklyRate: number | null } | null;
   /** SMP (maternity) or SAP (adoption). */
   smp: {
     kind: "SMP" | "SAP";
@@ -213,6 +215,11 @@ export const UK_COMPLIANCE_TABLES = {
       // Both rates, even before pay starts ("Not started" is the phase).
       { key: (r) => r.smp?.phase1WeeklyRate ?? null, header: "SMP/SAP first 6 weeks (£ a week)", format: "money" },
       { key: (r) => r.smp?.phase2WeeklyRate ?? null, header: "SMP/SAP weeks 7–39 (£ a week)", format: "money" },
+      {
+        key: (r) => (r.shpp ? (r.shpp.claimed ? r.shpp.weeklyRate : "Unpaid") : null),
+        header: "ShPP (£ a week)",
+        format: "money",
+      },
     ],
   }),
   "right-to-work": table<RightToWorkRow>({

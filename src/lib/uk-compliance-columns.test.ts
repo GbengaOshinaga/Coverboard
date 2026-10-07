@@ -105,7 +105,7 @@ test("compliance export headers are fixed per table (change them here on purpose
     parental: [
       "Employee ID", "Employee", "Leave type", "Start date", "Expected return", "Leave (weeks)", "Leave (working days)",
       "KIT or SPLIT days", "KIT/SPLIT days used", "KIT/SPLIT days allowed", "KIT/SPLIT days remaining",
-      "Maternity or adoption pay (SMP/SAP)", "SMP/SAP phase", "SMP/SAP first 6 weeks (£ a week)", "SMP/SAP weeks 7–39 (£ a week)",
+      "Maternity or adoption pay (SMP/SAP)", "SMP/SAP phase", "SMP/SAP first 6 weeks (£ a week)", "SMP/SAP weeks 7–39 (£ a week)", "ShPP (£ a week)",
     ],
     "right-to-work": [
       "Employee ID", "Employee", "Email", "Department", "Employment type", "Right to work", "Last checked",
@@ -151,8 +151,8 @@ test("the Excel pack has one sheet per table with the same headers", async () =>
 
 test("parental rows say KIT, SPLIT or Not applicable (never blank)", () => {
   assert.deepEqual(csvLines("parental").slice(1), [
-    "u3,Tom,Statutory Paternity Leave,2026-10-05,2026-10-16,2,10,Not applicable,Not applicable,Not applicable,Not applicable,,,,",
-    "u4,Sara,Shared Parental Leave (SPL),2026-09-01,2027-03-01,26.1,130,SPLIT,4,20,16,,,,",
+    "u3,Tom,Statutory Paternity Leave,2026-10-05,2026-10-16,2,10,Not applicable,Not applicable,Not applicable,Not applicable,,,,,",
+    "u4,Sara,Shared Parental Leave (SPL),2026-09-01,2027-03-01,26.1,130,SPLIT,4,20,16,,,,,",
   ]);
 });
 

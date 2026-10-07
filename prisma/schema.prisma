@@ -249,6 +249,11 @@ model LeaveRequest {
   /// service test and earnings period (src/lib/smp-dates.ts).
   matchedDate              DateTime?   @db.Date
   splCurtailmentConfirmed  Boolean     @default(false)
+  /// Shared parental leave: the employee's notice claims Statutory Shared
+  /// Parental Pay for these weeks (SPL can be up to 50 weeks, ShPP at most
+  /// 37, so some blocks are unpaid). The due date or matching date on the
+  /// request sets the qualifying or matching week for the rate.
+  shppClaimed              Boolean     @default(false)
   dailyHolidayPayRate      Decimal?    @db.Decimal(10, 2)
   sspDaysPaid              Int         @default(0)
   sspLimitReached          Boolean     @default(false)

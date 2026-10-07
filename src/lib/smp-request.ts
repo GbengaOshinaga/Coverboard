@@ -1,6 +1,11 @@
 import { prisma } from "@/lib/prisma";
-import { calculateSMPPhaseDates, calculateSmpEntitlement, getAweDetailForUser } from "@/lib/smpCalculator";
-import { birthPayKind, payTestWeek, smpEarningsCutoff, type BirthPayKind } from "@/lib/smp-dates";
+import {
+  calculatePaternityPay,
+  calculateSMPPhaseDates,
+  calculateSmpEntitlement,
+  getAweDetailForUser,
+} from "@/lib/smpCalculator";
+import { birthPayKind, parentPayDates, payTestWeek, smpEarningsCutoff, type BirthPayKind } from "@/lib/smp-dates";
 
 /**
  * SMP for a maternity request, or SAP for an adoption one, from earnings in
@@ -55,17 +60,54 @@ export async function withCurrentSmp<
     startDate: Date;
     expectedDueDate: Date | null;
     matchedDate?: Date | null;
+    shppClaimed?: boolean;
+    childBirthDate?: Date | null;
     smpAverageWeeklyEarnings: unknown;
     smpPhase1WeeklyRate: unknown;
     smpPhase2WeeklyRate: unknown;
     leaveType: { name: string };
   },
->(requests: T[]): Promise<Array<T & { smpEarningsWeeks?: number }>> {
+>(
+  requests: T[]
+): Promise<
+  Array<
+    T & {
+      smpEarningsWeeks?: number;
+      /** Shared parental leave: ShPP worked out now (not stored). */
+      shpp?: { claimed: boolean; eligible: boolean; weeklyRate: number | null; basis: string; dateKnown: boolean };
+      /** Paternity leave: SPP worked out now (not stored). */
+      spp?: { eligible: boolean; weeklyRate: number | null; basis: string; dateKnown: boolean };
+    }
+  >
+> {
   const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
   return Promise.all(
     requests.map(async (r) => {
+      if (r.status === "CANCELLED" || r.status === "REJECTED") return r;
+      if (/paternity/i.test(r.leaveType.name)) {
+        const pay = await computeSpp({
+          userId: r.userId,
+          startDate: r.startDate,
+          expectedDueDate: r.expectedDueDate,
+          matchedDate: r.matchedDate ?? null,
+          childBirthDate: r.childBirthDate ?? null,
+        });
+        return { ...r, spp: { eligible: pay.eligible, weeklyRate: pay.weeklyRate, basis: pay.basis, dateKnown: pay.dateKnown } };
+      }
+      if (isSharedParentalLeaveType(r.leaveType.name)) {
+        if (!r.shppClaimed) {
+          return { ...r, shpp: { claimed: false, eligible: false, weeklyRate: null, basis: "Unpaid: no ShPP claimed for these weeks", dateKnown: true } };
+        }
+        const pay = await computeShpp({
+          userId: r.userId,
+          startDate: r.startDate,
+          expectedDueDate: r.matchedDate ? null : r.expectedDueDate,
+          matchedDate: r.matchedDate ?? null,
+        });
+        return { ...r, shpp: { claimed: true, eligible: pay.eligible, weeklyRate: pay.weeklyRate, basis: pay.basis, dateKnown: pay.dateKnown } };
+      }
       const kind = birthPayKind(r.leaveType.name);
-      if (!kind || r.status === "CANCELLED" || r.status === "REJECTED") return r;
+      if (!kind) return r;
       const smp = await computeSmpFields({
         userId: r.userId,
         startDate: r.startDate,
@@ -107,4 +149,67 @@ export async function recomputeSmpAfterEarningsChange(userId: string): Promise<n
     await prisma.leaveRequest.update({ where: { id: r.id }, data: fields });
   }
   return requests.length;
+}
+
+/** Shared parental leave on a leave type name. */
+export function isSharedParentalLeaveType(name: string | null | undefined): boolean {
+  return !!name && /shared parental|\bSPL\b/i.test(name);
+}
+
+/**
+ * Paternity pay (SPP) or Shared Parental Pay (ShPP) for one employee: the
+ * lower of the flat rate and 90% of average weekly earnings, every week. Same
+ * earnings and service tests as SMP or SAP, from the qualifying week (birth,
+ * from the due date) or the matching week (adoption).
+ * https://www.gov.uk/employers-paternity-pay-leave
+ * https://www.gov.uk/shared-parental-leave-and-pay-employer-guide
+ */
+async function computeWeeklyParentPay(input: {
+  userId: string;
+  startDate: Date;
+  expectedDueDate: Date | null;
+  matchedDate: Date | null;
+  childBirthDate?: Date | null;
+  payName: string;
+}) {
+  const dates = parentPayDates(input);
+  const kind: BirthPayKind = dates.matchedDate ? "SAP" : "SMP";
+  const [{ awe, weeksCounted }, employee] = await Promise.all([
+    getAweDetailForUser(input.userId, smpEarningsCutoff({ startDate: input.startDate, ...dates, kind })),
+    prisma.user.findUnique({ where: { id: input.userId }, select: { serviceStartDate: true } }),
+  ]);
+  const pay = calculatePaternityPay(awe, {
+    serviceStartDate: employee?.serviceStartDate ?? null,
+    serviceTestWeek: payTestWeek({ kind, ...dates }),
+    payName: input.payName,
+    testWeekName: kind === "SAP" ? "matching week" : "qualifying week",
+  });
+  return {
+    ...pay,
+    basis: dates.note ? `${pay.basis.replace(/\.$/, "")}. ${dates.note}` : pay.basis,
+    averageWeeklyEarnings: awe,
+    weeksCounted,
+    dateKnown: !!(dates.expectedDueDate || dates.matchedDate),
+  };
+}
+
+/** Statutory Shared Parental Pay (see computeWeeklyParentPay). */
+export function computeShpp(input: {
+  userId: string;
+  startDate: Date;
+  expectedDueDate: Date | null;
+  matchedDate: Date | null;
+}) {
+  return computeWeeklyParentPay({ ...input, payName: "shared parental pay" });
+}
+
+/** Statutory Paternity Pay (see computeWeeklyParentPay). */
+export function computeSpp(input: {
+  userId: string;
+  startDate: Date;
+  expectedDueDate: Date | null;
+  matchedDate: Date | null;
+  childBirthDate: Date | null;
+}) {
+  return computeWeeklyParentPay({ ...input, payName: "paternity pay" });
 }

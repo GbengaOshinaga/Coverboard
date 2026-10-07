@@ -1,4 +1,5 @@
 import { countWorkingDays } from "@/lib/working-week";
+import { formatGBP } from "@/lib/money";
 import {
   isHoursAveragedEmploymentType,
   type EmploymentType as EmploymentTypeValue,
@@ -229,7 +230,7 @@ export function sspRateBasis(input: {
   flatRate?: number;
 }): string {
   const flat = input.flatRate ?? UK_SSP_WEEKLY_RATE;
-  const money = (n: number) => `£${n.toFixed(2)}`;
+  const money = formatGBP;
   if (input.startDate < SSP_REFORM_DATE) return `Flat rate of ${money(flat)} a week (before 6 April 2026)`;
   const awe = input.averageWeeklyEarnings;
   if (awe === null) {

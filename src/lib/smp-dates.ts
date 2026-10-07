@@ -148,3 +148,54 @@ export function smpPayInPeriod(input: {
 export function lastDayBefore(exclusiveEnd: Date): Date {
   return new Date(utcDay(exclusiveEnd).getTime() - DAY_MS);
 }
+
+/** Shared Parental Pay is paid for at most 37 weeks for a child. */
+export const SHPP_MAX_WEEKS = 37;
+
+/**
+ * Checks a new ShPP claim against the 37 weeks for one child: the employee's
+ * other ShPP-claimed bookings for the same child plus this one, in calendar
+ * days (pay weeks are 7 calendar days). The real limit is often lower (39
+ * weeks less the mother's or adopter's SMP/SAP/MA weeks, shared between the
+ * parents as their notices say); the app only knows this employee's claims.
+ */
+export function shppClaimError(input: {
+  request: { startDate: Date; endDate: Date };
+  otherClaims: Array<{ startDate: Date; endDate: Date }>;
+}): string | null {
+  const days = (r: { startDate: Date; endDate: Date }) =>
+    Math.max(0, Math.round((utcDay(r.endDate).getTime() - utcDay(r.startDate).getTime()) / DAY_MS) + 1);
+  const used = input.otherClaims.reduce((s, r) => s + days(r), 0);
+  const total = used + days(input.request);
+  const max = SHPP_MAX_WEEKS * 7;
+  if (total <= max) return null;
+  const left = Math.max(0, max - used);
+  return `That's more than ${SHPP_MAX_WEEKS} weeks of Shared Parental Pay for this child (${max} days). ${left} day${left === 1 ? "" : "s"} of pay left; book the rest as unpaid shared parental leave.`;
+}
+
+/**
+ * Which date sets the qualifying or matching week for paternity or shared
+ * parental pay: the matching date (adoption), else the due date (birth).
+ * With only the actual birth date, it stands in for the due date (close,
+ * but the law uses the due week), and the pay explanation says so.
+ */
+export function parentPayDates(input: {
+  expectedDueDate: Date | null;
+  matchedDate: Date | null;
+  childBirthDate?: Date | null;
+}): { expectedDueDate: Date | null; matchedDate: Date | null; note: string | null } {
+  if (input.matchedDate) return { expectedDueDate: null, matchedDate: input.matchedDate, note: null };
+  if (input.expectedDueDate) return { expectedDueDate: input.expectedDueDate, matchedDate: null, note: null };
+  if (input.childBirthDate) {
+    return {
+      expectedDueDate: input.childBirthDate,
+      matchedDate: null,
+      note: "Worked out from the birth date; add the due date if it was a different week.",
+    };
+  }
+  return {
+    expectedDueDate: null,
+    matchedDate: null,
+    note: "No due or matching date recorded, so earnings are from before the leave starts.",
+  };
+}

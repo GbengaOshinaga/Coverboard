@@ -8,8 +8,8 @@ import { emailApprovedLeaveCancelled } from "@/lib/email-notifications";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
-import { birthPayKind } from "@/lib/smp-dates";
-import { computeSmpFields } from "@/lib/smp-request";
+import { birthPayKind, shppClaimError } from "@/lib/smp-dates";
+import { computeSmpFields, isSharedParentalLeaveType } from "@/lib/smp-request";
 import { reviewLeaveRequest } from "@/lib/leave-requests/review";
 import { changeSicknessEndDate } from "@/lib/leave-requests/change-end-date";
 import { isoDateSchema, isoDateToUtc } from "@/lib/validations";
@@ -28,6 +28,8 @@ const updateSchema = z.object({
   expectedDueDate: isoDateSchema.nullable().optional(),
   /** Adoption: when they were told of the match (sets the matching week). */
   matchedDate: isoDateSchema.nullable().optional(),
+  /** Shared parental leave: whether their notice claims ShPP for these weeks. */
+  shppClaimed: z.boolean().optional(),
 });
 
 export async function PATCH(
@@ -78,7 +80,7 @@ export async function PATCH(
     }
 
     const { status, kitDaysUsed, splitDaysUsed, evidenceProvided, splCurtailmentConfirmed, coverOverride, endDate } = parsed.data;
-    const { expectedDueDate, matchedDate } = parsed.data;
+    const { expectedDueDate, matchedDate, shppClaimed } = parsed.data;
 
     // Date changes stand alone so they can't be mixed with a status change.
     if (endDate !== undefined) {
@@ -228,22 +230,56 @@ export async function PATCH(
     // manager, can add it after booking (often only known later). Only on
     // the leave type it belongs to.
     const payKind = birthPayKind(leaveRequest.leaveType.name);
+    const isSpl = isSharedParentalLeaveType(leaveRequest.leaveType.name);
+    const isPaternity = /paternity/i.test(leaveRequest.leaveType.name);
     const datesChanging = expectedDueDate !== undefined || matchedDate !== undefined;
-    if (datesChanging) {
+    if (datesChanging || shppClaimed !== undefined) {
       if (leaveRequest.userId !== userId && userRole !== "ADMIN" && userRole !== "MANAGER") {
         return NextResponse.json({ error: "You can't change this request" }, { status: 403 });
       }
-      if ((expectedDueDate !== undefined && payKind !== "SMP") || (matchedDate !== undefined && payKind !== "SAP")) {
+      // SPL and paternity can be for a birth (due date) or an adoption (matching date).
+      if (
+        !isSpl &&
+        !isPaternity &&
+        ((expectedDueDate !== undefined && payKind !== "SMP") || (matchedDate !== undefined && payKind !== "SAP"))
+      ) {
         return NextResponse.json(
           { error: "A due date is for maternity leave, and a matching date for adoption leave." },
           { status: 400 }
         );
       }
+      if (shppClaimed !== undefined && !isSpl) {
+        return NextResponse.json({ error: "Shared Parental Pay is only for shared parental leave." }, { status: 400 });
+      }
+    }
+    // Claiming ShPP: within the 37 weeks for the child.
+    if (isSpl && (shppClaimed === true || (datesChanging && leaveRequest.shppClaimed))) {
+      const due = expectedDueDate !== undefined ? (expectedDueDate ? isoDateToUtc(expectedDueDate) : null) : leaveRequest.expectedDueDate;
+      const matched = matchedDate !== undefined ? (matchedDate ? isoDateToUtc(matchedDate) : null) : leaveRequest.matchedDate;
+      if (!due && !matched) {
+        return NextResponse.json(
+          { error: "Add the baby's due date (birth) or the matching date (adoption) to claim Shared Parental Pay." },
+          { status: 400 }
+        );
+      }
+      const otherClaims = await prisma.leaveRequest.findMany({
+        where: {
+          userId: leaveRequest.userId,
+          id: { not: leaveRequest.id },
+          shppClaimed: true,
+          status: { in: ["PENDING", "APPROVED"] },
+          ...(matched ? { matchedDate: matched } : { expectedDueDate: due }),
+        },
+        select: { startDate: true, endDate: true },
+      });
+      const capError = shppClaimError({ request: leaveRequest, otherClaims });
+      if (capError) return NextResponse.json({ error: capError }, { status: 400 });
     }
 
     const updateData: Record<string, unknown> = {};
     if (expectedDueDate !== undefined) updateData.expectedDueDate = expectedDueDate ? isoDateToUtc(expectedDueDate) : null;
     if (matchedDate !== undefined) updateData.matchedDate = matchedDate ? isoDateToUtc(matchedDate) : null;
+    if (shppClaimed !== undefined) updateData.shppClaimed = shppClaimed;
     if (status === "CANCELLED") {
       updateData.status = "CANCELLED";
     }

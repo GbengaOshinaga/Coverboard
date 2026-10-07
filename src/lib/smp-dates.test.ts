@@ -6,6 +6,8 @@ import {
   lastDayBefore,
   latestStartForService,
   matchingWeek,
+  parentPayDates,
+  shppClaimError,
   maternityLeaveLatestEnd,
   qualifyingWeek,
   smpEarningsCutoff,
@@ -101,4 +103,28 @@ test("adoption: the matching week sets the service test and the 8 earnings weeks
   assert.equal(day(latestStartForService(mw)), "2026-09-12");
   assert.equal(calculateSmpEntitlement(400, { serviceStartDate: d("2026-09-13"), serviceTestWeek: mw }).eligible, false);
   assert.equal(calculateSmpEntitlement(400, { serviceStartDate: d("2026-09-12"), serviceTestWeek: mw }).eligible, true);
+});
+
+test("ShPP: at most 37 weeks (259 days) of pay for a child, across bookings", () => {
+  const block = (from: string, to: string) => ({ startDate: d(from), endDate: d(to) });
+  // 30 weeks already claimed (210 days), 7 more is exactly 37.
+  const thirty = [block("2027-01-04", "2027-08-01")];
+  assert.equal(shppClaimError({ otherClaims: thirty, request: block("2027-08-02", "2027-09-19") }), null);
+  // One more day is over.
+  assert.match(
+    shppClaimError({ otherClaims: thirty, request: block("2027-08-02", "2027-09-20") })!,
+    /more than 37 weeks .* 49 days of pay left/
+  );
+});
+
+test("paternity and shared parental pay: matching date, else due date, else birth date (noted)", () => {
+  const due = d("2027-06-14");
+  const matched = d("2027-03-03");
+  const born = d("2027-06-20");
+  assert.deepEqual(parentPayDates({ expectedDueDate: due, matchedDate: matched }), { expectedDueDate: null, matchedDate: matched, note: null });
+  assert.deepEqual(parentPayDates({ expectedDueDate: due, matchedDate: null, childBirthDate: born }), { expectedDueDate: due, matchedDate: null, note: null });
+  const fromBirth = parentPayDates({ expectedDueDate: null, matchedDate: null, childBirthDate: born });
+  assert.equal(fromBirth.expectedDueDate, born);
+  assert.match(fromBirth.note!, /birth date/);
+  assert.match(parentPayDates({ expectedDueDate: null, matchedDate: null }).note!, /before the leave starts/);
 });

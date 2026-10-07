@@ -8,7 +8,7 @@ import { CoverageWarning } from "./coverage-warning";
 import { RegionalCoverPanel } from "./regional-cover-panel";
 import { RegionalCoverWarning } from "./regional-cover-warning";
 import { FitNoteSection, type FitNoteRow } from "./fit-note-section";
-import { SmpSummary } from "./smp-summary";
+import { ShppSummary, SmpSummary, SppSummary } from "./smp-summary";
 import { birthPayKind } from "@/lib/smp-dates";
 import { formatDateRange, countWeekdays } from "@/lib/utils";
 import { Check, X, ChevronDown, ChevronRight, CalendarClock } from "lucide-react";
@@ -51,6 +51,8 @@ type LeaveRequest = {
   /** Maternity: stored SMP (recalculated when earnings change). */
   expectedDueDate?: string | null;
   matchedDate?: string | null;
+  shpp?: { claimed: boolean; eligible: boolean; weeklyRate: number | null; basis: string; dateKnown: boolean };
+  spp?: { eligible: boolean; weeklyRate: number | null; basis: string; dateKnown: boolean };
   smpAverageWeeklyEarnings?: string | number | null;
   smpPhase1WeeklyRate?: string | number | null;
   smpPhase2WeeklyRate?: string | number | null;
@@ -325,6 +327,12 @@ export function RequestCard({
 
       {birthPayKind(request.leaveType.name) && request.status !== "CANCELLED" && request.status !== "REJECTED" && (
         <SmpSummary request={request} kind={birthPayKind(request.leaveType.name)!} onChanged={onUpdated} />
+      )}
+      {request.spp && request.status !== "CANCELLED" && request.status !== "REJECTED" && (
+        <SppSummary request={request} onChanged={onUpdated} />
+      )}
+      {request.shpp && request.status !== "CANCELLED" && request.status !== "REJECTED" && (
+        <ShppSummary request={request} onChanged={onUpdated} />
       )}
 
       {canChangeEnd && request.status === "APPROVED" && (

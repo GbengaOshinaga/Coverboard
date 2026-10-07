@@ -71,6 +71,17 @@ export type PayrollRow = {
     basis: string;
   } | null;
   /**
+   * Statutory Shared Parental Pay within the pay period (shared parental
+   * leave, UK): as SPP, for blocks their notice claims pay for; unpaid
+   * blocks show £0 and say so.
+   */
+  shpp: {
+    weeklyRate: number | null;
+    calendarDays: number;
+    pay: number | null;
+    basis: string;
+  } | null;
+  /**
    * SSP for this absence within the pay period: days on their qualifying
    * days, at the daily rate stored when it was booked (null for absences
    * booked before the rate was stored).
@@ -98,6 +109,7 @@ export type PayrollReport = {
     totalEstimatedPay: number;
     totalSspPay: number;
     totalSppPay: number;
+    totalShppPay: number;
     totalSmpPay: number;
     totalSapPay: number;
   };
@@ -132,6 +144,9 @@ export const PAYROLL_EXPORT_COLUMNS: ExportColumn<PayrollRow>[] = [
   { key: (r) => r.spp?.weeklyRate ?? null, header: "SPP weekly rate (£)", format: "money" },
   { key: (r) => r.spp?.pay ?? null, header: "SPP pay (£)", format: "money" },
   { key: (r) => r.spp?.basis ?? null, header: "SPP basis" },
+  { key: (r) => r.shpp?.weeklyRate ?? null, header: "ShPP weekly rate (£)", format: "money" },
+  { key: (r) => r.shpp?.pay ?? null, header: "ShPP pay (£)", format: "money" },
+  { key: (r) => r.shpp?.basis ?? null, header: "ShPP basis" },
   // SMP and SAP share these columns; this one says which (HMRC reports them separately).
   { key: (r) => r.smp?.kind ?? null, header: "Maternity or adoption pay (SMP/SAP)" },
   { key: (r) => r.smp?.label ?? null, header: "SMP/SAP phase" },

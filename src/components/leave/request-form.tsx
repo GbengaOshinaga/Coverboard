@@ -1,6 +1,7 @@
 "use client";
 
 import { formatGBP } from "@/lib/money";
+import { SMP_FLAT_RATE } from "@/lib/smpCalculator";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Heart } from "lucide-react";
@@ -91,6 +92,11 @@ export function RequestForm({
   // Expected due date — maternity only, for the SMP service-test.
   const [expectedDueDate, setExpectedDueDate] = useState("");
   const [matchedDate, setMatchedDate] = useState("");
+  // Shared parental leave: for a birth or an adoption, and whether their
+  // notice claims Shared Parental Pay for these weeks.
+  const [splFor, setSplFor] = useState<"birth" | "adoption">("birth");
+  const [shppClaimed, setShppClaimed] = useState(true);
+  const [childBirthDate, setChildBirthDate] = useState("");
 
   // Balances of whoever the leave is for.
   useEffect(() => {
@@ -136,6 +142,10 @@ export function RequestForm({
   const isSickness = /SSP|Sick/i.test(selectedLeaveType?.name ?? "");
   const isMaternityLeave = /maternity/i.test(selectedLeaveType?.name ?? "");
   const isAdoptionLeave = /adoption/i.test(selectedLeaveType?.name ?? "");
+  const isSplLeave = /shared parental|\bSPL\b/i.test(selectedLeaveType?.name ?? "");
+  const isPaternityLeave = /paternity/i.test(selectedLeaveType?.name ?? "");
+  // Paternity and shared parental leave: the child's due or matching date.
+  const asksChildDate = isSplLeave || isPaternityLeave;
   // Unpaid parental leave is per child, so the booking names the child.
   const isUnpaidParental = /unpaid parental/i.test(selectedLeaveType?.name ?? "");
   const { children, reload: reloadChildren } = useChildren(
@@ -250,11 +260,16 @@ export function RequestForm({
           evidenceProvided: needsEvidence ? hasEvidence : undefined,
           hoursBooked: isHoursLeave ? requestedHours : undefined,
           expectedDueDate:
-            isMaternityLeave && expectedDueDate
+            (isMaternityLeave || (asksChildDate && splFor === "birth")) && expectedDueDate
               ? new Date(expectedDueDate).toISOString()
               : undefined,
           matchedDate:
-            isAdoptionLeave && matchedDate ? new Date(matchedDate).toISOString() : undefined,
+            (isAdoptionLeave || (asksChildDate && splFor === "adoption")) && matchedDate
+              ? new Date(matchedDate).toISOString()
+              : undefined,
+          shppClaimed: isSplLeave ? shppClaimed : undefined,
+          childBirthDate:
+            isPaternityLeave && childBirthDate ? new Date(childBirthDate).toISOString() : undefined,
           childId: isUnpaidParental ? childId || undefined : undefined,
           onBehalfOfUserId: forSomeoneElse ? subjectId : undefined,
         }),
@@ -273,6 +288,24 @@ export function RequestForm({
         toast(
           "🎉 Your first request is in! You'll hear back once it's reviewed.",
           "success"
+        );
+      }
+      // Paternity leave: the SPP rate, or why there's none.
+      if (data.sppInfo) {
+        toast(
+          data.sppInfo.eligible
+            ? `SPP: ${data.sppInfo.basis}.`
+            : `No SPP: ${data.sppInfo.basis}`,
+          data.sppInfo.eligible ? "success" : "error"
+        );
+      }
+      // Shared parental leave claiming pay: the ShPP rate, or why there's none.
+      if (data.shppInfo) {
+        toast(
+          data.shppInfo.eligible
+            ? `ShPP: ${formatGBP(data.shppInfo.weeklyRate)} a week. ${data.shppInfo.basis}.`
+            : `No ShPP: ${data.shppInfo.basis}`,
+          data.shppInfo.eligible ? "success" : "error"
         );
       }
       // Maternity or adoption: SMP or SAP from the earnings in the 8 weeks before.
@@ -464,6 +497,78 @@ export function RequestForm({
             leave starts. Overseas adoptions and surrogacy have different dates:
             work those out by hand.
           </p>
+        </div>
+      )}
+
+      {/* Shared parental leave: the child (birth or adoption) and whether pay is claimed */}
+      {asksChildDate && (
+        <div className="space-y-3 rounded-lg border border-gray-200 p-3">
+          <Select
+            id="splFor"
+            label={isPaternityLeave ? "Paternity leave for" : "Shared parental leave for"}
+            value={splFor}
+            onChange={(e) => setSplFor(e.target.value as "birth" | "adoption")}
+            options={[
+              { value: "birth", label: "A birth" },
+              { value: "adoption", label: "An adoption" },
+            ]}
+          />
+          {splFor === "birth" ? (
+            <Input
+              id="splDueDate"
+              label="Baby's due date"
+              type="date"
+              value={expectedDueDate}
+              onChange={(e) => setExpectedDueDate(e.target.value)}
+            />
+          ) : (
+            <Input
+              id="splMatchedDate"
+              label="Date they were told of the match"
+              type="date"
+              value={matchedDate}
+              onChange={(e) => setMatchedDate(e.target.value)}
+            />
+          )}
+          {isPaternityLeave && (
+            <>
+              <Input
+                id="childBirthDate"
+                label={splFor === "birth" ? "Born on (if the baby has arrived)" : "Placed on (if the child has arrived)"}
+                type="date"
+                value={childBirthDate}
+                onChange={(e) => setChildBirthDate(e.target.value)}
+              />
+              <p className="text-xs text-gray-500">
+                Paternity pay is the lower of {formatGBP(SMP_FLAT_RATE)} or 90% of their
+                average weekly earnings, worked out from pay in the 8 weeks up to the{" "}
+                {splFor === "birth" ? "15th week before the due week" : "week they were matched"},
+                with 26 weeks&apos; service by then. Leave must be taken within 52
+                weeks of the birth or placement.
+              </p>
+            </>
+          )}
+          {isSplLeave && (
+          <label className="flex items-start gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+              checked={shppClaimed}
+              onChange={(e) => setShppClaimed(e.target.checked)}
+            />
+            <span>Their notice claims Shared Parental Pay for these weeks</span>
+          </label>
+          )}
+          {isSplLeave && (
+          <p className="text-xs text-gray-500">
+            Shared Parental Pay is the lower of {formatGBP(SMP_FLAT_RATE)} or 90% of their average
+            weekly earnings, for up to 37 weeks between both parents. It&apos;s
+            worked out from pay in the 8 weeks up to the{" "}
+            {splFor === "birth" ? "15th week before the due week" : "week they were matched"}.
+            Untick for weeks they&apos;re taking unpaid. The partner&apos;s
+            eligibility is their declaration; you don&apos;t have to check it.
+          </p>
+          )}
         </div>
       )}
 

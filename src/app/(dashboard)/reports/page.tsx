@@ -1222,6 +1222,15 @@ export default function ReportsPage() {
                             </td>
                             <td className="py-2.5 pr-4 text-gray-600">
                               {row.leaveType}
+                              {row.shpp && (
+                                <span className="block text-[11px] text-gray-500">
+                                  {row.shpp.claimed
+                                    ? row.shpp.weeklyRate !== null
+                                      ? `ShPP ${formatGBP(row.shpp.weeklyRate)} a week`
+                                      : "No ShPP (see the request)"
+                                    : "Unpaid shared parental leave"}
+                                </span>
+                              )}
                               {row.smp && row.smp.phase1WeeklyRate !== null && (
                                 <span className="block text-[11px] text-gray-500">
                                   {row.smp.kind} {formatGBP(row.smp.phase1WeeklyRate)} a week for 6 weeks, then{" "}
@@ -1670,6 +1679,7 @@ export default function ReportsPage() {
                         {(
                           payrollReport.totals.totalSspPay +
                           payrollReport.totals.totalSppPay +
+                          payrollReport.totals.totalShppPay +
                           payrollReport.totals.totalSmpPay +
                           payrollReport.totals.totalSapPay
                         ).toLocaleString("en-GB", {
@@ -1682,6 +1692,7 @@ export default function ReportsPage() {
                         {formatGBP(payrollReport.totals.totalSppPay)} · SMP{" "}
                         {formatGBP(payrollReport.totals.totalSmpPay)}
                         {payrollReport.totals.totalSapPay > 0 && <> · SAP {formatGBP(payrollReport.totals.totalSapPay)}</>}
+                        {payrollReport.totals.totalShppPay > 0 && <> · ShPP {formatGBP(payrollReport.totals.totalShppPay)}</>}
                       </p>
                     </div>
                   </div>
@@ -1751,6 +1762,10 @@ export default function ReportsPage() {
                                 ? row.smp.weeklyRate == null
                                   ? "—"
                                   : `${formatGBP(row.smp.weeklyRate)}/wk ${row.smp.kind}`
+                                : row.shpp
+                                ? row.shpp.weeklyRate == null
+                                  ? row.shpp.pay === 0 ? "Unpaid" : "—"
+                                  : `${formatGBP(row.shpp.weeklyRate)}/wk ShPP`
                                 : row.spp
                                 ? row.spp.weeklyRate == null
                                   ? "—"
@@ -1772,6 +1787,10 @@ export default function ReportsPage() {
                                 ? row.smp.pay == null
                                   ? "—"
                                   : formatGBP(row.smp.pay)
+                                : row.shpp
+                                ? row.shpp.pay == null
+                                  ? "—"
+                                  : formatGBP(row.shpp.pay)
                                 : row.spp
                                 ? row.spp.pay == null
                                   ? "—"
@@ -1786,6 +1805,11 @@ export default function ReportsPage() {
                               {row.smp && (
                                 <div className="max-w-56 text-[11px] font-normal text-gray-500">
                                   {row.smp.daysInPeriod} days of {row.smp.kind} · {row.smp.label}
+                                </div>
+                              )}
+                              {row.shpp && (
+                                <div className="max-w-56 text-[11px] font-normal text-gray-500">
+                                  {row.shpp.weeklyRate == null ? row.shpp.basis : `${row.shpp.calendarDays} days of ShPP`}
                                 </div>
                               )}
                               {row.spp && (
