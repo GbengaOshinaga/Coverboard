@@ -102,10 +102,54 @@ export type PayrollRow = {
   } | null;
 };
 
+/**
+ * Someone whose last day falls in the pay period: holiday built up by then,
+ * taken, and owed in their final pay (src/lib/holiday-on-leaving.ts, WTR reg 14).
+ */
+export type PayrollLeaverRow = {
+  userId: string;
+  name: string;
+  email: string;
+  department: string | null;
+  /** YYYY-MM-DD */
+  lastDay: string;
+  leaveYear: string;
+  unit: "days" | "hours";
+  accrued: number;
+  carriedOver: number;
+  taken: number;
+  /** Positive: to pay. Negative: taken more than built up. */
+  owed: number;
+  /** 52-week average holiday pay, per day (or hour). */
+  rate: number | null;
+  /** owed × rate when there's something to pay. */
+  pay: number | null;
+};
+
+/** The leavers table in the payroll export (its own sheet, or ?table=leavers as CSV). */
+export const PAYROLL_LEAVER_COLUMNS: ExportColumn<PayrollLeaverRow>[] = [
+  { key: "userId", header: "Employee ID" },
+  { key: "name", header: "Employee" },
+  { key: "email", header: "Email" },
+  { key: "department", header: "Department" },
+  { key: "lastDay", header: "Last day" },
+  { key: "leaveYear", header: "Leave year" },
+  { key: (r) => (r.unit === "hours" ? "Hours" : "Days"), header: "Unit" },
+  { key: "accrued", header: "Built up this year" },
+  { key: "carriedOver", header: "Carried over and owed" },
+  { key: "taken", header: "Taken" },
+  { key: (r) => Math.max(0, r.owed), header: "Holiday to pay" },
+  { key: (r) => Math.max(0, -r.owed), header: "Taken over the entitlement" },
+  { key: "rate", header: "Holiday pay rate (£, 52-week average)", format: "money" },
+  { key: "pay", header: "Holiday pay on leaving (£)", format: "money" },
+];
+
 export type PayrollReport = {
   from: string;
   to: string;
   rows: PayrollRow[];
+  /** People whose last day falls in these dates (UK staff). */
+  leavers: PayrollLeaverRow[];
   totals: {
     rowCount: number;
     totalDays: number;
@@ -118,6 +162,8 @@ export type PayrollReport = {
     totalNeonatalPay: number;
     totalSmpPay: number;
     totalSapPay: number;
+    /** Holiday pay owed to leavers in these dates. */
+    totalLeaverHolidayPay: number;
   };
 };
 

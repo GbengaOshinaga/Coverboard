@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "CarryOverReason" ADD VALUE 'EMPLOYER_PREVENTED';

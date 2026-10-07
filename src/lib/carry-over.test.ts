@@ -157,3 +157,22 @@ test("family leave and sickness in the same year: family first, then sickness wi
   // Sickness: min(30, 8 left, 20 − 10 taken − 10 carried) = 0 → no row.
   assert.deepEqual(rows.map((r) => [r.reason, r.carried]), [["FAMILY_LEAVE", 10]]);
 });
+
+test("employer didn't give the chance to take it: the untaken 4 weeks carry to the end of next year (reg. 13(17))", () => {
+  // Took 10 of 28: 4 weeks = 20 days, 10 untaken carry; then the company cap from the other 8.
+  const { rows } = planYearEndCarryOver({ ...base, employerPrevented: true });
+  assert.deepEqual(
+    rows.map((r) => [r.reason, r.carried, r.expiresAt.toISOString().slice(0, 10)]),
+    [
+      ["EMPLOYER_PREVENTED", 10, "2027-12-31"],
+      ["COMPANY_POLICY", 5, "2027-03-31"],
+    ]
+  );
+  // With 4 sick days: those keep their 18-month expiry, the rest of the 4
+  // weeks carries as employer-prevented; nothing counted twice.
+  const both = planYearEndCarryOver({ ...base, employerPrevented: true, sicknessDays: 4 }).rows.map((r) => [r.reason, r.carried]);
+  assert.deepEqual(both, [["SICKNESS", 4], ["EMPLOYER_PREVENTED", 6], ["COMPANY_POLICY", 5]]);
+  // Irregular hours: all untaken hours.
+  const hours = planYearEndCarryOver({ ...base, unit: "hours", entitlement: 120, takenBy: takenOn([["2026-03-01", 40]]), employerPrevented: true, company: { ...base.company, enabled: false } });
+  assert.deepEqual(hours.rows.map((r) => [r.reason, r.carried]), [["EMPLOYER_PREVENTED", 80]]);
+});

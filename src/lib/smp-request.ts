@@ -5,7 +5,7 @@ import {
   calculateSmpEntitlement,
   getAweDetailForUser,
 } from "@/lib/smpCalculator";
-import { neonatalWeeksEntitled, weekBeforeNeonatalCare } from "@/lib/neonatalPay";
+import { neonatalBookingError, neonatalWeeksEntitled, weekBeforeNeonatalCare } from "@/lib/neonatalPay";
 import { SHPP_MAX_WEEKS, birthPayKind, parentPayDates, shppPoolWeeks, smpWeeksUsed, payTestWeek, smpEarningsCutoff, type BirthPayKind } from "@/lib/smp-dates";
 
 /**
@@ -59,6 +59,7 @@ export async function withCurrentSmp<
     userId: string;
     status: string;
     startDate: Date;
+    endDate: Date;
     expectedDueDate: Date | null;
     matchedDate?: Date | null;
     shppClaimed?: boolean;
@@ -100,6 +101,10 @@ export async function withCurrentSmp<
         weeksEntitled: number;
         daysInCare: number;
         stillInCare: boolean;
+        /** No care dates recorded yet (booked before they were). */
+        needsCareDates?: boolean;
+        /** The booking is longer than the time in care gives, or past 68 weeks. */
+        bookingProblem?: string | null;
       };
     }
   >
@@ -109,7 +114,21 @@ export async function withCurrentSmp<
     requests.map(async (r) => {
       if (r.status === "CANCELLED" || r.status === "REJECTED") return r;
       if (/neonatal/i.test(r.leaveType.name)) {
-        if (!r.neonatalCareFirstDay) return r;
+        if (!r.neonatalCareFirstDay) {
+          // Booked before care dates were recorded: the card asks for them.
+          return {
+            ...r,
+            neonatal: {
+              eligible: false,
+              weeklyRate: null,
+              basis: "",
+              weeksEntitled: 0,
+              daysInCare: 0,
+              stillInCare: false,
+              needsCareDates: true,
+            },
+          };
+        }
         const [pay, entitled] = await Promise.all([
           computeSncp({
             userId: r.userId,
@@ -123,6 +142,16 @@ export async function withCurrentSmp<
             neonatalWeeksEntitled({ firstFullDay: r.neonatalCareFirstDay, lastFullDay: r.neonatalCareLastDay ?? null })
           ),
         ]);
+        const otherBookings = await prisma.leaveRequest.findMany({
+          where: {
+            userId: r.userId,
+            id: { not: r.id },
+            neonatalCareFirstDay: r.neonatalCareFirstDay,
+            status: { in: ["PENDING", "APPROVED"] },
+            leaveType: { name: { contains: "neonatal", mode: "insensitive" } },
+          },
+          select: { startDate: true, endDate: true },
+        });
         return {
           ...r,
           neonatal: {
@@ -132,6 +161,13 @@ export async function withCurrentSmp<
             weeksEntitled: entitled.weeks,
             daysInCare: entitled.daysInCare,
             stillInCare: entitled.ongoing,
+            bookingProblem: neonatalBookingError({
+              request: r,
+              otherBookings,
+              entitledWeeks: entitled.weeks,
+              ongoing: entitled.ongoing,
+              birthDate: r.childBirthDate ?? null,
+            }),
           },
         };
       }

@@ -13,6 +13,11 @@
  *    paternity, adoption, shared parental, bereavement or neonatal care leave.
  *    All of it: the 4 weeks and the extra 1.6 (at most 28 days). Carries into
  *    the next leave year. WTR reg. 13(14), reg. 13A(7A), reg. 15D(3).
+ *  - EMPLOYER_PREVENTED: the employer didn't give a reasonable chance to take
+ *    the leave (or encourage it), didn't recognise the right to it, or didn't
+ *    warn it would be lost. The untaken part of the 4 weeks (all untaken
+ *    leave for irregular-hours staff), to the end of the next leave year: the
+ *    first full year the employer complies. WTR reg. 13(16)–(18).
  * https://www.legislation.gov.uk/uksi/1998/1833/regulation/13
  * https://www.legislation.gov.uk/uksi/1998/1833/regulation/13A
  * https://www.legislation.gov.uk/uksi/1998/1833/regulation/15D
@@ -20,7 +25,7 @@
  * Leave years follow the team's leave year (src/lib/leave-year.ts).
  */
 
-export type CarryOverReason = "COMPANY_POLICY" | "SICKNESS" | "FAMILY_LEAVE";
+export type CarryOverReason = "COMPANY_POLICY" | "SICKNESS" | "FAMILY_LEAVE" | "EMPLOYER_PREVENTED";
 
 /** Weeks that must carry over when sickness prevented them (reg. 13 leave). */
 export const STATUTORY_CARRY_WEEKS = 4;
@@ -103,6 +108,8 @@ export type YearEndInput = {
   familyLeaveDays: number;
   /** The admin can decide someone could have taken their leave anyway. */
   includeStatutory: boolean;
+  /** The admin records that the employer didn't give them the chance to take it (reg. 13(16)). */
+  employerPrevented?: boolean;
   company: { enabled: boolean; max: number; expiresAt: Date };
 };
 
@@ -187,6 +194,21 @@ export function planYearEndCarryOver(input: YearEndInput): YearEndPlan {
   // Sickness: the 4 weeks of regulation 13 leave (reg. 13(15)).
   statutory("SICKNESS", input.sicknessDays, STATUTORY_CARRY_WEEKS * input.daysPerWeek);
 
+  // The employer didn't give them the chance: the rest of the untaken 4
+  // weeks, whatever the absences (reg. 13(17)). After family leave and
+  // sickness, whose carry-over lasts longer, so nothing counts twice and
+  // nobody's carry-over expires sooner for being ticked.
+  if (input.employerPrevented && left > 0) {
+    const untaken =
+      input.unit === "hours" ? left : Math.max(0, STATUTORY_CARRY_WEEKS * input.daysPerWeek - usedFromEntitlement - carriedThisYear);
+    const owed = round2(Math.min(left, untaken));
+    if (owed > 0) {
+      rows.push({ reason: "EMPLOYER_PREVENTED", carried: owed, expiresAt: familyLeaveCarryExpiry(yearEnd), source: "this_year" });
+      carriedThisYear += owed;
+      left = round2(left - owed);
+    }
+  }
+
   if (input.company.enabled && input.company.max > 0 && left > 0) {
     rows.push({
       reason: "COMPANY_POLICY",
@@ -207,4 +229,5 @@ export const CARRY_OVER_REASON_LABEL: Record<CarryOverReason, string> = {
   COMPANY_POLICY: "company carry-over",
   SICKNESS: "carried over after sickness",
   FAMILY_LEAVE: "carried over after family leave",
+  EMPLOYER_PREVENTED: "carried over: the employer didn't give the chance to take it",
 };

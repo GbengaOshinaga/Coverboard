@@ -27,7 +27,14 @@ import {
   EXPORT_CONTENT_TYPE,
   exportFilename,
 } from "@/lib/export-formats";
-import { PAYROLL_EXPORT_COLUMNS, type PayrollReport, type PayrollRow } from "@/lib/payroll-columns";
+import {
+  PAYROLL_EXPORT_COLUMNS,
+  PAYROLL_LEAVER_COLUMNS,
+  type PayrollLeaverRow,
+  type PayrollReport,
+  type PayrollRow,
+} from "@/lib/payroll-columns";
+import { getHolidayOnLeaving } from "@/lib/holiday-on-leaving-server";
 
 /**
  * Payroll export for a given date range.
@@ -378,6 +385,40 @@ export async function GET(request: Request) {
     })
   );
 
+  // The pay period as whole days (leftOn is a date column).
+  const dbDay = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  // Leavers whose last day falls in these dates: holiday owed in their final
+  // pay (UK staff; src/lib/holiday-on-leaving-server.ts).
+  const leaverUsers = await prisma.user.findMany({
+    where: {
+      organizationId: orgId,
+      workCountry: "GB",
+      leftOn: { gte: dbDay(from), lte: dbDay(to) },
+    },
+    orderBy: { leftOn: "asc" },
+    select: { id: true, name: true, email: true, department: true },
+  });
+  const leavers: PayrollLeaverRow[] = [];
+  for (const u of leaverUsers) {
+    const h = await getHolidayOnLeaving(u.id);
+    if (!h) continue;
+    leavers.push({
+      userId: u.id,
+      name: u.name,
+      email: u.email,
+      department: u.department,
+      lastDay: h.lastDay,
+      leaveYear: h.leaveYear,
+      unit: h.unit,
+      accrued: h.accrued,
+      carriedOver: h.carriedOver,
+      taken: h.taken,
+      owed: h.owed,
+      rate: h.rate,
+      pay: h.pay,
+    });
+  }
+
   const totals = {
     rowCount: rows.length,
     totalDays: rows.reduce((s, r) => s + r.daysTaken, 0),
@@ -393,6 +434,7 @@ export async function GET(request: Request) {
     totalNeonatalPay: Number(rows.reduce((s, r) => s + (r.neonatal?.pay ?? 0), 0).toFixed(2)),
     totalSmpPay: Number(rows.reduce((s, r) => s + (r.smp?.kind === "SMP" ? (r.smp.pay ?? 0) : 0), 0).toFixed(2)),
     totalSapPay: Number(rows.reduce((s, r) => s + (r.smp?.kind === "SAP" ? (r.smp.pay ?? 0) : 0), 0).toFixed(2)),
+    totalLeaverHolidayPay: Number(leavers.reduce((s, l) => s + (l.pay ?? 0), 0).toFixed(2)),
   };
 
   const format = parseExportFormat(searchParams.get("format"));
@@ -401,6 +443,7 @@ export async function GET(request: Request) {
       from: from.toISOString(),
       to: to.toISOString(),
       rows,
+      leavers,
       totals,
     };
     return NextResponse.json(report);
@@ -412,13 +455,15 @@ export async function GET(request: Request) {
   const columns = PAYROLL_EXPORT_COLUMNS;
 
   const filename = exportFilename(
-    `coverboard-payroll-${from.toISOString().slice(0, 10)}-to-${to.toISOString().slice(0, 10)}`,
+    `coverboard-payroll${searchParams.get("table") === "leavers" ? "-leavers" : ""}-${from.toISOString().slice(0, 10)}-to-${to.toISOString().slice(0, 10)}`,
     format,
     new Date()
   );
 
+  // CSV is one table a file: ?table=leavers gives the leavers instead.
+  const leaversOnly = searchParams.get("table") === "leavers";
   if (format === "csv") {
-    const body = toCsv(rows, columns);
+    const body = leaversOnly ? toCsv(leavers, PAYROLL_LEAVER_COLUMNS) : toCsv(rows, columns);
     return new NextResponse(body, {
       status: 200,
       headers: {
@@ -436,6 +481,7 @@ export async function GET(request: Request) {
       columns,
       rows,
     },
+    { name: "Leavers", columns: PAYROLL_LEAVER_COLUMNS, rows: leavers },
   ]);
   return new NextResponse(new Uint8Array(buffer), {
     status: 200,

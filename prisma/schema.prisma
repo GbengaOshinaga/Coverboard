@@ -455,6 +455,8 @@ enum CarryOverReason {
   COMPANY_POLICY
   SICKNESS
   FAMILY_LEAVE
+  /// The employer didn't give the chance to take it (WTR reg. 13(16)–(18)).
+  EMPLOYER_PREVENTED
 }
 
 model WeeklyEarning {

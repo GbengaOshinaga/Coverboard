@@ -22,6 +22,11 @@ const bodySchema = z.object({
    * holiday (the admin's judgement): no statutory carry-over for them.
    */
   excludeStatutory: z.array(z.string()).optional(),
+  /**
+   * People the employer didn't give a reasonable chance to take their leave
+   * (or warn it would be lost): the untaken 4 weeks carry (WTR reg. 13(16)–(18)).
+   */
+  employerPrevented: z.array(z.string()).optional(),
 });
 
 /**
@@ -59,6 +64,7 @@ export async function POST(request: Request) {
   }
   const { fromYear, dryRun } = parsed;
   const excluded = new Set(parsed.excludeStatutory ?? []);
+  const prevented = new Set(parsed.employerPrevented ?? []);
 
   const org = await prisma.organization.findUnique({
     where: { id: orgId },
@@ -113,6 +119,7 @@ export async function POST(request: Request) {
     sicknessDays: number;
     familyLeaveDays: number;
     statutoryExcluded: boolean;
+    employerPrevented: boolean;
     rows: YearEndRow[];
     /** Total carried into next year. */
     daysCarried: number;
@@ -198,6 +205,7 @@ export async function POST(request: Request) {
       sicknessDays,
       familyLeaveDays,
       includeStatutory: !excluded.has(user.id),
+      employerPrevented: prevented.has(user.id),
       company: {
         enabled: org.ukCarryOverEnabled,
         // The cap is set in days; irregular-hours staff carry hours.
@@ -208,7 +216,9 @@ export async function POST(request: Request) {
 
     const round2 = (n: number) => Math.round(n * 100) / 100;
     const daysCarried = round2(rows.reduce((sum, r) => sum + r.carried, 0));
-    if (daysCarried <= 0 && sicknessDays + familyLeaveDays === 0) continue;
+    // Listed if anything carries, they were off, or they have leave left
+    // (so the admin can record that the employer didn't give the chance).
+    if (daysCarried <= 0 && sicknessDays + familyLeaveDays === 0 && unused <= 0) continue;
 
     summary.push({
       userId: user.id,
@@ -221,6 +231,7 @@ export async function POST(request: Request) {
       sicknessDays,
       familyLeaveDays,
       statutoryExcluded: excluded.has(user.id),
+      employerPrevented: prevented.has(user.id),
       rows,
       daysCarried,
     });
@@ -263,6 +274,7 @@ export async function POST(request: Request) {
         processed: summary.length,
         companyExpiresAt: companyExpiresAt.toISOString(),
         statutoryExcluded: [...excluded],
+        employerPrevented: [...prevented],
       },
       context: requestAuditContext(request),
     });

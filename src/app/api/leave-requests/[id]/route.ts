@@ -9,6 +9,7 @@ import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
 import { birthPayKind, shppClaimError } from "@/lib/smp-dates";
+import { neonatalBookingError, neonatalWeeksEntitled } from "@/lib/neonatalPay";
 import { computeSmpFields, isSharedParentalLeaveType, shppPoolForChild } from "@/lib/smp-request";
 import { reviewLeaveRequest } from "@/lib/leave-requests/review";
 import { changeSicknessEndDate } from "@/lib/leave-requests/change-end-date";
@@ -32,6 +33,8 @@ const updateSchema = z.object({
   shppClaimed: z.boolean().optional(),
   /** Neonatal care leave: the last full day in care, once the baby leaves. */
   neonatalCareLastDay: isoDateSchema.nullable().optional(),
+  /** Neonatal care leave: the first full day in care (bookings made before it was recorded). */
+  neonatalCareFirstDay: isoDateSchema.optional(),
 });
 
 export async function PATCH(
@@ -82,7 +85,7 @@ export async function PATCH(
     }
 
     const { status, kitDaysUsed, splitDaysUsed, evidenceProvided, splCurtailmentConfirmed, coverOverride, endDate } = parsed.data;
-    const { expectedDueDate, matchedDate, shppClaimed, neonatalCareLastDay } = parsed.data;
+    const { expectedDueDate, matchedDate, shppClaimed, neonatalCareLastDay, neonatalCareFirstDay } = parsed.data;
 
     // Date changes stand alone so they can't be mixed with a status change.
     if (endDate !== undefined) {
@@ -238,20 +241,49 @@ export async function PATCH(
     const isSpl = isSharedParentalLeaveType(leaveRequest.leaveType.name);
     const isPaternity = /paternity/i.test(leaveRequest.leaveType.name);
     const isNeonatal = /neonatal/i.test(leaveRequest.leaveType.name);
-    if (neonatalCareLastDay !== undefined) {
+    // Days in neonatal care: added after booking (the last day once the baby
+    // leaves care; both on bookings made before they were recorded).
+    let neonatalWarning: string | null = null;
+    if (neonatalCareLastDay !== undefined || neonatalCareFirstDay !== undefined) {
       if (leaveRequest.userId !== userId && userRole !== "ADMIN" && userRole !== "MANAGER") {
         return NextResponse.json({ error: "You can't change this request" }, { status: 403 });
       }
       if (!isNeonatal) {
         return NextResponse.json({ error: "Days in neonatal care are for neonatal care leave." }, { status: 400 });
       }
-      if (
-        neonatalCareLastDay &&
-        leaveRequest.neonatalCareFirstDay &&
-        isoDateToUtc(neonatalCareLastDay) < leaveRequest.neonatalCareFirstDay
-      ) {
+      const first = neonatalCareFirstDay ? isoDateToUtc(neonatalCareFirstDay) : leaveRequest.neonatalCareFirstDay;
+      const last =
+        neonatalCareLastDay !== undefined
+          ? neonatalCareLastDay
+            ? isoDateToUtc(neonatalCareLastDay)
+            : null
+          : leaveRequest.neonatalCareLastDay;
+      if (!first) {
+        return NextResponse.json({ error: "Add the first full day the baby spent in neonatal care." }, { status: 400 });
+      }
+      if (last && last < first) {
         return NextResponse.json({ error: "The last day in neonatal care can't be before the first." }, { status: 400 });
       }
+      // Saved even if the booking is longer than the time in care gives (the
+      // dates are a record); the response says so, for the booking to be put right.
+      const entitled = neonatalWeeksEntitled({ firstFullDay: first, lastFullDay: last });
+      const otherBookings = await prisma.leaveRequest.findMany({
+        where: {
+          userId: leaveRequest.userId,
+          id: { not: leaveRequest.id },
+          neonatalCareFirstDay: first,
+          status: { in: ["PENDING", "APPROVED"] },
+          leaveType: { name: { contains: "neonatal", mode: "insensitive" } },
+        },
+        select: { startDate: true, endDate: true },
+      });
+      neonatalWarning = neonatalBookingError({
+        request: leaveRequest,
+        otherBookings,
+        entitledWeeks: entitled.weeks,
+        ongoing: entitled.ongoing,
+        birthDate: leaveRequest.childBirthDate,
+      });
     }
     const datesChanging = expectedDueDate !== undefined || matchedDate !== undefined;
     if (datesChanging || shppClaimed !== undefined) {
@@ -310,6 +342,7 @@ export async function PATCH(
     if (neonatalCareLastDay !== undefined) {
       updateData.neonatalCareLastDay = neonatalCareLastDay ? isoDateToUtc(neonatalCareLastDay) : null;
     }
+    if (neonatalCareFirstDay !== undefined) updateData.neonatalCareFirstDay = isoDateToUtc(neonatalCareFirstDay);
     if (status === "CANCELLED") {
       updateData.status = "CANCELLED";
     }
@@ -435,7 +468,7 @@ export async function PATCH(
       updated.userId === userId || userRole === "ADMIN"
         ? updated
         : { ...updated, sicknessNote: null };
-    return NextResponse.json(responsePayload);
+    return NextResponse.json(neonatalWarning ? { ...responsePayload, neonatalWarning } : responsePayload);
   } catch (error) {
     console.error("Update leave request error:", error);
     return NextResponse.json(

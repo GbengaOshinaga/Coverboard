@@ -344,9 +344,12 @@ export function NeonatalSummary({
       weeksEntitled: number;
       daysInCare: number;
       stillInCare: boolean;
+      needsCareDates?: boolean;
+      bookingProblem?: string | null;
     };
   };
 }) {
+  const [firstDay, setFirstDay] = useState("");
   const [lastDay, setLastDay] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -354,13 +357,16 @@ export function NeonatalSummary({
   if (!n) return null;
 
   async function saveLastDay() {
-    if (!lastDay) return;
+    if (!lastDay && !firstDay) return;
     setSaving(true);
     setError("");
     const res = await fetch(`/api/leave-requests/${request.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ neonatalCareLastDay: lastDay }),
+      body: JSON.stringify({
+        ...(firstDay ? { neonatalCareFirstDay: firstDay } : {}),
+        ...(lastDay ? { neonatalCareLastDay: lastDay } : {}),
+      }),
     });
     const data = await res.json().catch(() => null);
     setSaving(false);
@@ -374,6 +380,43 @@ export function NeonatalSummary({
   return (
     <div className="mt-2 rounded-md border border-purple-100 bg-purple-50/50 px-3 py-2 text-xs text-gray-700">
       <p className="font-medium text-gray-900">Neonatal Care Pay</p>
+      {n.needsCareDates ? (
+        <div className="space-y-1">
+          <p className="text-amber-700">
+            No days in neonatal care recorded. Employers have to keep them, and they set the weeks of
+            leave and pay (one per 7 full days in care, up to 12) and, if they don&apos;t get maternity
+            or paternity pay, which week their pay comes from.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="date"
+              aria-label="First full day in neonatal care"
+              value={firstDay}
+              onChange={(e) => setFirstDay(e.target.value)}
+              className="rounded border border-gray-300 bg-white px-2 py-1 text-xs"
+            />
+            <span>to</span>
+            <input
+              type="date"
+              aria-label="Last full day in neonatal care (empty if still there)"
+              value={lastDay}
+              onChange={(e) => setLastDay(e.target.value)}
+              className="rounded border border-gray-300 bg-white px-2 py-1 text-xs"
+            />
+            <button
+              type="button"
+              disabled={!firstDay || saving}
+              onClick={saveLastDay}
+              className="rounded border border-purple-200 bg-white px-2 py-1 text-xs font-medium text-purple-700 hover:bg-purple-50 disabled:opacity-50"
+            >
+              {saving ? "Saving…" : "Add days in care"}
+            </button>
+          </div>
+          <p className="text-gray-500">First and last full days. Leave the last empty if the baby is still in care.</p>
+          {error && <p className="text-red-700">{error}</p>}
+        </div>
+      ) : (
+      <>
       <p className={n.weeklyRate === null ? "text-amber-700" : undefined}>
         {n.weeklyRate === null ? `No neonatal care pay: ${n.basis}` : `${n.basis}.`}
       </p>
@@ -382,6 +425,7 @@ export function NeonatalSummary({
         {n.stillInCare ? " so far" : ""}: {n.weeksEntitled} week{n.weeksEntitled === 1 ? "" : "s"} of leave and pay
         {n.weeksEntitled === 12 ? " (the most)" : ""}.
       </p>
+      {n.bookingProblem && <p className="text-amber-700">{n.bookingProblem} Change the booking to match.</p>}
       {n.stillInCare && (
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <input
@@ -402,6 +446,8 @@ export function NeonatalSummary({
         </div>
       )}
       {error && <p className="text-red-700">{error}</p>}
+      </>
+      )}
     </div>
   );
 }

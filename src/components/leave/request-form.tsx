@@ -11,6 +11,7 @@ import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
 import { OverlapWarning } from "./overlap-warning";
 import { BalanceIndicator } from "./balance-indicator";
+import { neonatalWeeksEntitled } from "@/lib/neonatalPay";
 import { CoverageWarning } from "./coverage-warning";
 import { RegionalCoverWarning } from "./regional-cover-warning";
 import { countWeekdays } from "@/lib/utils";
@@ -99,6 +100,8 @@ export function RequestForm({
   const [childBirthDate, setChildBirthDate] = useState("");
   const [careFirstDay, setCareFirstDay] = useState("");
   const [careLastDay, setCareLastDay] = useState("");
+  // Days of neonatal leave already booked for this baby (same first day in care).
+  const [neonatalBooked, setNeonatalBooked] = useState<{ firstDay: string; days: number } | null>(null);
 
   // Balances of whoever the leave is for.
   useEffect(() => {
@@ -149,6 +152,22 @@ export function RequestForm({
   const isNeonatalLeave = /neonatal/i.test(selectedLeaveType?.name ?? "");
   // Paternity, shared parental and neonatal care leave: the child's due or matching date.
   const asksChildDate = isSplLeave || isPaternityLeave || isNeonatalLeave;
+  useEffect(() => {
+    if (!isNeonatalLeave || !careFirstDay || !subjectId) {
+      setNeonatalBooked(null);
+      return;
+    }
+    let stale = false;
+    fetch(`/api/team-members/${encodeURIComponent(subjectId)}/neonatal-booked?firstDay=${careFirstDay}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!stale) setNeonatalBooked(d ? { firstDay: careFirstDay, days: d.daysBooked } : null);
+      })
+      .catch(() => undefined);
+    return () => {
+      stale = true;
+    };
+  }, [isNeonatalLeave, careFirstDay, subjectId]);
   // Unpaid parental leave is per child, so the booking names the child.
   const isUnpaidParental = /unpaid parental/i.test(selectedLeaveType?.name ?? "");
   const { children, reload: reloadChildren } = useChildren(
@@ -350,7 +369,9 @@ export function RequestForm({
 
   const leaveTypeOptions = leaveTypes.map((lt) => {
     const bal = balances.find((b) => b.leaveTypeId === lt.id);
-    if (!bal) return { value: lt.id, label: lt.name };
+    // Neonatal leave depends on the time in care, not the type's allowance:
+    // the box under the dates shows what's left.
+    if (!bal || /neonatal/i.test(lt.name)) return { value: lt.id, label: lt.name };
     const left =
       bal.unit === "hours"
         ? `${bal.remaining.toFixed(1)} hrs left`
@@ -667,12 +688,53 @@ export function RequestForm({
 
       {/* Balance indicator */}
       {leaveTypeId && (
+        isNeonatalLeave ? (
+          // Neonatal leave is limited by the time in care (one week per 7 full
+          // days, up to 12), in calendar days, not by the type's 12-week allowance.
+          (() => {
+            if (!careFirstDay) {
+              return (
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
+                  Add the days in neonatal care to see how many weeks of leave they give.
+                </div>
+              );
+            }
+            const e = neonatalWeeksEntitled({
+              firstFullDay: new Date(`${careFirstDay}T00:00:00Z`),
+              lastFullDay: careLastDay ? new Date(`${careLastDay}T00:00:00Z`) : null,
+            });
+            const booked =
+              startDate && endDate
+                ? Math.round((Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86_400_000) + 1
+                : 0;
+            const already = neonatalBooked?.firstDay === careFirstDay ? neonatalBooked.days : 0;
+            const left = Math.max(0, e.weeks * 7 - already);
+            const over = booked > left;
+            return (
+              <div
+                className={`rounded-lg border p-3 text-xs ${
+                  over || e.weeks === 0 ? "border-amber-200 bg-amber-50 text-amber-900" : "border-green-200 bg-green-50 text-green-900"
+                }`}
+              >
+                {e.daysInCare} full day{e.daysInCare === 1 ? "" : "s"} in neonatal care
+                {e.ongoing ? " so far" : ""}: {e.weeks} week{e.weeks === 1 ? "" : "s"} of leave ({e.weeks * 7} days)
+                {e.weeks === 12 ? ", the most" : ""}.
+                {already > 0 && ` ${already} day${already === 1 ? "" : "s"} already booked for this baby, so ${left} left.`}
+                {booked > 0 && ` This booking is ${booked} day${booked === 1 ? "" : "s"}`}
+                {booked > 0 && (over ? `, more than the ${left} left.` : ".")}
+                {e.weeks === 0 && " It needs 7 full days in care in a row."}
+                {e.ongoing && e.weeks > 0 && " More weeks build up while the baby is still in care."}
+              </div>
+            );
+          })()
+        ) : (
         <BalanceIndicator
           balance={selectedBalance}
           requestedDays={requestedDays}
           requestedHours={requestedHours}
           loading={balanceLoading}
         />
+        )
       )}
 
       <div className="space-y-1">
