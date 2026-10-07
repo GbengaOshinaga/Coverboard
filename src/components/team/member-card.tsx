@@ -112,6 +112,11 @@ export function MemberCard({
             {" "}· records kept for 6 years
           </p>
         )}
+        {member.isActive !== false && member.leftOn && (
+          <p className="text-xs font-medium text-amber-700">
+            Leaving {new Date(member.leftOn).toLocaleDateString("en-GB", { timeZone: "UTC" })}
+          </p>
+        )}
         <p className="text-xs text-gray-400 mt-0.5">
           {formatEmploymentType(member.employmentType)} •{" "}
           {member.fte ? fteLabel(member.fte) : `FTE ${member.fteRatio}`}
