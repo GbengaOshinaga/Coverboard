@@ -167,6 +167,15 @@ export const authOptions: NextAuthOptions = {
         // update() — pick up the new org so the session carries it.
         await hydrateTokenFromEmail(token, token.email as string);
       }
+      // update() after someone renames themselves: read the name back from
+      // the database (not from the client) so the header shows it straight away.
+      if (trigger === "update" && token.id) {
+        const me = await prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: { name: true },
+        });
+        if (me) token.name = me.name;
+      }
       // Refresh plan from DB on explicit update() or once per hour so the
       // lock/middleware sees current state without forcing a re-login.
       const HOUR = 60 * 60 * 1000;

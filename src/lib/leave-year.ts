@@ -70,6 +70,25 @@ export function rolloverLeaveYear(now: Date, s: LeaveYearStart): number {
  * that's easy to misread: on the last day of the next year (so carried days
  * last all of it), or within its first month.
  */
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+/**
+ * The last day a carry-over expiry can fall on in a month. It recurs every
+ * year, so February stops at 28 (29 February only exists in leap years).
+ */
+export function lastExpiryDay(month: number): number {
+  return month === 2 ? 28 : new Date(Date.UTC(2001, month, 0)).getUTCDate();
+}
+
+/** Why a carry-over expiry day/month can't be used, or null when it can. */
+export function expiryDateError(month: number, day: number): string | null {
+  const last = lastExpiryDay(month);
+  if (!Number.isInteger(day) || day < 1 || day > last) {
+    return `${MONTH_NAMES[month - 1]} expiry has to be a day from 1 to ${last}.`;
+  }
+  return null;
+}
+
 export function companyCarryOverExpiry(
   year: number,
   s: LeaveYearStart,

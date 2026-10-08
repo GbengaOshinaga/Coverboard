@@ -65,7 +65,7 @@ function rtwAtRisk(m: {
 }
 
 export default function TeamPage() {
-  const { data: session } = useSession();
+  const { data: session, update: updateSession } = useSession();
   const searchParams = useSearchParams();
   const earningsFilter = searchParams.get("earnings");
   const [members, setMembers] = useState<Member[]>([]);
@@ -353,6 +353,10 @@ export default function TeamPage() {
     }
 
     toast("Team member updated", "success");
+    // Editing yourself: refresh the session so the header shows the new name.
+    if (data.id === (session?.user as Record<string, unknown> | undefined)?.id) {
+      void updateSession();
+    }
     setEditMember(undefined);
     fetchMembers();
   }

@@ -1,4 +1,4 @@
-import { firstDateAfterYear } from "@/lib/leave-year";
+import { expiryDateError, firstDateAfterYear } from "@/lib/leave-year";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -11,7 +11,12 @@ const updateSchema = z.object({
   ukBankHolidayInclusive: z.boolean().optional(),
   ukBankHolidayRegion: z.enum(["ENGLAND_WALES", "SCOTLAND", "NORTHERN_IRELAND"]).optional(),
   ukCarryOverEnabled: z.boolean().optional(),
-  ukCarryOverMax: z.number().int().min(0).max(8).optional(),
+  ukCarryOverMax: z
+    .number({ message: "Carry-over max has to be a whole number of days from 0 to 8." })
+    .int("Carry-over max has to be a whole number of days from 0 to 8.")
+    .min(0, "Carry-over max has to be a whole number of days from 0 to 8.")
+    .max(8, "Carry-over max has to be a whole number of days from 0 to 8.")
+    .optional(),
   ukCarryOverExpiryMonth: z.number().int().min(1).max(12).optional(),
   ukCarryOverExpiryDay: z.number().int().min(1).max(31).optional(),
   // Day 1–28 so the leave year starts on the same date every year.
@@ -103,8 +108,20 @@ export async function PATCH(request: Request) {
   const orgId = (session.user as Record<string, unknown>).organizationId as string;
   const data = parsed.data;
 
-  if (data.ukCarryOverEnabled === false) {
-    data.ukCarryOverMax = 0;
+  // Switching carry-over off keeps the limit, so switching it back on
+  // restores it (the rollover checks ukCarryOverEnabled, not the limit).
+
+  // Day and month are checked together: 31 February isn't a date.
+  if (data.ukCarryOverExpiryMonth !== undefined || data.ukCarryOverExpiryDay !== undefined) {
+    const saved = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { ukCarryOverExpiryMonth: true, ukCarryOverExpiryDay: true },
+    });
+    const problem = expiryDateError(
+      data.ukCarryOverExpiryMonth ?? saved?.ukCarryOverExpiryMonth ?? 1,
+      data.ukCarryOverExpiryDay ?? saved?.ukCarryOverExpiryDay ?? 1
+    );
+    if (problem) return NextResponse.json({ error: problem }, { status: 400 });
   }
 
   const updated = await prisma.organization.update({

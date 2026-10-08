@@ -20,7 +20,10 @@ const isProduction = process.env.NODE_ENV === "production";
 //   silently blocked every browser error report), so the host is read from
 //   the DSN, with the known regional wildcards as a fallback.
 // - Stripe Elements loads js.stripe.com as a script and renders hooks /
-//   card iframes from js.stripe.com + hooks.stripe.com.
+//   card iframes from js.stripe.com + hooks.stripe.com. Stripe's CSP list
+//   (docs.stripe.com/security/guide#content-security-policy) also needs
+//   *.js.stripe.com in script-src and frame-src: Stripe.js starts frames on
+//   those origins, and blocking them can leave the card form blank.
 // - The CSP is only emitted in production builds; `next dev` uses HMR with
 //   eval'd scripts and websockets that a tight CSP would break. Vercel
 //   preview deployments use NODE_ENV=production, so previews get the same
@@ -37,12 +40,12 @@ function sentryConnectSources(): string {
 
 const contentSecurityPolicy = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://js.stripe.com",
+  "script-src 'self' 'unsafe-inline' https://js.stripe.com https://*.js.stripe.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
   `connect-src 'self' https://api.stripe.com ${sentryConnectSources()}`,
-  "frame-src https://js.stripe.com https://hooks.stripe.com",
+  "frame-src https://js.stripe.com https://*.js.stripe.com https://hooks.stripe.com",
   "worker-src 'self' blob:",
   "frame-ancestors 'none'",
   "object-src 'none'",
@@ -64,8 +67,9 @@ const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   // Disable browser features Coverboard doesn't use, so a future XSS can't
-  // request them. Card collection runs inside a Stripe iframe and doesn't
-  // need the Payment Request API on our origin.
+  // request them. Payment is the exception: Apple Pay and Google Pay inside
+  // Stripe's Payment Element use the Payment Request API from Stripe's
+  // frames, so it's allowed for Stripe only (payment=() blocked them).
   {
     key: "Permissions-Policy",
     value: [
@@ -75,7 +79,7 @@ const securityHeaders = [
       "gyroscope=()",
       "magnetometer=()",
       "microphone=()",
-      "payment=()",
+      'payment=(self "https://js.stripe.com" "https://*.js.stripe.com")',
       "usb=()",
       "interest-cohort=()",
     ].join(", "),
