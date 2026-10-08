@@ -49,6 +49,8 @@ const GROWTH_FEATURES = [
   "bradford_factor",
   "holiday_pay_calculator",
   "earnings_history",
+  // Statutory pay and holiday pay for each pay period (/api/reports/payroll).
+  "payroll_report",
 ] as const;
 
 const SCALE_FEATURES = [

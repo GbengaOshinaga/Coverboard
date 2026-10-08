@@ -648,6 +648,13 @@ model Child {
   /// Weeks of unpaid parental leave already taken for this child with
   /// previous employers (the 18 weeks are per child, not per job).
   weeksTakenElsewhere Int      @default(0)
+  /// Adopted: when the child was placed with them. Entitlement starts then,
+  /// not at birth.
+  placedOn            DateTime? @db.Date
+  /// Gets Disability Living Allowance, Personal Independence Payment or
+  /// Armed Forces Independence Payment: leave can then be taken in days, not
+  /// only whole weeks (1999 Regs Sch 2 para 7).
+  disabilityBenefit   Boolean  @default(false)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 

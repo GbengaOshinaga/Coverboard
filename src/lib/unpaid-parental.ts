@@ -7,10 +7,14 @@ import { countWorkingDays } from "@/lib/working-week";
  * counted on the days they work.
  *
  * The "year" is the child's own, not the calendar or leave year: 12 months
- * from when the employee first became entitled for that child (the later of
- * the birth and a year's service), then each anniversary (the default scheme,
- * Maternity and Parental Leave etc. Regulations 1999, Schedule 2 paras 8–9).
+ * from when the employee first became entitled for that child, then each
+ * anniversary (the default scheme, Maternity and Parental Leave etc.
+ * Regulations 1999, Schedule 2 paras 8–9). Leave is taken in whole weeks
+ * unless the child gets a disability benefit (para 7).
  * https://www.legislation.gov.uk/uksi/1999/3312/schedule/2
+ *
+ * The app always applies the default scheme; a workforce or collective
+ * agreement can replace it, and isn't modelled.
  */
 export const UPL_WEEKS_PER_CHILD = 18;
 export const UPL_WEEKS_PER_CHILD_PER_YEAR = 4;
@@ -27,14 +31,52 @@ const addYears = (d: Date, n: number) =>
   new Date(Date.UTC(d.getUTCFullYear() + n, d.getUTCMonth(), d.getUTCDate()));
 
 /**
- * When the employee became entitled for this child: the later of the birth
- * and a year's service (birth alone when the start date isn't recorded).
+ * The year's service needed for this leave went on 6 April 2026 (Employment
+ * Rights Act 2025; reg 13(1) as amended). From then it's a day-one right.
  */
-export function uplEntitledFrom(dateOfBirth: Date, serviceStartDate: Date | null): Date {
-  const dob = addYears(dateOfBirth, 0);
-  if (!serviceStartDate) return dob;
-  const oneYearService = addYears(serviceStartDate, 1);
-  return oneYearService > dob ? oneYearService : dob;
+export const UPL_DAY_ONE_FROM = new Date(Date.UTC(2026, 3, 6));
+
+const latest = (...ds: Date[]) => new Date(Math.max(...ds.map((x) => x.getTime())));
+
+/**
+ * When the employee first became entitled for this child. Responsibility
+ * starts at birth, or at placement for an adopted child. Under the old rule
+ * they also needed a year's service; if that made them entitled before
+ * 6 April 2026, that date stands. Otherwise it's the latest of
+ * responsibility, their start date and 6 April 2026. Responsibility alone
+ * when the start date isn't recorded.
+ */
+export function uplEntitledFrom(
+  child: { dateOfBirth: Date; placedOn?: Date | null },
+  serviceStartDate: Date | null
+): Date {
+  const responsible = child.placedOn ?? child.dateOfBirth;
+  if (!serviceStartDate) return latest(responsible);
+  const oldRule = latest(responsible, addYears(serviceStartDate, 1));
+  if (oldRule < UPL_DAY_ONE_FROM) return oldRule;
+  return latest(responsible, serviceStartDate, UPL_DAY_ONE_FROM);
+}
+
+export const DISABILITY_BENEFITS =
+  "Disability Living Allowance, Personal Independence Payment or Armed Forces Independence Payment";
+
+/**
+ * Whole weeks (para 7): the working days booked must be a multiple of their
+ * working week. Only checked when we know which days they work: a work
+ * pattern, or 5 days with none (counted Mon–Fri). A part-timer with only a
+ * day count could work any of the days, so a booking can't be judged.
+ */
+export function uplWholeWeeksError(input: {
+  request: Range;
+  daysPerWeek: number;
+  weekdays: number[] | null;
+}): string | null {
+  const { daysPerWeek } = input;
+  if (!input.weekdays && daysPerWeek !== 5) return null;
+  const days = countWorkingDays(input.request.startDate, input.request.endDate, input.weekdays);
+  if (days > 0 && days % daysPerWeek === 0) return null;
+  const week = daysPerWeek === 1 ? "1 working day" : `${daysPerWeek} working days`;
+  return `Unpaid parental leave has to be taken in whole weeks. A week here is ${week}, and this booking is ${days}. Single days are only allowed when the child gets ${DISABILITY_BENEFITS} – tick that on the child if so.`;
 }
 
 /** The child's parental-leave year containing a date (first and last day). */
@@ -87,6 +129,10 @@ export function uplUsage(input: {
 export function uplError(input: {
   childName: string;
   dateOfBirth: Date;
+  /** Adopted: placement date. */
+  placedOn?: Date | null;
+  /** Gets DLA, PIP or AFIP: days allowed, not only whole weeks. */
+  disabilityBenefit?: boolean;
   /** Employment start, for when entitlement began (null if not recorded). */
   serviceStartDate: Date | null;
   request: Range;
@@ -106,8 +152,15 @@ export function uplError(input: {
   if (request.startDate < input.dateOfBirth) {
     return `Unpaid parental leave for ${childName} can't start before their date of birth.`;
   }
+  if (input.placedOn && request.startDate < input.placedOn) {
+    return `Unpaid parental leave for ${childName} can't start before they were placed with you.`;
+  }
+  if (!input.disabilityBenefit) {
+    const wholeWeeks = uplWholeWeeksError(input);
+    if (wholeWeeks) return wholeWeeks;
+  }
 
-  const entitledFrom = uplEntitledFrom(input.dateOfBirth, input.serviceStartDate);
+  const entitledFrom = uplEntitledFrom(input, input.serviceStartDate);
   const all = [...input.bookings, request];
   const firstYear = uplYearContaining(request.startDate, entitledFrom);
   const total = uplUsage({ ...input, bookings: all, year: firstYear });

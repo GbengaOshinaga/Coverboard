@@ -39,11 +39,14 @@ export type ChildWithUsage = {
   label: string | null;
   dateOfBirth: string;
   eighteenthBirthday: string;
+  /** Adopted: when they were placed (YYYY-MM-DD). */
+  placedOn: string | null;
+  disabilityBenefit: boolean;
   weeksTakenElsewhere: number;
   hasLeave: boolean;
   /** Working days of unpaid parental leave used and allowed. */
   usage: { daysThisYear: number; capThisYear: number; daysTotal: number; capTotal: number };
-  /** The child's current parental-leave year (YYYY-MM-DD), from their birthday or a year's service. */
+  /** The child's current parental-leave year (YYYY-MM-DD), from when the parent became entitled. */
   year: { start: string; end: string };
 };
 
@@ -65,12 +68,14 @@ export async function listChildren(userId: string): Promise<ChildWithUsage[]> {
     prisma.user.findUnique({ where: { id: userId }, select: { serviceStartDate: true } }),
   ]);
   return children.map((c) => {
-    const year = uplYearContaining(new Date(), uplEntitledFrom(c.dateOfBirth, parent?.serviceStartDate ?? null));
+    const year = uplYearContaining(new Date(), uplEntitledFrom(c, parent?.serviceStartDate ?? null));
     return {
       id: c.id,
       label: c.label,
       dateOfBirth: c.dateOfBirth.toISOString().slice(0, 10),
       eighteenthBirthday: eighteenthBirthday(c.dateOfBirth).toISOString().slice(0, 10),
+      placedOn: c.placedOn ? c.placedOn.toISOString().slice(0, 10) : null,
+      disabilityBenefit: c.disabilityBenefit,
       weeksTakenElsewhere: c.weeksTakenElsewhere,
       hasLeave: c.leaveRequests.length > 0,
       usage: uplUsage({

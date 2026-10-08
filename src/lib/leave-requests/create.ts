@@ -275,7 +275,7 @@ export async function createLeaveRequest(
     }
     const child = await prisma.child.findFirst({
       where: { id: childId, userId },
-      select: { label: true, dateOfBirth: true, weeksTakenElsewhere: true },
+      select: { label: true, dateOfBirth: true, placedOn: true, disabilityBenefit: true, weeksTakenElsewhere: true },
     });
     if (!child) {
       return { ok: false, status: 404, error: "Child not found" };
@@ -289,6 +289,8 @@ export async function createLeaveRequest(
     const uplProblem = uplError({
       childName: child.label?.trim() || "this child",
       dateOfBirth: child.dateOfBirth,
+      placedOn: child.placedOn,
+      disabilityBenefit: child.disabilityBenefit,
       serviceStartDate: parent?.serviceStartDate ?? null,
       request: { startDate, endDate },
       bookings,

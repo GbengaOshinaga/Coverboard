@@ -22,7 +22,8 @@ const STATUS: Record<Offer["status"], { label: string; cls: string }> = {
   ACCEPTED: { label: "You're covering", cls: "bg-emerald-50 text-emerald-700" },
   DECLINED: { label: "Declined", cls: "bg-gray-100 text-gray-600" },
   CANCELLED: { label: "Withdrawn by your manager", cls: "bg-gray-100 text-gray-600" },
-  FILLED: { label: "Covered by someone else", cls: "bg-gray-100 text-gray-600" },
+  // Someone else took it, or the gap closed another way: either way it isn't needed.
+  FILLED: { label: "No longer needed", cls: "bg-gray-100 text-gray-600" },
   WITHDRAWN: { label: "You dropped out", cls: "bg-gray-100 text-gray-600" },
 };
 
@@ -59,7 +60,7 @@ export function CoverRequestsList() {
       if (!res.ok) {
         setMessage({ id, text: data.error || "Something went wrong", tone: "error" });
       } else if (data.status === "FILLED") {
-        setMessage({ id, text: "Thanks — someone else has already covered this shift.", tone: "ok" });
+        setMessage({ id, text: "Thanks — this shift doesn't need cover any more.", tone: "ok" });
       } else if (data.status === "ACCEPTED") {
         setMessage({ id, text: "Thanks — you're on the shift. Your manager has been told.", tone: "ok" });
       }
@@ -143,7 +144,7 @@ export function CoverRequestsList() {
                 <button
                   type="button"
                   onClick={() => setConfirmDrop(o.id)}
-                  className="font-medium text-gray-600 hover:text-gray-900"
+                  className="font-medium text-gray-600 underline underline-offset-2 hover:text-gray-900"
                 >
                   Can&apos;t make it any more?
                 </button>

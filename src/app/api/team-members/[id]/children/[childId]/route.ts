@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { childrenAccess } from "@/lib/children-server";
-import { childSchema } from "@/lib/children-schema";
+import { childSchema, placedOnError } from "@/lib/children-schema";
 
 type Params = { params: Promise<{ id: string; childId: string }> };
 
@@ -15,8 +15,16 @@ export async function PATCH(request: Request, { params }: Params) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
-  const existing = await prisma.child.findFirst({ where: { id: childId, userId: id }, select: { id: true } });
+  const existing = await prisma.child.findFirst({
+    where: { id: childId, userId: id },
+    select: { id: true, dateOfBirth: true, placedOn: true },
+  });
   if (!existing) return NextResponse.json({ error: "Child not found" }, { status: 404 });
+  const placedProblem = placedOnError(
+    parsed.data.dateOfBirth ?? existing.dateOfBirth.toISOString().slice(0, 10),
+    parsed.data.placedOn !== undefined ? parsed.data.placedOn : existing.placedOn?.toISOString().slice(0, 10)
+  );
+  if (placedProblem) return NextResponse.json({ error: placedProblem }, { status: 400 });
 
   await prisma.child.update({
     where: { id: childId },
@@ -26,6 +34,10 @@ export async function PATCH(request: Request, { params }: Params) {
       ...(parsed.data.weeksTakenElsewhere !== undefined
         ? { weeksTakenElsewhere: parsed.data.weeksTakenElsewhere }
         : {}),
+      ...(parsed.data.placedOn !== undefined
+        ? { placedOn: parsed.data.placedOn ? new Date(`${parsed.data.placedOn}T00:00:00Z`) : null }
+        : {}),
+      ...(parsed.data.disabilityBenefit !== undefined ? { disabilityBenefit: parsed.data.disabilityBenefit } : {}),
     },
   });
   await recordAudit({

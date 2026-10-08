@@ -40,6 +40,7 @@ import {
   PARENTAL_TRACKER_LEAVE_TYPES,
 } from "@/lib/uk-compliance-columns";
 import type { AnyPlan } from "@/lib/plans";
+import { hasFeatureForEnum } from "@/lib/planFeatures";
 import {
   parseExportFormat,
   toCsv,
@@ -405,6 +406,13 @@ export async function GET(request: Request) {
     parentalTracker: parental,
     rightToWork: rightToWorkData,
   };
+  // Bradford, SSP, the parental tracker and right to work are Growth features:
+  // lower plans get those sections empty (holiday usage stays on every plan).
+  const plan = (sessionUser.plan as AnyPlan | undefined) ?? null;
+  if (!hasFeatureForEnum(plan, "bradford_factor")) report.absenceTrigger.rows = [];
+  if (!hasFeatureForEnum(plan, "ssp_tracking")) report.sspLiability = [];
+  if (!hasFeatureForEnum(plan, "parental_leave_tracker")) report.parentalTracker = [];
+  if (!hasFeatureForEnum(plan, "right_to_work")) report.rightToWork = [];
 
   const format = parseExportFormat(searchParams.get("format"));
   if (format === "json") {

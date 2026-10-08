@@ -10,6 +10,7 @@ import {
   hasSlaSupport,
   hasAuditTrail,
 } from "@/lib/plans";
+import { hasFeatureForEnum } from "@/lib/planFeatures";
 
 test("planAtLeast respects tier ordering across the full 5-tier ladder", () => {
   assert.equal(planAtLeast("STARTER", "FREE"), true);
@@ -54,7 +55,7 @@ test("admin caps match the launch pricing structure", () => {
 test("employee caps match the launch pricing structure", () => {
   assert.equal(PLAN_MAX_EMPLOYEES.FREE, 5);
   assert.equal(PLAN_MAX_EMPLOYEES.STARTER, 15);
-  assert.equal(PLAN_MAX_EMPLOYEES.GROWTH, 0);
+  assert.equal(PLAN_MAX_EMPLOYEES.GROWTH, 75);
   assert.equal(PLAN_MAX_EMPLOYEES.SCALE, 0);
   assert.equal(PLAN_MAX_EMPLOYEES.PRO, 0);
 });
@@ -87,8 +88,18 @@ test("maxAdminsForPlan returns 0 for LOCKED and null/undefined", () => {
 test("maxEmployeesForPlan: same shape as maxAdminsForPlan", () => {
   assert.equal(maxEmployeesForPlan("FREE"), 5);
   assert.equal(maxEmployeesForPlan("STARTER"), 15);
-  assert.equal(maxEmployeesForPlan("GROWTH"), Infinity);
+  assert.equal(maxEmployeesForPlan("GROWTH"), 75);
+  assert.equal(maxEmployeesForPlan("SCALE"), Infinity);
   assert.equal(maxEmployeesForPlan("PRO"), Infinity);
   assert.equal(maxEmployeesForPlan("TRIAL"), Infinity);
   assert.equal(maxEmployeesForPlan("LOCKED"), 0);
+});
+
+test("statutory pay reports are Growth and above", () => {
+  for (const f of ["payroll_report", "ssp_tracking", "parental_leave_tracker", "bradford_factor", "right_to_work"]) {
+    assert.equal(hasFeatureForEnum("STARTER", f), false, f);
+    assert.equal(hasFeatureForEnum("FREE", f), false, f);
+    assert.equal(hasFeatureForEnum("GROWTH", f), true, f);
+    assert.equal(hasFeatureForEnum("TRIAL", f), true, f);
+  }
 });

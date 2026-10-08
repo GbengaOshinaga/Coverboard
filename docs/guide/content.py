@@ -546,7 +546,7 @@ FEATURES = [
 
 LIMITATIONS = [
     ("Calculations fixed on 4 Oct 2026", "Holiday pay, SSP days and earnings, family leave units, starter proration, carry-over units and fit-note evidence were corrected after tester feedback. Records created on production before the fix keep their old SSP figures until recalculated."),
-    ("Unpaid parental leave per child", "The app doesn't record children, so the 4-weeks-a-year cap is per person, not per child; the 18-weeks-per-child total isn't tracked."),
+    ("Unpaid parental leave follows the default scheme", "The statutory fallback rules (whole weeks, 4 weeks a year per child, the child's year) are applied. If you have a workforce or collective agreement, its rules take precedence and aren't enforced. Whole weeks aren't checked for part-timers with no working pattern, as the app can't tell which days they work."),
     ("Working days without a pattern", "Without a working pattern only the number of days is known, so Monday–Friday is assumed when counting which days were missed."),
     ("Average earnings with gaps", "Weeks with no earnings record are treated as missing, not £0. Record zero-pay weeks explicitly so averages are right."),
     ("Cover needs fixed weekly patterns", "Shift cover assumes the same pattern each week. Teams whose rota changes weekly will see inaccurate cover until a rota feature exists."),
@@ -675,9 +675,10 @@ _UPDATES = {
         related=["maternity", "payroll"]),
     "otherfamily": dict(
         summary="Parental bereavement leave (2 weeks), unpaid parental leave (18 weeks per child, at most 4 a year per child) and carer's leave (1 week a year).",
-        how=["Children are recorded on the profile, with weeks taken with previous employers.",
-             "The 4-week limit runs in each child's own year: 12 months from when the employee became entitled (birth, or a year's service), renewing each anniversary.",
-             "Weeks are their working week (4 weeks = 12 days for a 3-day worker); leave must end before the child's 18th birthday."],
+        how=["Children are recorded on the profile, with weeks taken with previous employers, a placement date if adopted, and whether they get a disability benefit.",
+             "The 4-week limit runs in each child's own year: 12 months from when the employee became entitled, renewing each anniversary. That's the birth or placement, or their start date if later (a day-one right since 6 April 2026; before then, a year's service).",
+             "Weeks are their working week (4 weeks = 12 days for a 3-day worker); leave must end before the child's 18th birthday.",
+             "Leave is booked in whole weeks unless the child gets Disability Living Allowance, Personal Independence Payment or Armed Forces Independence Payment, when single days are allowed."],
         code=[("src/lib/unpaid-parental.ts", "Per-child limits and the child's year"),
               ("src/lib/children-server.ts", "Children and usage"),
               ("src/lib/leave-requests/create.ts", "Booking checks")],

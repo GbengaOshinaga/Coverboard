@@ -44,6 +44,9 @@ AMBER_LINE = HexColor("#F59E0B")
 AMBER_INK = HexColor("#92400E")
 CH = {cid: HexColor(col) for cid, _, col, _ in C.CHAPTERS}
 CH_TITLE = {cid: t for cid, t, _, _ in C.CHAPTERS}
+# The closing chapter has its own (grey) header.
+CH["limits"] = HexColor("#6B7280")
+CH_TITLE["limits"] = "Known limitations"
 CH_INTRO = {cid: i for cid, _, _, i in C.CHAPTERS}
 DIAGRAM_COLOR = HexColor("#4F46E5")
 
@@ -109,7 +112,9 @@ class GuideDoc(BaseDocTemplate):
         cover_frame = Frame(0, 0, PAGE_W, PAGE_H, id="c", leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
         self.addPageTemplates([
             PageTemplate(id="cover", frames=[cover_frame], onPage=draw_cover),
-            PageTemplate(id="normal", frames=[frame], onPage=draw_page),
+            # Drawn at the end of the page, once its chapter anchor has been
+            # placed, so a chapter's first page carries its own header.
+            PageTemplate(id="normal", frames=[frame], onPageEnd=draw_page),
         ])
         self.current_chapter = None
 
@@ -692,7 +697,7 @@ def build(out):
     # Known limitations
     story.append(PageBreak())
     lim_col = HexColor("#6B7280")
-    story += [Anchor(0, f"{len(C.CHAPTERS) + 1}. Known limitations", "ch_limits", chapter=None),
+    story += [Anchor(0, f"{len(C.CHAPTERS) + 1}. Known limitations", "ch_limits", chapter="limits"),
               ChapterBanner(len(C.CHAPTERS) + 1, "Known limitations", "What the app doesn't do yet, or does with an assumption you should know about. Keep this list honest — it's what protects you when you make compliance claims.", lim_col),
               Spacer(1, 12)]
     for t, body in C.LIMITATIONS:

@@ -35,6 +35,8 @@ import {
   type PayrollRow,
 } from "@/lib/payroll-columns";
 import { getHolidayOnLeaving } from "@/lib/holiday-on-leaving-server";
+import { hasFeatureForEnum } from "@/lib/planFeatures";
+import type { AnyPlan } from "@/lib/plans";
 
 /**
  * Payroll export for a given date range.
@@ -58,6 +60,10 @@ export async function GET(request: Request) {
   const userRole = sessionUser.role as string;
   if (userRole !== "ADMIN" && userRole !== "MANAGER") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  // Statutory pay worked out for payroll is what Growth sells.
+  if (!hasFeatureForEnum((sessionUser.plan as AnyPlan | undefined) ?? null, "payroll_report")) {
+    return NextResponse.json({ error: "The payroll report is on the Growth plan and above." }, { status: 403 });
   }
 
   const orgId = sessionUser.organizationId as string;
