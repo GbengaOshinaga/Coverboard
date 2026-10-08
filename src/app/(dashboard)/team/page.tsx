@@ -588,6 +588,7 @@ export default function TeamPage() {
           }
           onSubmit={handleAddMember}
           onCancel={() => setShowForm(false)}
+          canSetRoles={userRole === "ADMIN"}
         />
       </Dialog>
 
@@ -606,6 +607,7 @@ export default function TeamPage() {
             }}
             onSubmit={handleEditMember}
             onCancel={() => setEditMember(undefined)}
+            canSetRoles={userRole === "ADMIN"}
           />
         )}
       </Dialog>

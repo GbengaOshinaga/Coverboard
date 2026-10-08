@@ -147,6 +147,10 @@ export async function POST(request: Request) {
         );
       }
 
+      if (role === "ADMIN" && userRole !== "ADMIN") {
+        return NextResponse.json({ error: "Only an admin can add another admin." }, { status: 403 });
+      }
+
       if (role === "ADMIN") {
         const maxAdmins = maxAdminsForPlan(org.plan);
         if (Number.isFinite(maxAdmins) && adminCount >= maxAdmins) {

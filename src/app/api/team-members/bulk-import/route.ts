@@ -115,6 +115,10 @@ export async function POST(request: Request) {
 
   // Enforce the plan-level admin seat cap across the whole batch.
   const newAdminCount = valid.filter((v) => v.data.role === "ADMIN").length;
+  // Only admins add admins.
+  if (newAdminCount > 0 && userRole !== "ADMIN") {
+    return NextResponse.json({ error: "Only an admin can add admins. Change those rows to Manager or Member." }, { status: 403 });
+  }
   const [org, currentAdmins, currentEmployees] = await Promise.all([
     prisma.organization.findUnique({
       where: { id: orgId },

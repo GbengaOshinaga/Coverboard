@@ -163,10 +163,15 @@ export async function PATCH(
     // Only people in the caller's own organisation.
     const inOrg = await prisma.user.findFirst({
       where: { id, organizationId: sessionUser.organizationId as string },
-      select: { id: true },
+      select: { id: true, role: true },
     });
     if (!inOrg) {
       return NextResponse.json({ error: "Member not found" }, { status: 404 });
+    }
+
+    // Only admins change roles (a manager could otherwise make themselves admin).
+    if (parsed.data.role !== undefined && parsed.data.role !== inOrg.role && userRole !== "ADMIN") {
+      return NextResponse.json({ error: "Only an admin can change someone's role." }, { status: 403 });
     }
 
     // Right-to-work status is a Growth feature; on lower plans it isn't changed.

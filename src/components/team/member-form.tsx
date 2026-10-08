@@ -48,8 +48,11 @@ export function MemberForm({
   locations,
   onSubmit,
   onCancel,
+  canSetRoles = true,
 }: {
   initialData?: MemberData;
+  /** Admins only: managers can't change a role or add an admin. */
+  canSetRoles?: boolean;
   /**
    * Active locations, when the team uses them. Shown when adding someone, so
    * they don't land unassigned and silently miss cover.
@@ -157,9 +160,10 @@ export function MemberForm({
         <Select
           id="memberRole"
           label="Role"
-          options={roleOptions}
+          options={canSetRoles || isEdit ? roleOptions : roleOptions.filter((o) => o.value !== "ADMIN")}
           value={role}
           onChange={(e) => setRole(e.target.value)}
+          disabled={isEdit && !canSetRoles}
         />
         <Select
           id="memberType"
