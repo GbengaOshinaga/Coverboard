@@ -285,7 +285,10 @@ export async function createLeaveRequest(
       where: { childId, status: { in: ["APPROVED", "PENDING"] } },
       select: { startDate: true, endDate: true },
     });
-    const parent = await prisma.user.findUnique({ where: { id: userId }, select: { serviceStartDate: true } });
+    const parent = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { serviceStartDate: true, employmentType: true, daysWorkedPerWeek: true },
+    });
     const uplProblem = uplError({
       childName: child.label?.trim() || "this child",
       dateOfBirth: child.dateOfBirth,
@@ -297,6 +300,10 @@ export async function createLeaveRequest(
       weeksTakenElsewhere: child.weeksTakenElsewhere,
       daysPerWeek: workingWeek.daysPerWeek,
       weekdays: workingWeek.weekdays,
+      irregularHours:
+        parent?.employmentType === "ZERO_HOURS" ||
+        parent?.employmentType === "VARIABLE_HOURS" ||
+        !((parent?.daysWorkedPerWeek ?? 0) >= 1),
     });
     if (uplProblem) return { ok: false, status: 400, error: uplProblem };
   }

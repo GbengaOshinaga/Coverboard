@@ -62,15 +62,24 @@ export type TeamMemberInput = z.infer<typeof teamMemberSchema>;
  * existing types via leave policies is free on every plan.)
  */
 export const leaveTypeSchema = z.object({
-  name: z.string().min(1, "Name is required"),
+  // Spaces trimmed and runs collapsed, so "Training " can't sit beside "training".
+  name: z
+    .string()
+    .trim()
+    .min(1, "Name is required")
+    .max(60, "Name must be 60 characters or fewer")
+    .transform((s) => s.replace(/\s+/g, " ")),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Must be a valid hex color"),
   isPaid: z.boolean(),
-  defaultDays: z.number().int().min(1, "Must be at least 1 day"),
+  defaultDays: z
+    .number({ invalid_type_error: "Default allowance has to be a whole number of days" })
+    .int("Default allowance has to be a whole number of days")
+    .min(1, "Must be at least 1 day"),
   category: z.enum(["PAID", "UNPAID", "STATUTORY"]).optional(),
   requiresEvidence: z.boolean().optional(),
   minNoticeDays: z
-    .number()
-    .int()
+    .number({ invalid_type_error: "Notice has to be a whole number of days" })
+    .int("Notice has to be a whole number of days")
     .min(0, "Notice days cannot be negative")
     .max(365, "Notice days cannot exceed 365")
     .optional(),

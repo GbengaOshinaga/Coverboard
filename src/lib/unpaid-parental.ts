@@ -65,14 +65,21 @@ export const DISABILITY_BENEFITS =
  * working week. Only checked when we know which days they work: a work
  * pattern, or 5 days with none (counted Mon–Fri). A part-timer with only a
  * day count could work any of the days, so a booking can't be judged.
+ *
+ * Nor can it when hours vary (zero-hours or variable-hours with no pattern):
+ * their week is a year's working time averaged over 52 weeks (reg 14(3)),
+ * which the app doesn't hold, so the 5 days assumed for them mustn't force
+ * Mon–Fri blocks.
  */
 export function uplWholeWeeksError(input: {
   request: Range;
   daysPerWeek: number;
   weekdays: number[] | null;
+  /** Zero-hours or variable-hours: no fixed week. */
+  irregularHours?: boolean;
 }): string | null {
   const { daysPerWeek } = input;
-  if (!input.weekdays && daysPerWeek !== 5) return null;
+  if (!input.weekdays && (daysPerWeek !== 5 || input.irregularHours)) return null;
   const days = countWorkingDays(input.request.startDate, input.request.endDate, input.weekdays);
   if (days > 0 && days % daysPerWeek === 0) return null;
   const week = daysPerWeek === 1 ? "1 working day" : `${daysPerWeek} working days`;
@@ -141,6 +148,7 @@ export function uplError(input: {
   weeksTakenElsewhere: number;
   daysPerWeek: number;
   weekdays: number[] | null;
+  irregularHours?: boolean;
 }): string | null {
   const { request, childName } = input;
   const birthday18 = eighteenthBirthday(input.dateOfBirth);

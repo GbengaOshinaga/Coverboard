@@ -177,9 +177,11 @@ function daysLeft(c: ChildWithUsage) {
 
 export function usageLine(c: ChildWithUsage): string {
   const f = (d: string) =>
-    new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+    new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
   // The child's year runs from when the parent became entitled, not January.
-  return `${c.usage.daysThisYear} of ${c.usage.capThisYear} days this year (${f(c.year.start)} – ${f(c.year.end)}) · ${c.usage.daysTotal} of ${c.usage.capTotal} in total · ${daysLeft(c)} days left now · ${c.disabilityBenefit ? "can be taken in days" : "whole weeks only"}`;
+  // Leave booked in a later year is listed with that year, not lost.
+  const later = (c.laterYears ?? []).map((y) => ` · ${y.days} of ${c.usage.capThisYear} booked for ${f(y.start)} – ${f(y.end)}`).join("");
+  return `${c.usage.daysThisYear} of ${c.usage.capThisYear} days this year (${f(c.year.start)} – ${f(c.year.end)})${later} · ${c.usage.daysTotal} of ${c.usage.capTotal} in total · ${daysLeft(c)} days left now · ${c.disabilityBenefit ? "can be taken in days" : "whole weeks only"}`;
 }
 
 /** Profile card: a member's children and their unpaid parental leave so far. */

@@ -106,3 +106,12 @@ test("a booking across the child's birthday counts each part against its own yea
   assert.equal(after.daysThisYear, 5); // Mon 1 – Fri 5 Mar
   assert.equal(before.daysTotal, 10);
 });
+
+test("zero-hours or variable-hours with no pattern: not forced into Mon–Fri blocks", () => {
+  const twoDays = { startDate: d("2026-06-01"), endDate: d("2026-06-02") };
+  assert.equal(uplWholeWeeksError({ request: twoDays, ...fiveDay, irregularHours: true }), null);
+  assert.match(uplWholeWeeksError({ request: twoDays, ...fiveDay })!, /whole weeks/);
+  // A pattern still decides the week, whatever the contract says.
+  const mwf = { daysPerWeek: 3, weekdays: [0, 2, 4] };
+  assert.match(uplWholeWeeksError({ request: twoDays, ...mwf, irregularHours: true })!, /whole weeks/);
+});

@@ -95,8 +95,8 @@ test("maxEmployeesForPlan: same shape as maxAdminsForPlan", () => {
   assert.equal(maxEmployeesForPlan("LOCKED"), 0);
 });
 
-test("statutory pay reports are Growth and above", () => {
-  for (const f of ["payroll_report", "ssp_tracking", "parental_leave_tracker", "bradford_factor", "right_to_work"]) {
+test("statutory pay, earnings, Bradford and right to work are Growth and above", () => {
+  for (const f of ["payroll_report", "ssp_tracking", "parental_leave_tracker", "bradford_factor", "right_to_work", "earnings_history", "holiday_pay_calculator"]) {
     assert.equal(hasFeatureForEnum("STARTER", f), false, f);
     assert.equal(hasFeatureForEnum("FREE", f), false, f);
     assert.equal(hasFeatureForEnum("GROWTH", f), true, f);

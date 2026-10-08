@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { sessionHasFeature } from "@/lib/plan-gate";
 import { qualifyingDaysFor } from "@/lib/working-week-server";
 import { ftesFor } from "@/lib/fte-server";
 import { unusablePasswordHash } from "@/lib/invite-links";
@@ -176,7 +177,10 @@ export async function POST(request: Request) {
         daysWorkedPerWeek,
         qualifyingDaysPerWeek: qualifyingDaysFor(daysWorkedPerWeek),
         fteRatio,
-        rightToWorkVerified: rightToWorkVerified ?? null,
+        // A Growth feature: not recorded on lower plans.
+        rightToWorkVerified: sessionHasFeature(session.user as Record<string, unknown>, "right_to_work")
+          ? rightToWorkVerified ?? null
+          : null,
         department: department ?? null,
         countryCode,
         workCountry,

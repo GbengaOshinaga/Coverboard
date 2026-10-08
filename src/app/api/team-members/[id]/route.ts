@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { sessionHasFeature } from "@/lib/plan-gate";
 import { ukToday } from "@/lib/workPattern";
 import { leavingDateError, recordLeaving } from "@/lib/leavers";
 import { getWorkingWeek, qualifyingDaysFor, syncDaysFromPattern } from "@/lib/working-week-server";
@@ -123,6 +124,8 @@ export async function GET(
   }
   return NextResponse.json({
     ...member,
+    // The Bradford Factor is a Growth feature.
+    bradfordScore: sessionHasFeature(sessionUser, "bradford_factor") ? member.bradfordScore : 0,
     daysWorkedPerWeek: fromPattern ? week.daysPerWeek : member.daysWorkedPerWeek,
     daysFromPattern: fromPattern,
     fte,
@@ -155,6 +158,20 @@ export async function PATCH(
         { error: parsed.error.issues[0].message },
         { status: 400 }
       );
+    }
+
+    // Only people in the caller's own organisation.
+    const inOrg = await prisma.user.findFirst({
+      where: { id, organizationId: sessionUser.organizationId as string },
+      select: { id: true },
+    });
+    if (!inOrg) {
+      return NextResponse.json({ error: "Member not found" }, { status: 404 });
+    }
+
+    // Right-to-work status is a Growth feature; on lower plans it isn't changed.
+    if (!sessionHasFeature(sessionUser, "right_to_work")) {
+      delete parsed.data.rightToWorkVerified;
     }
 
     if (parsed.data.role === "ADMIN") {

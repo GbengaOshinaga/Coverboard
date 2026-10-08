@@ -419,7 +419,7 @@ function FindCoverSection() {
 // report really works out.
 const payRows = [
   { name: "Priya S.", type: "SSP", detail: "6 qualifying days", amount: "£147.90" },
-  { name: "Amara O.", type: "SMP", detail: "31 days at the flat rate", amount: "£860.62" },
+  { name: "Amara O.", type: "SMP", detail: "31 days at the flat rate", amount: "£860.56" },
   { name: "Tom B.", type: "Paternity pay", detail: "2 weeks from 12 Oct", amount: "£388.64" },
   { name: "Sam R.", type: "Leaver", detail: "4.5 days' holiday owed", amount: "£432.00" },
 ];

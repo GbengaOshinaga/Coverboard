@@ -48,6 +48,8 @@ export type ChildWithUsage = {
   usage: { daysThisYear: number; capThisYear: number; daysTotal: number; capTotal: number };
   /** The child's current parental-leave year (YYYY-MM-DD), from when the parent became entitled. */
   year: { start: string; end: string };
+  /** Later years with leave already booked in them, and the working days booked. */
+  laterYears: { start: string; end: string; days: number }[];
 };
 
 /** A member's children with their unpaid parental leave used so far. */
@@ -67,8 +69,31 @@ export async function listChildren(userId: string): Promise<ChildWithUsage[]> {
     getWorkingWeek(userId),
     prisma.user.findUnique({ where: { id: userId }, select: { serviceStartDate: true } }),
   ]);
+  const ymd = (d: Date) => d.toISOString().slice(0, 10);
   return children.map((c) => {
-    const year = uplYearContaining(new Date(), uplEntitledFrom(c, parent?.serviceStartDate ?? null));
+    const entitledFrom = uplEntitledFrom(c, parent?.serviceStartDate ?? null);
+    // Not before they're entitled (a placement still to come).
+    const today = new Date();
+    const year = uplYearContaining(today > entitledFrom ? today : entitledFrom, entitledFrom);
+    const usageIn = (y: { start: Date; end: Date }) =>
+      uplUsage({
+        bookings: c.leaveRequests,
+        year: y,
+        weeksTakenElsewhere: c.weeksTakenElsewhere,
+        daysPerWeek: week.daysPerWeek,
+        weekdays: week.weekdays,
+      });
+    // A booking next year doesn't show in this year's count, so list those years too.
+    const lastEnd = c.leaveRequests.reduce<Date | null>((m, b) => (!m || b.endDate > m ? b.endDate : m), null);
+    const laterYears: ChildWithUsage["laterYears"] = [];
+    for (
+      let y = uplYearContaining(new Date(year.end.getTime() + 86_400_000), entitledFrom);
+      lastEnd && y.start <= lastEnd;
+      y = uplYearContaining(new Date(y.end.getTime() + 86_400_000), entitledFrom)
+    ) {
+      const days = usageIn(y).daysThisYear;
+      if (days > 0) laterYears.push({ start: ymd(y.start), end: ymd(y.end), days });
+    }
     return {
       id: c.id,
       label: c.label,
@@ -78,14 +103,9 @@ export async function listChildren(userId: string): Promise<ChildWithUsage[]> {
       disabilityBenefit: c.disabilityBenefit,
       weeksTakenElsewhere: c.weeksTakenElsewhere,
       hasLeave: c.leaveRequests.length > 0,
-      usage: uplUsage({
-        bookings: c.leaveRequests,
-        year,
-        weeksTakenElsewhere: c.weeksTakenElsewhere,
-        daysPerWeek: week.daysPerWeek,
-        weekdays: week.weekdays,
-      }),
-      year: { start: year.start.toISOString().slice(0, 10), end: year.end.toISOString().slice(0, 10) },
+      usage: usageIn(year),
+      year: { start: ymd(year.start), end: ymd(year.end) },
+      laterYears,
     };
   });
 }

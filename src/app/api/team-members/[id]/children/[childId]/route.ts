@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { childrenAccess } from "@/lib/children-server";
-import { childSchema, placedOnError } from "@/lib/children-schema";
+import { childChangeError, childSchema, placedOnError } from "@/lib/children-schema";
 
 type Params = { params: Promise<{ id: string; childId: string }> };
 
@@ -17,14 +17,41 @@ export async function PATCH(request: Request, { params }: Params) {
   }
   const existing = await prisma.child.findFirst({
     where: { id: childId, userId: id },
-    select: { id: true, dateOfBirth: true, placedOn: true },
+    select: {
+      id: true,
+      dateOfBirth: true,
+      placedOn: true,
+      disabilityBenefit: true,
+      weeksTakenElsewhere: true,
+      leaveRequests: {
+        where: { status: { in: ["APPROVED", "PENDING"] } },
+        select: { startDate: true, endDate: true },
+      },
+    },
   });
   if (!existing) return NextResponse.json({ error: "Child not found" }, { status: 404 });
-  const placedProblem = placedOnError(
-    parsed.data.dateOfBirth ?? existing.dateOfBirth.toISOString().slice(0, 10),
-    parsed.data.placedOn !== undefined ? parsed.data.placedOn : existing.placedOn?.toISOString().slice(0, 10)
-  );
-  if (placedProblem) return NextResponse.json({ error: placedProblem }, { status: 400 });
+  const ymd = (d: Date) => d.toISOString().slice(0, 10);
+  const before = {
+    dateOfBirth: ymd(existing.dateOfBirth),
+    placedOn: existing.placedOn ? ymd(existing.placedOn) : null,
+    disabilityBenefit: existing.disabilityBenefit,
+    weeksTakenElsewhere: existing.weeksTakenElsewhere,
+  };
+  const after = {
+    dateOfBirth: parsed.data.dateOfBirth ?? before.dateOfBirth,
+    placedOn: parsed.data.placedOn !== undefined ? parsed.data.placedOn || null : before.placedOn,
+    disabilityBenefit: parsed.data.disabilityBenefit ?? before.disabilityBenefit,
+    weeksTakenElsewhere: parsed.data.weeksTakenElsewhere ?? before.weeksTakenElsewhere,
+  };
+  const problem =
+    placedOnError(after.dateOfBirth, after.placedOn) ??
+    childChangeError({
+      canApprove: access.actor.role === "ADMIN" || access.actor.role === "MANAGER",
+      before,
+      after,
+      bookings: existing.leaveRequests.map((b) => ({ startDate: ymd(b.startDate), endDate: ymd(b.endDate) })),
+    });
+  if (problem) return NextResponse.json({ error: problem }, { status: 400 });
 
   await prisma.child.update({
     where: { id: childId },

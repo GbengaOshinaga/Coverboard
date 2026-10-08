@@ -200,6 +200,12 @@ export function RequestForm({
     const days = (Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86_400_000 + 1;
     return Math.round((days / 7) * 10) / 10;
   }, [startDate, endDate]);
+  // Unpaid parental leave counts in the person's working weeks (Mon–Fri is 1
+  // week for a 5-day worker, not 0.7 of a calendar week).
+  const weeksShown =
+    isUnpaidParental && workingWeek
+      ? Math.round((requestedDays / workingWeek.daysPerWeek) * 10) / 10
+      : calendarWeeks;
 
   // Hours-based balances (irregular/zero-hours workers): the request deducts
   // hours, defaulted to working days × their average day and editable.
@@ -436,7 +442,7 @@ export function RequestForm({
 
       {startDate && endDate && requestedDays > 0 && (
         <p className="text-xs text-gray-500">
-          {selectedLeaveType?.allowanceUnit === "WEEKS" && `${calendarWeeks} week${calendarWeeks === 1 ? "" : "s"} · `}
+          {selectedLeaveType?.allowanceUnit === "WEEKS" && `${weeksShown} week${weeksShown === 1 ? "" : "s"} · `}
           {requestedDays} working day{requestedDays !== 1 ? "s" : ""}
           {workingWeek && workingWeek.daysPerWeek !== 5
             ? ` (${forSomeoneElse ? `${subjectName ?? "they"} works` : "you work"} ${workingWeek.daysPerWeek} days a week)`

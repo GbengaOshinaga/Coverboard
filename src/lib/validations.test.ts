@@ -161,3 +161,10 @@ test("leaveTypeUpdateSchema treats every field as optional (partial PATCH)", () 
   const empty = leaveTypeUpdateSchema.safeParse({});
   assert.equal(empty.success, true);
 });
+
+test("leave type names: spaces trimmed and collapsed, blank refused", () => {
+  const base = { color: "#123456", isPaid: true, defaultDays: 5 };
+  assert.equal(leaveTypeSchema.parse({ ...base, name: "  Training   leave " }).name, "Training leave");
+  assert.equal(leaveTypeSchema.safeParse({ ...base, name: "   " }).success, false);
+  assert.equal(leaveTypeUpdateSchema.parse({ name: "Training " }).name, "Training");
+});

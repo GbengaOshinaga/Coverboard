@@ -78,6 +78,9 @@ function describeLeaveYear(start: LeaveYearStart, opts: { short?: boolean } = {}
   return `${leaveYearLabel(year, start)}, ${fmtUtcDate(from)} to ${fmtUtcDate(to)}`;
 }
 
+/** A typed number as is (blank is NaN), so the API can refuse 12.5 rather than parseInt cutting it to 12. */
+const typedNumber = (v: string) => (v.trim() === "" ? NaN : Number(v));
+
 const MONTH_OPTIONS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
@@ -451,10 +454,10 @@ export default function SettingsPage() {
         name: editName,
         color: editColor,
         isPaid: editIsPaid,
-        defaultDays: parseInt(editDays, 10),
+        defaultDays: typedNumber(editDays),
         category: editCategory,
         requiresEvidence: editRequiresEvidence,
-        minNoticeDays: parseInt(editMinNoticeDays, 10) || 0,
+        minNoticeDays: typedNumber(editMinNoticeDays) || 0,
         applyProRata: editApplyProRata,
         countryCode: editCountryCode.trim() || null,
       }),
@@ -511,8 +514,8 @@ export default function SettingsPage() {
       body: JSON.stringify({
         leaveTypeId: newPolicyType,
         countryCode: newPolicyCountry.toUpperCase(),
-        annualAllowance: parseInt(newPolicyAllowance, 10),
-        carryOverMax: parseInt(newPolicyCarryOver, 10),
+        annualAllowance: typedNumber(newPolicyAllowance),
+        carryOverMax: typedNumber(newPolicyCarryOver),
       }),
     });
     if (res.ok) {
@@ -570,10 +573,10 @@ export default function SettingsPage() {
         name: newName,
         color: newColor,
         isPaid: newIsPaid,
-        defaultDays: parseInt(newDays),
+        defaultDays: typedNumber(newDays),
         category: newCategory,
         requiresEvidence: newRequiresEvidence,
-        minNoticeDays: parseInt(newMinNoticeDays, 10) || 0,
+        minNoticeDays: typedNumber(newMinNoticeDays) || 0,
         applyProRata: newApplyProRata,
         countryCode: newCountryCode.trim() || null,
       }),
@@ -1343,7 +1346,8 @@ export default function SettingsPage() {
                             defaultValue={p.annualAllowance}
                             onBlur={async (e) => {
                               const input = e.currentTarget;
-                              const next = parseInt(input.value, 10);
+                              // Number, not parseInt: 12.5 has to be refused, not saved as 12.
+                              const next = typedNumber(input.value);
                               // A refused or empty value goes back to what's saved.
                               if (isNaN(next)) {
                                 input.value = String(p.annualAllowance);
@@ -1364,7 +1368,8 @@ export default function SettingsPage() {
                             defaultValue={p.carryOverMax}
                             onBlur={async (e) => {
                               const input = e.currentTarget;
-                              const next = parseInt(input.value, 10);
+                              // Number, not parseInt: 12.5 has to be refused, not saved as 12.
+                              const next = typedNumber(input.value);
                               // A refused or empty value goes back to what's saved.
                               if (isNaN(next)) {
                                 input.value = String(p.carryOverMax);

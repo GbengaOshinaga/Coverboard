@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { childrenAccess, listChildren } from "@/lib/children-server";
-import { childSchema, placedOnError } from "@/lib/children-schema";
+import { childChangeError, childSchema, placedOnError } from "@/lib/children-schema";
 
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -21,8 +21,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
-  const placedProblem = placedOnError(parsed.data.dateOfBirth, parsed.data.placedOn);
-  if (placedProblem) return NextResponse.json({ error: placedProblem }, { status: 400 });
+  const problem =
+    placedOnError(parsed.data.dateOfBirth, parsed.data.placedOn) ??
+    childChangeError({
+      canApprove: access.actor.role === "ADMIN" || access.actor.role === "MANAGER",
+      before: null,
+      after: {
+        dateOfBirth: parsed.data.dateOfBirth,
+        placedOn: parsed.data.placedOn || null,
+        disabilityBenefit: parsed.data.disabilityBenefit ?? false,
+        weeksTakenElsewhere: parsed.data.weeksTakenElsewhere ?? 0,
+      },
+      bookings: [],
+    });
+  if (problem) return NextResponse.json({ error: problem }, { status: 400 });
   const child = await prisma.child.create({
     data: {
       userId: id,

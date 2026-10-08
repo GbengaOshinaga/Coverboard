@@ -39,6 +39,8 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [holidayPay, setHolidayPay] = useState<HolidayPayStats | null>(null);
+  // Earnings history is a Growth feature: no holiday pay card on lower plans.
+  const [holidayPayOnPlan, setHolidayPayOnPlan] = useState(true);
 
   // Profile form
   const [name, setName] = useState("");
@@ -70,6 +72,7 @@ export default function ProfilePage() {
         if (data.workCountry === "GB") {
           const hpRes = await fetch(`/api/team-members/${data.id}/earnings-history`);
           if (hpRes.ok) setHolidayPay(await hpRes.json());
+          else if (hpRes.status === 403) setHolidayPayOnPlan(false);
         } else {
           setHolidayPay(null);
         }
@@ -303,7 +306,7 @@ export default function ProfilePage() {
       </Card>
 
       {/* Holiday pay — read-only self-service (UK-only) */}
-      {profile?.workCountry === "GB" && (
+      {profile?.workCountry === "GB" && holidayPayOnPlan && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">

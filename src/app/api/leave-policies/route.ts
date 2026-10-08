@@ -8,8 +8,8 @@ import { z } from "zod";
 const createSchema = z.object({
   leaveTypeId: z.string().min(1),
   countryCode: z.string().length(2).toUpperCase(),
-  annualAllowance: z.number().int("Annual allowance has to be a whole number of days from 0 to 365.").min(0, "Annual allowance has to be a whole number of days from 0 to 365.").max(365, "Annual allowance has to be a whole number of days from 0 to 365."),
-  carryOverMax: z.number().int("Carry-over max has to be a whole number of days from 0 to 365.").min(0, "Carry-over max has to be a whole number of days from 0 to 365.").max(365, "Carry-over max has to be a whole number of days from 0 to 365.").default(0),
+  annualAllowance: z.number({ invalid_type_error: "Annual allowance has to be a whole number of days from 0 to 365." }).int("Annual allowance has to be a whole number of days from 0 to 365.").min(0, "Annual allowance has to be a whole number of days from 0 to 365.").max(365, "Annual allowance has to be a whole number of days from 0 to 365."),
+  carryOverMax: z.number({ invalid_type_error: "Carry-over max has to be a whole number of days from 0 to 365." }).int("Carry-over max has to be a whole number of days from 0 to 365.").min(0, "Carry-over max has to be a whole number of days from 0 to 365.").max(365, "Carry-over max has to be a whole number of days from 0 to 365.").default(0),
 });
 
 export async function GET(request: Request) {

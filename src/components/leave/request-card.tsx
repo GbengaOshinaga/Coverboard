@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useSession } from "next-auth/react";
+import { hasFeatureForEnum } from "@/lib/planFeatures";
+import type { AnyPlan } from "@/lib/plans";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -112,6 +115,12 @@ export function RequestCard({
     request.workingDays ?? countWeekdays(new Date(request.startDate), new Date(request.endDate));
 
   const [showCover, setShowCover] = useState(false);
+  // Statutory pay figures are a Growth feature (the API leaves them out too).
+  const { data: session } = useSession();
+  const showPay = hasFeatureForEnum(
+    ((session?.user as Record<string, unknown> | undefined)?.plan as AnyPlan | undefined) ?? null,
+    "parental_leave_tracker"
+  );
   const [editingEnd, setEditingEnd] = useState(false);
   const [endDraft, setEndDraft] = useState(request.endDate.slice(0, 10));
   const [endError, setEndError] = useState("");
@@ -346,16 +355,16 @@ export function RequestCard({
         </div>
       )}
 
-      {birthPayKind(request.leaveType.name) && request.status !== "CANCELLED" && request.status !== "REJECTED" && (
+      {showPay && birthPayKind(request.leaveType.name) && request.status !== "CANCELLED" && request.status !== "REJECTED" && (
         <SmpSummary request={request} kind={birthPayKind(request.leaveType.name)!} onChanged={onUpdated} />
       )}
-      {request.neonatal && request.status !== "CANCELLED" && request.status !== "REJECTED" && (
+      {showPay && request.neonatal && request.status !== "CANCELLED" && request.status !== "REJECTED" && (
         <NeonatalSummary request={request} onChanged={onUpdated} />
       )}
-      {request.spp && request.status !== "CANCELLED" && request.status !== "REJECTED" && (
+      {showPay && request.spp && request.status !== "CANCELLED" && request.status !== "REJECTED" && (
         <SppSummary request={request} onChanged={onUpdated} />
       )}
-      {request.shpp && request.status !== "CANCELLED" && request.status !== "REJECTED" && (
+      {showPay && request.shpp && request.status !== "CANCELLED" && request.status !== "REJECTED" && (
         <ShppSummary request={request} onChanged={onUpdated} />
       )}
 

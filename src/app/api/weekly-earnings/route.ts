@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { featureGate } from "@/lib/plan-gate";
 import { recomputeSspAfterEarningsChange } from "@/lib/leave-requests/ssp-spell";
 import { recomputeSmpAfterEarningsChange } from "@/lib/smp-request";
 import { getServerSession } from "next-auth";
@@ -23,6 +24,8 @@ export async function GET(request: Request) {
   const targetUserId = searchParams.get("userId");
 
   const sessionUser = session.user as Record<string, unknown>;
+  const gated = featureGate(sessionUser, "earnings_history", "Earnings history");
+  if (gated) return gated;
   const currentUserId = sessionUser.id as string;
   const userRole = sessionUser.role as string;
   const orgId = sessionUser.organizationId as string;
@@ -76,6 +79,8 @@ export async function POST(request: Request) {
   }
 
   const sessionUser = session.user as Record<string, unknown>;
+  const gated = featureGate(sessionUser, "earnings_history", "Earnings history");
+  if (gated) return gated;
   const userRole = sessionUser.role as string;
   if (userRole !== "ADMIN" && userRole !== "MANAGER") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
