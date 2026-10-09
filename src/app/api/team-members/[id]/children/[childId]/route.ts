@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { childrenAccess } from "@/lib/children-server";
-import { childChangeError, childSchema, placedOnError } from "@/lib/children-schema";
+import { canConfirmChildDetails, childChangeError, childSchema, duplicateChildError, placedOnError } from "@/lib/children-schema";
 
 type Params = { params: Promise<{ id: string; childId: string }> };
 
@@ -19,6 +19,7 @@ export async function PATCH(request: Request, { params }: Params) {
     where: { id: childId, userId: id },
     select: {
       id: true,
+      label: true,
       dateOfBirth: true,
       placedOn: true,
       disabilityBenefit: true,
@@ -46,12 +47,25 @@ export async function PATCH(request: Request, { params }: Params) {
   const problem =
     placedOnError(after.dateOfBirth, after.placedOn) ??
     childChangeError({
-      canApprove: access.actor.role === "ADMIN" || access.actor.role === "MANAGER",
+      canApprove: canConfirmChildDetails(access.actor, id),
       before,
       after,
       bookings: existing.leaveRequests.map((b) => ({ startDate: ymd(b.startDate), endDate: ymd(b.endDate) })),
     });
   if (problem) return NextResponse.json({ error: problem }, { status: 400 });
+  const others = await prisma.child.findMany({
+    where: { userId: id, id: { not: childId } },
+    select: { label: true, dateOfBirth: true, placedOn: true },
+  });
+  const duplicate = duplicateChildError(
+    {
+      label: parsed.data.label !== undefined ? parsed.data.label ?? null : existing.label,
+      dateOfBirth: after.dateOfBirth,
+      placedOn: after.placedOn,
+    },
+    others.map((o) => ({ label: o.label, dateOfBirth: ymd(o.dateOfBirth), placedOn: o.placedOn ? ymd(o.placedOn) : null }))
+  );
+  if (duplicate) return NextResponse.json({ error: duplicate }, { status: 409 });
 
   await prisma.child.update({
     where: { id: childId },
@@ -73,7 +87,16 @@ export async function PATCH(request: Request, { params }: Params) {
     resource: "team_member",
     resourceId: id,
     actor: access.actor,
-    metadata: { event: "child.updated", childId },
+    // Which details changed, not their values (dates of birth and benefits
+    // are personal data; the benefit is health-related).
+    metadata: {
+      event: "child.updated",
+      childId,
+      changed: [
+        ...(parsed.data.label !== undefined && (parsed.data.label?.trim() || null) !== existing.label ? ["label"] : []),
+        ...(Object.keys(before) as (keyof typeof before)[]).filter((k) => before[k] !== after[k]),
+      ],
+    },
     context: requestAuditContext(request),
   });
   return NextResponse.json({ id: childId });

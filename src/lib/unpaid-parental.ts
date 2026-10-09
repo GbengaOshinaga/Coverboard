@@ -163,6 +163,13 @@ export function uplError(input: {
   if (input.placedOn && request.startDate < input.placedOn) {
     return `Unpaid parental leave for ${childName} can't start before they were placed with you.`;
   }
+  // Nothing to count (e.g. a weekend, counted Mon–Fri with no pattern) would
+  // never use up the allowance.
+  if (countWorkingDays(request.startDate, request.endDate, input.weekdays) === 0) {
+    return input.weekdays
+      ? `This booking has none of the days worked in it, so it wouldn't count against the unpaid parental leave for ${childName}.`
+      : `This booking has no weekdays in it. Without a working pattern, days are counted Monday to Friday – add a working pattern to book the days actually worked.`;
+  }
   if (!input.disabilityBenefit) {
     const wholeWeeks = uplWholeWeeksError(input);
     if (wholeWeeks) return wholeWeeks;

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withoutGatedPay } from "@/lib/plan-gate";
 import { keepingInTouchError } from "@/lib/keeping-in-touch";
 import { recomputeBradfordScore } from "@/lib/leave-requests/bradford";
 import { getServerSession } from "next-auth";
@@ -109,10 +110,12 @@ export async function PATCH(
         where: { id },
         include: fullInclude,
       });
-      const responsePayload =
+      const responsePayload = withoutGatedPay(
         updated && (updated.userId === userId || userRole === "ADMIN")
           ? updated
-          : { ...updated, sicknessNote: null };
+          : { ...updated, sicknessNote: null },
+        sessionUser
+      );
       return NextResponse.json(responsePayload);
     }
 
@@ -161,10 +164,12 @@ export async function PATCH(
           { status: 404 }
         );
       }
-      const responsePayload =
+      const responsePayload = withoutGatedPay(
         updated.userId === userId || userRole === "ADMIN"
           ? updated
-          : { ...updated, sicknessNote: null };
+          : { ...updated, sicknessNote: null },
+        sessionUser
+      );
       return NextResponse.json(responsePayload);
     }
 
@@ -464,10 +469,12 @@ export async function PATCH(
 
     // Sickness notes are sensitive: only the owner and admins receive the free
     // text. A manager acting on someone else's request gets it redacted.
-    const responsePayload =
+    const responsePayload = withoutGatedPay(
       updated.userId === userId || userRole === "ADMIN"
         ? updated
-        : { ...updated, sicknessNote: null };
+        : { ...updated, sicknessNote: null },
+      sessionUser
+    );
     return NextResponse.json(neonatalWarning ? { ...responsePayload, neonatalWarning } : responsePayload);
   } catch (error) {
     console.error("Update leave request error:", error);

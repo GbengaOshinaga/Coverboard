@@ -66,7 +66,20 @@ export async function GET(request: Request) {
   });
 
   const ftes = await ftesFor(orgId, members);
-  return NextResponse.json(members.map((m) => ({ ...m, fte: ftes.get(m.id) })));
+  // Right-to-work status is for admins and managers, on plans that include it.
+  const sessionUser = session.user as Record<string, unknown>;
+  const showRightToWork =
+    (sessionUser.role === "ADMIN" || sessionUser.role === "MANAGER") &&
+    sessionHasFeature(sessionUser, "right_to_work");
+  return NextResponse.json(
+    members.map((m) => ({
+      ...m,
+      ...(showRightToWork
+        ? {}
+        : { rightToWorkVerified: null, rightToWorkCheckedOn: null, rightToWorkExpiresOn: null }),
+      fte: ftes.get(m.id),
+    }))
+  );
 }
 
 export async function POST(request: Request) {

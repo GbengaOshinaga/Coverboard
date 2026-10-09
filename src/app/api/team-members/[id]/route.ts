@@ -126,6 +126,9 @@ export async function GET(
     ...member,
     // The Bradford Factor is a Growth feature.
     bradfordScore: sessionHasFeature(sessionUser, "bradford_factor") ? member.bradfordScore : 0,
+    // Earnings are a Growth feature (earnings history and statutory pay).
+    averageWeeklyEarnings: sessionHasFeature(sessionUser, "earnings_history") ? member.averageWeeklyEarnings : null,
+    rightToWorkVerified: sessionHasFeature(sessionUser, "right_to_work") ? member.rightToWorkVerified : null,
     daysWorkedPerWeek: fromPattern ? week.daysPerWeek : member.daysWorkedPerWeek,
     daysFromPattern: fromPattern,
     fte,
@@ -172,6 +175,19 @@ export async function PATCH(
     // Only admins change roles (a manager could otherwise make themselves admin).
     if (parsed.data.role !== undefined && parsed.data.role !== inOrg.role && userRole !== "ADMIN") {
       return NextResponse.json({ error: "Only an admin can change someone's role." }, { status: 403 });
+    }
+
+    // Never leave the team without an admin.
+    if (inOrg.role === "ADMIN" && parsed.data.role !== undefined && parsed.data.role !== "ADMIN") {
+      const admins = await prisma.user.count({
+        where: { organizationId: sessionUser.organizationId as string, role: "ADMIN", isActive: true },
+      });
+      if (admins <= 1) {
+        return NextResponse.json(
+          { error: "This is the team's only admin. Make someone else an admin first." },
+          { status: 409 }
+        );
+      }
     }
 
     // Right-to-work status is a Growth feature; on lower plans it isn't changed.

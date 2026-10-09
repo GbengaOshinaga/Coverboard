@@ -75,3 +75,31 @@ export function childChangeError(input: {
   }
   return null;
 }
+
+/**
+ * The same child added twice would double the 18-week limit. Twins share a
+ * date of birth, so a second child born (or placed) the same day needs a
+ * different name. `others` are the parent's other children.
+ */
+export function duplicateChildError(
+  child: { label: string | null; dateOfBirth: string; placedOn: string | null },
+  others: { label: string | null; dateOfBirth: string; placedOn: string | null }[]
+): string | null {
+  const key = (l: string | null) => (l ?? "").trim().toLowerCase();
+  const same = others.find(
+    (o) => o.dateOfBirth === child.dateOfBirth && (o.placedOn ?? "") === (child.placedOn ?? "")
+  );
+  if (!same) return null;
+  if (!key(child.label) || !key(same.label) || key(child.label) === key(same.label)) {
+    return "There's already a child with that date of birth. If they're twins, give each one a different name.";
+  }
+  return null;
+}
+
+/**
+ * Whether the person making a change can confirm details that allow more
+ * leave: admins, and managers for someone else's child (not their own).
+ */
+export function canConfirmChildDetails(actor: { id: string; role: string }, parentId: string): boolean {
+  return actor.role === "ADMIN" || (actor.role === "MANAGER" && actor.id !== parentId);
+}

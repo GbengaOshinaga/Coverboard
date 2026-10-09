@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { childrenAccess, listChildren } from "@/lib/children-server";
-import { childChangeError, childSchema, placedOnError } from "@/lib/children-schema";
+import { canConfirmChildDetails, childChangeError, childSchema, duplicateChildError, placedOnError } from "@/lib/children-schema";
 
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -24,7 +24,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const problem =
     placedOnError(parsed.data.dateOfBirth, parsed.data.placedOn) ??
     childChangeError({
-      canApprove: access.actor.role === "ADMIN" || access.actor.role === "MANAGER",
+      canApprove: canConfirmChildDetails(access.actor, id),
       before: null,
       after: {
         dateOfBirth: parsed.data.dateOfBirth,
@@ -35,6 +35,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       bookings: [],
     });
   if (problem) return NextResponse.json({ error: problem }, { status: 400 });
+  const others = await prisma.child.findMany({
+    where: { userId: id },
+    select: { label: true, dateOfBirth: true, placedOn: true },
+  });
+  const duplicate = duplicateChildError(
+    { label: parsed.data.label ?? null, dateOfBirth: parsed.data.dateOfBirth, placedOn: parsed.data.placedOn || null },
+    others.map((o) => ({
+      label: o.label,
+      dateOfBirth: o.dateOfBirth.toISOString().slice(0, 10),
+      placedOn: o.placedOn ? o.placedOn.toISOString().slice(0, 10) : null,
+    }))
+  );
+  if (duplicate) return NextResponse.json({ error: duplicate }, { status: 409 });
   const child = await prisma.child.create({
     data: {
       userId: id,

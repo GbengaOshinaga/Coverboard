@@ -176,20 +176,22 @@ export const authOptions: NextAuthOptions = {
         });
         if (me) token.name = me.name;
       }
-      // Refresh plan from DB on explicit update() or once per hour so the
-      // lock/middleware sees current state without forcing a re-login.
-      const HOUR = 60 * 60 * 1000;
-      const lastRefresh = (token.planRefreshedAt as number | undefined) ?? 0;
-      if (trigger === "update" || Date.now() - lastRefresh > HOUR) {
-        if (token.organizationId) {
-          const org = await prisma.organization.findUnique({
-            where: { id: token.organizationId as string },
-            select: { plan: true },
-          });
-          if (org) {
-            token.plan = org.plan;
-            token.planRefreshedAt = Date.now();
-          }
+      // Role and plan come from the database on every check, not from the
+      // login: someone demoted (or promoted) gets their new role on their next
+      // request, not up to 30 days later when the session expires, and a
+      // demoted admin can't use a stale session to promote themselves back.
+      // One primary-key lookup; the token is rewritten whenever the browser
+      // fetches its session, so middleware sees the change after a reload.
+      if (token.id && !user) {
+        const me = await prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: { role: true, memberType: true, organization: { select: { plan: true, name: true } } },
+        });
+        if (me) {
+          token.role = me.role;
+          token.memberType = me.memberType;
+          token.plan = me.organization.plan;
+          token.organizationName = me.organization.name;
         }
       }
       return token;

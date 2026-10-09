@@ -115,3 +115,12 @@ test("zero-hours or variable-hours with no pattern: not forced into Mon–Fri bl
   const mwf = { daysPerWeek: 3, weekdays: [0, 2, 4] };
   assert.match(uplWholeWeeksError({ request: twoDays, ...mwf, irregularHours: true })!, /whole weeks/);
 });
+
+test("a booking with no working days in it is refused, not counted as 0", () => {
+  const weekend = { startDate: d("2026-06-06"), endDate: d("2026-06-07") };
+  const base = { childName: "Ada", dateOfBirth: d("2024-01-01"), serviceStartDate: null, bookings: [], weeksTakenElsewhere: 0 };
+  assert.match(uplError({ ...base, request: weekend, ...fiveDay, irregularHours: true })!, /no weekdays/);
+  assert.match(uplError({ ...base, request: weekend, daysPerWeek: 3, weekdays: [0, 2, 4] })!, /none of the days worked/);
+  // Someone whose pattern includes weekends can book them.
+  assert.equal(uplError({ ...base, request: weekend, daysPerWeek: 2, weekdays: [5, 6] }), null);
+});

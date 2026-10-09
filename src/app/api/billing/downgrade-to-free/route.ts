@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { headcountOverPlanError } from "@/lib/plan-headcount";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -68,6 +69,9 @@ export async function POST() {
       { status: 400 }
     );
   }
+
+  const tooSmall = await headcountOverPlanError(orgId, "FREE", "Free");
+  if (tooSmall) return NextResponse.json({ error: tooSmall }, { status: 409 });
 
   try {
     const existing = await stripe.subscriptions.retrieve(
