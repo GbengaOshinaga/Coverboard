@@ -34,6 +34,21 @@ export async function middleware(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
 
+  // Marked as left while signed in (see the jwt callback): drop the session
+  // cookie and send them to the login page, which refuses inactive accounts.
+  if (token.revoked) {
+    if (/^\/api\/auth(\/|$)/.test(path)) return NextResponse.next();
+    const response = path.startsWith("/api/")
+      ? NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      : /^\/login(\/|$)/.test(path)
+        ? NextResponse.next()
+        : NextResponse.redirect(new URL("/login", request.url));
+    for (const cookie of request.cookies.getAll()) {
+      if (cookie.name.includes("next-auth.session-token")) response.cookies.delete(cookie.name);
+    }
+    return response;
+  }
+
   // A user who authenticated via Google but hasn't created a team yet has no
   // organizationId in their token. Send them to /welcome to finish signup;
   // everything else (the page itself, NextAuth routes, signout) is allowed.

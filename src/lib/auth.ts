@@ -182,11 +182,20 @@ export const authOptions: NextAuthOptions = {
       // demoted admin can't use a stale session to promote themselves back.
       // One primary-key lookup; the token is rewritten whenever the browser
       // fetches its session, so middleware sees the change after a reload.
+      // Someone marked as left (or deleted) is signed out the same way: the
+      // token is flagged, the session callback hands back no session, and
+      // middleware clears the cookie.
       if (token.id && !user) {
         const me = await prisma.user.findUnique({
           where: { id: token.id as string },
-          select: { role: true, memberType: true, organization: { select: { plan: true, name: true } } },
+          select: {
+            isActive: true,
+            role: true,
+            memberType: true,
+            organization: { select: { plan: true, name: true } },
+          },
         });
+        token.revoked = !me || !me.isActive;
         if (me) {
           token.role = me.role;
           token.memberType = me.memberType;
@@ -197,6 +206,10 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
     async session({ session, token }) {
+      // No session at all, rather than one with the user's details blanked:
+      // getServerSession returns null, so every route's sign-in check refuses
+      // a leaver, and nothing reads a missing organisation ID.
+      if (token.revoked) return null as unknown as typeof session;
       if (session.user) {
         (session.user as Record<string, unknown>).id = token.id;
         (session.user as Record<string, unknown>).role = token.role;
