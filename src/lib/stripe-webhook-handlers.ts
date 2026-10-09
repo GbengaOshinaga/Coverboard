@@ -54,8 +54,11 @@ export type WebhookDeps = {
   setTrialGracePeriod(params: {
     organizationId: string;
   }): Promise<{ graceEndsAt: Date }>;
+  /** Why the team doesn't fit a plan (more people or admins), or null. */
+  headcountOverPlan(organizationId: string, plan: PlanEnum, planName: string): Promise<string | null>;
   emailers: {
     trialEndingSoon(args: { to: string; daysLeft: number }): Promise<void>;
+    planTooSmall(args: { to: string; problem: string; trialEnding: boolean }): Promise<void>;
     paymentFailed(args: { to: string }): Promise<void>;
     subscriptionCanceled(args: { to: string }): Promise<void>;
     welcomeActive(args: { to: string; planName: string }): Promise<void>;
@@ -183,7 +186,27 @@ export async function handleTrialWillEnd(
 ): Promise<void> {
   const org = await deps.findOrgByCustomerId(sub.customer as string);
   if (!org?.adminEmail) return;
+  // Grown past the plan they chose: say so while there's time to pick a
+  // bigger one, since the trial turns into it without asking.
+  const priceId = sub.items?.data[0]?.price?.id ?? org.stripePriceId;
+  const problem = await planTooSmallFor(org, priceId, deps);
+  if (problem) {
+    await deps.emailers.planTooSmall({ to: org.adminEmail, problem, trialEnding: true });
+    return;
+  }
   await deps.emailers.trialEndingSoon({ to: org.adminEmail, daysLeft: 3 });
+}
+
+/**
+ * Whether the team has outgrown the plan a price is for. Adding people past
+ * the chosen plan is refused during a trial (planForLimits), so this catches
+ * teams that grew before that rule, or by rejoining or plan changes in Stripe.
+ * The plan isn't changed for them: moving to a dearer plan needs their say.
+ */
+async function planTooSmallFor(org: OrgRecord, priceId: string | null | undefined, deps: WebhookDeps): Promise<string | null> {
+  const planKey = priceId ? planKeyFromPriceId(priceId) : null;
+  if (!planKey) return null;
+  return deps.headcountOverPlan(org.id, PLAN_KEY_TO_ENUM[planKey], PLAN_DISPLAY_NAME[planKey]);
 }
 
 export async function handleInvoicePaymentSucceeded(
@@ -220,6 +243,14 @@ export async function handleInvoicePaymentSucceeded(
   if (wasTrialing && org.adminEmail) {
     const planName = planKey ? PLAN_DISPLAY_NAME[planKey] : "Coverboard";
     await deps.emailers.welcomeActive({ to: org.adminEmail, planName });
+  }
+  // Converted onto a plan the team has outgrown: flag it for them and for us.
+  if (wasTrialing) {
+    const problem = await planTooSmallFor(org, priceId, deps);
+    if (problem) {
+      console.warn(`[billing] org ${org.id} converted from trial onto a plan it has outgrown: ${problem}`);
+      if (org.adminEmail) await deps.emailers.planTooSmall({ to: org.adminEmail, problem, trialEnding: false });
+    }
   }
   if (wasScheduled && org.adminEmail) {
     await deps.emailers.deletionCanceled({ to: org.adminEmail });

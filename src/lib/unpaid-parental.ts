@@ -220,45 +220,33 @@ export function uplError(input: {
 }
 
 /**
- * Rechecks the leave already booked for a child against its changed details
- * (dates, weeks taken elsewhere, disability benefit): every year within
- * 4 weeks, 18 weeks in total, and whole weeks unless a disability benefit is
- * ticked. Null when it all still fits. Bookings outside the child's dates are
- * refused separately (childChangeError).
+ * Rechecks the leave already booked for a child after its details change
+ * (dates, weeks taken elsewhere, disability benefit). Each booking goes
+ * through the same check as booking it now (uplError), with the working week
+ * on its own start date, which is what was used when it was booked, and the
+ * others counted alongside it. Null when they all still fit.
  */
 export function uplBookedLeaveError(input: {
+  childName: string;
   dateOfBirth: Date;
   placedOn?: Date | null;
   disabilityBenefit: boolean;
   serviceStartDate: Date | null;
-  bookings: Range[];
   weeksTakenElsewhere: number;
-  daysPerWeek: number;
-  weekdays: number[] | null;
   irregularHours?: boolean;
+  /** Live bookings, each with the working week on its start date. */
+  bookings: (Range & { daysPerWeek: number; weekdays: number[] | null })[];
 }): string | null {
-  if (input.bookings.length === 0) return null;
   const f = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
-  const fix = "Cancel or shorten a booking first.";
-  if (!input.disabilityBenefit) {
-    const split = input.bookings.find((b) => uplWholeWeeksError({ ...input, request: b }));
-    if (split) {
-      return `The leave booked for ${f(split.startDate)} – ${f(split.endDate)} isn't in whole weeks, which is only allowed when the child gets ${DISABILITY_BENEFITS}. Change that booking first.`;
-    }
-  }
-  const entitledFrom = uplEntitledFrom(input, input.serviceStartDate);
-  const sorted = [...input.bookings].sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
-  const first = uplYearContaining(sorted[0].startDate, entitledFrom);
-  const total = uplUsage({ ...input, year: first });
-  if (total.daysTotal > total.capTotal) {
-    return `With this change the leave booked for this child, plus weeks taken elsewhere, comes to ${total.daysTotal} working days, over the ${UPL_WEEKS_PER_CHILD} weeks (${total.capTotal} days) allowed. ${fix}`;
-  }
-  const lastEnd = sorted.reduce((m, b) => (b.endDate > m ? b.endDate : m), sorted[0].endDate);
-  for (let year = first; year.start <= lastEnd; year = uplYearContaining(new Date(year.end.getTime() + 86_400_000), entitledFrom)) {
-    const used = uplUsage({ ...input, year });
-    if (used.daysThisYear > used.capThisYear) {
-      return `With this change ${used.daysThisYear} working days of the leave booked for this child fall in the year ${f(year.start)} – ${f(year.end)}, over the ${UPL_WEEKS_PER_CHILD_PER_YEAR} weeks (${used.capThisYear} days) allowed in a year. ${fix}`;
-    }
+  for (const b of input.bookings) {
+    const error = uplError({
+      ...input,
+      request: { startDate: b.startDate, endDate: b.endDate },
+      bookings: input.bookings.filter((o) => o !== b).map(({ startDate, endDate }) => ({ startDate, endDate })),
+      daysPerWeek: b.daysPerWeek,
+      weekdays: b.weekdays,
+    });
+    if (error) return `With this change, the leave booked for ${f(b.startDate)} – ${f(b.endDate)} wouldn't be allowed. ${error}`;
   }
   return null;
 }

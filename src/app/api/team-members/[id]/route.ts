@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { sessionHasFeature } from "@/lib/plan-gate";
 import { ukToday } from "@/lib/workPattern";
 import { leavingDateError, recordLeaving } from "@/lib/leavers";
+import { lastAdminError } from "@/lib/admin-continuity";
+import type { Prisma } from "@prisma/client";
 import { getWorkingWeek, qualifyingDaysFor, syncDaysFromPattern } from "@/lib/working-week-server";
 import { recomputeCurrentSspSpells } from "@/lib/leave-requests/ssp-spell";
 import { ftesFor } from "@/lib/fte-server";
@@ -167,7 +169,7 @@ export async function PATCH(
     // Only people in the caller's own organisation.
     const inOrg = await prisma.user.findFirst({
       where: { id, organizationId: sessionUser.organizationId as string },
-      select: { id: true, role: true },
+      select: { id: true, role: true, organizationId: true },
     });
     if (!inOrg) {
       return NextResponse.json({ error: "Member not found" }, { status: 404 });
@@ -176,19 +178,6 @@ export async function PATCH(
     // Only admins change roles (a manager could otherwise make themselves admin).
     if (parsed.data.role !== undefined && parsed.data.role !== inOrg.role && userRole !== "ADMIN") {
       return NextResponse.json({ error: "Only an admin can change someone's role." }, { status: 403 });
-    }
-
-    // Never leave the team without an admin.
-    if (inOrg.role === "ADMIN" && parsed.data.role !== undefined && parsed.data.role !== "ADMIN") {
-      const admins = await prisma.user.count({
-        where: { organizationId: sessionUser.organizationId as string, role: "ADMIN", isActive: true },
-      });
-      if (admins <= 1) {
-        return NextResponse.json(
-          { error: "This is the team's only admin. Make someone else an admin first." },
-          { status: 409 }
-        );
-      }
     }
 
     // Right-to-work status is a Growth feature; on lower plans it isn't changed.
@@ -230,30 +219,45 @@ export async function PATCH(
       select: { role: true, organizationId: true },
     });
 
-    const member = await prisma.user.update({
-      where: { id },
-      data: {
-        ...parsed.data,
-        ...(parsed.data.daysWorkedPerWeek !== undefined
-          ? { qualifyingDaysPerWeek: qualifyingDaysFor(parsed.data.daysWorkedPerWeek) }
-          : {}),
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        memberType: true,
-        employmentType: true,
-        daysWorkedPerWeek: true,
-        fteRatio: true,
-        rightToWorkVerified: true,
-        department: true,
-        countryCode: true,
-        workCountry: true,
-        organizationId: true,
-      },
-    });
+    const update = (db: Prisma.TransactionClient) =>
+      db.user.update({
+        where: { id },
+        data: {
+          ...parsed.data,
+          ...(parsed.data.daysWorkedPerWeek !== undefined
+            ? { qualifyingDaysPerWeek: qualifyingDaysFor(parsed.data.daysWorkedPerWeek) }
+            : {}),
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          memberType: true,
+          employmentType: true,
+          daysWorkedPerWeek: true,
+          fteRatio: true,
+          rightToWorkVerified: true,
+          department: true,
+          countryCode: true,
+          workCountry: true,
+          organizationId: true,
+        },
+      });
+
+    // Never leave the team without an admin: checked and changed under one
+    // lock (see admin-continuity).
+    const demoting = parsed.data.role !== undefined && parsed.data.role !== "ADMIN";
+    const outcome = demoting
+      ? await prisma.$transaction(async (tx) => {
+          const error = await lastAdminError(tx, inOrg.organizationId, id);
+          return error ? { error } : { member: await update(tx) };
+        })
+      : { member: await update(prisma) };
+    if ("error" in outcome) {
+      return NextResponse.json({ error: outcome.error }, { status: 409 });
+    }
+    const member = outcome.member;
 
     // Without a working pattern, days worked decides which days SSP is paid
     // on; recalculate sickness still going on or still to come.
@@ -364,7 +368,8 @@ export async function DELETE(
     const dateProblem = leavingDateError({ lastDay, today, serviceStartDate: target.serviceStartDate });
     if (dateProblem) return NextResponse.json({ error: dateProblem }, { status: 400 });
 
-    const result = await recordLeaving({ userId: id, lastDay, today });
+    const result = await recordLeaving({ userId: id, organizationId: orgId, lastDay, today });
+    if ("error" in result) return NextResponse.json({ error: result.error }, { status: 409 });
 
     recordAudit({
       organizationId: orgId,

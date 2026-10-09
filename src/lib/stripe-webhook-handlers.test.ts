@@ -14,7 +14,7 @@ type EmailCall = { name: string; args: unknown };
 
 function makeDeps(
   initial: OrgRecord | null,
-  options: { scheduledDeletionExists?: boolean } = {}
+  options: { scheduledDeletionExists?: boolean; overPlan?: string } = {}
 ) {
   const updates: OrgUpdate[] = [];
   const emails: EmailCall[] = [];
@@ -43,8 +43,13 @@ function makeDeps(
       calls.push({ name: "setTrialGracePeriod", args });
       return { graceEndsAt: new Date("2026-06-10T00:00:00Z") };
     },
+    async headcountOverPlan(_orgId, plan) {
+      calls.push({ name: "headcountOverPlan", args: plan });
+      return options.overPlan ?? null;
+    },
     emailers: {
       trialEndingSoon: spy("trialEndingSoon"),
+      planTooSmall: spy("planTooSmall"),
       paymentFailed: spy("paymentFailed"),
       subscriptionCanceled: spy("subscriptionCanceled"),
       welcomeActive: spy("welcomeActive"),
@@ -480,4 +485,28 @@ test("dispatcher ignores unknown event types without throwing", async () => {
   );
   assert.equal(updates.length, 0);
   assert.equal(emails.length, 0);
+});
+
+// ---------- outgrown plan ----------
+
+const tooBig = "Growth is for up to 75 people and your team has 90.";
+
+test("trial_will_end warns instead when the team has outgrown the chosen plan", async () => {
+  const { deps, emails, updates } = makeDeps(makeOrg({ stripePriceId: STRIPE_PRICE_IDS.growth }), { overPlan: tooBig });
+  await dispatchStripeEvent(subscriptionEvent("customer.subscription.trial_will_end", { customer: "cus_1" }), deps);
+  assert.deepEqual(emails, [{ name: "planTooSmall", args: { to: "admin@example.com", problem: tooBig, trialEnding: true } }]);
+  assert.equal(updates.length, 0);
+});
+
+test("converting onto an outgrown plan keeps the plan but tells the admin", async () => {
+  const { deps, emails, updates } = makeDeps(makeOrg({ plan: "TRIAL", subscriptionStatus: "trialing" }), { overPlan: tooBig });
+  await dispatchStripeEvent(
+    invoiceEvent("invoice.payment_succeeded", {
+      customer: "cus_1",
+      lines: { data: [{ pricing: { price_details: { price: STRIPE_PRICE_IDS.growth } } }] },
+    } as unknown as Partial<Stripe.Invoice> & { customer: string }),
+    deps
+  );
+  assert.equal(updates[0]!.plan, "GROWTH");
+  assert.deepEqual(emails.map((e) => e.name), ["welcomeActive", "planTooSmall"]);
 });

@@ -15,13 +15,13 @@ export function dbDate(iso: string): Date {
  * rows that never took effect are deleted, rows in effect close yesterday so
  * past cover stays accurate. Run inside a $transaction.
  */
-export function endWorkPatternOps(userId: string, today: Date) {
+export function endWorkPatternOps(userId: string, today: Date, db: Pick<typeof prisma, "workPattern"> = prisma) {
   const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
   return [
-    prisma.workPattern.deleteMany({
+    db.workPattern.deleteMany({
       where: { userId, effectiveFrom: { gte: today } },
     }),
-    prisma.workPattern.updateMany({
+    db.workPattern.updateMany({
       where: {
         userId,
         effectiveFrom: { lt: today },

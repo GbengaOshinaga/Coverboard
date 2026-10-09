@@ -58,23 +58,26 @@ export async function PATCH(request: Request, { params }: Params) {
   // Leave already booked must still fit the changed details. Only when a
   // detail that affects it changed, so a rename always goes through.
   if (existing.leaveRequests.length > 0 && (Object.keys(before) as (keyof typeof before)[]).some((k) => before[k] !== after[k])) {
-    const [week, parent] = await Promise.all([
-      getWorkingWeek(id),
+    const [parent, bookings] = await Promise.all([
       prisma.user.findUnique({
         where: { id },
         select: { serviceStartDate: true, employmentType: true, daysWorkedPerWeek: true },
       }),
+      // Each booking with the working week it was booked against.
+      Promise.all(
+        existing.leaveRequests.map(async (b) => ({ ...b, ...(await getWorkingWeek(id, b.startDate)) }))
+      ),
     ]);
+    const childLabel = parsed.data.label !== undefined ? parsed.data.label?.trim() || null : existing.label;
     const overLimit = uplBookedLeaveError({
+      childName: childLabel ?? "this child",
       dateOfBirth: new Date(`${after.dateOfBirth}T00:00:00Z`),
       placedOn: after.placedOn ? new Date(`${after.placedOn}T00:00:00Z`) : null,
       disabilityBenefit: after.disabilityBenefit,
       serviceStartDate: parent?.serviceStartDate ?? null,
-      bookings: existing.leaveRequests,
       weeksTakenElsewhere: after.weeksTakenElsewhere,
-      daysPerWeek: week.daysPerWeek,
-      weekdays: week.weekdays,
       irregularHours: hasIrregularHours(parent),
+      bookings,
     });
     if (overLimit) return NextResponse.json({ error: overLimit }, { status: 409 });
   }

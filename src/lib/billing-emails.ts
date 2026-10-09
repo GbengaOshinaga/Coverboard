@@ -26,6 +26,19 @@ export async function emailTrialEndingSoon({ to, daysLeft }: { to: string; daysL
   });
 }
 
+export async function emailPlanTooSmall({ to, problem, trialEnding }: { to: string; problem: string; trialEnding: boolean }) {
+  await sendEmail({
+    to,
+    subject: trialEnding ? "Your team has outgrown the plan your trial moves to" : "Your team has outgrown its Coverboard plan",
+    html: base(`
+      <h2 style="margin:0 0 12px">${trialEnding ? "Choose a bigger plan before your trial ends" : "Your team has outgrown its plan"}</h2>
+      <p>${esc(problem)}</p>
+      <p>${trialEnding ? "Your trial ends in 3 days and moves to the plan you chose." : "Your trial has moved to the plan you chose."} Choose a plan that fits your team in Billing.</p>
+      <p><a href="${getAppBaseUrl()}/settings/billing" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Go to Billing</a></p>
+    `),
+  });
+}
+
 export async function emailPaymentFailed({ to }: { to: string }) {
   await sendEmail({
     to,

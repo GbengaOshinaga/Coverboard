@@ -8,6 +8,7 @@ import {
   getSlackIntegrationByTeamId,
   createSlackClient,
   postSlackCommandResponse,
+  slackLockedMessage,
 } from "@/lib/slack";
 import { getLeaveYearStart } from "@/lib/leave-year-server";
 import { CALENDAR_LEAVE_YEAR, leaveYearLabel, leaveYearOf } from "@/lib/leave-year";
@@ -72,6 +73,9 @@ export async function POST(request: Request) {
       )
     );
   }
+
+  const locked = slackLockedMessage(integration);
+  if (locked) return NextResponse.json(ephemeral(locked));
 
   if (!responseUrl) {
     return NextResponse.json(

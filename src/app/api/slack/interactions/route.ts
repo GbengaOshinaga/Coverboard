@@ -5,6 +5,7 @@ import {
   isSlackAppConfigured,
   getSlackIntegrationByTeamId,
   createSlackClient,
+  slackLockedMessage,
 } from "@/lib/slack";
 import { reviewLeaveRequest } from "@/lib/leave-requests/review";
 
@@ -60,6 +61,11 @@ async function handleBlockAction(payload: {
       text: "This Slack workspace is not connected to Coverboard.",
       replace_original: false,
     });
+  }
+
+  const locked = slackLockedMessage(integration);
+  if (locked) {
+    return NextResponse.json({ response_type: "ephemeral", text: locked, replace_original: false });
   }
 
   const slack = createSlackClient(integration.botToken);
