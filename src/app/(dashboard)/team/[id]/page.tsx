@@ -35,6 +35,7 @@ import { ChildrenCard } from "@/components/team/children";
 import { RightToWorkCard } from "@/components/team/right-to-work-card";
 import { WorkingTimeOptOutCard } from "@/components/team/working-time-opt-out-card";
 import { hasAuditTrail, type AnyPlan } from "@/lib/plans";
+import { hasFeatureForEnum } from "@/lib/planFeatures";
 import {
   parseEarningsCsv,
   findIntraFileDuplicates,
@@ -653,6 +654,9 @@ export default function EmployeeProfilePage({
   // Activity log surfaces the read-side audit trail on a per-member basis;
   // backed by the same Pro-plan gate as the org-wide audit trail.
   const canSeeActivity = isAdmin && hasAuditTrail(userPlan);
+  // Growth features: earnings history and what a leaver is owed.
+  const hasEarningsHistory = hasFeatureForEnum(userPlan ?? null, "earnings_history");
+  const hasLeaverPay = hasFeatureForEnum(userPlan ?? null, "holiday_pay_calculator");
 
   const [activeTab, setActiveTab] = useState<"overview" | "activity">("overview");
   const [member, setMember] = useState<Member | null>(null);
@@ -702,12 +706,12 @@ export default function EmployeeProfilePage({
     setLoading(true);
     const [memberRes, earningsRes] = await Promise.all([
       fetch(`/api/team-members/${memberId}`),
-      fetch(`/api/team-members/${memberId}/earnings-history`),
+      hasEarningsHistory ? fetch(`/api/team-members/${memberId}/earnings-history`) : null,
     ]);
     if (memberRes.ok) setMember(await memberRes.json());
-    if (earningsRes.ok) setStats(await earningsRes.json());
+    if (earningsRes?.ok) setStats(await earningsRes.json());
     setLoading(false);
-  }, [memberId]);
+  }, [memberId, hasEarningsHistory]);
 
   useEffect(() => {
     fetchData();
@@ -1105,7 +1109,7 @@ export default function EmployeeProfilePage({
       </Dialog>
 
       {/* Leaving: holiday built up and owed at their last day */}
-      {member.leftOn && canManage && <HolidayOnLeavingCard memberId={memberId} />}
+      {member.leftOn && canManage && hasLeaverPay && <HolidayOnLeavingCard memberId={memberId} />}
 
       <WorkPatternCard memberId={memberId} canManage={canManage} />
 
@@ -1126,7 +1130,7 @@ export default function EmployeeProfilePage({
       {member.workCountry === "GB" && <ChildrenCard memberId={memberId} />}
 
       {/* Holiday pay earnings history (UK-only) */}
-      {member.workCountry === "GB" && (
+      {member.workCountry === "GB" && hasEarningsHistory && (
       <Card id="earnings-history">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

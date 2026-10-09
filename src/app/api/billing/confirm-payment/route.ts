@@ -8,7 +8,8 @@ import { cancelScheduledDeletion } from "@/lib/deletionScheduler";
 import { emailDeletionCanceled } from "@/lib/billing-emails";
 import { planKeyForBilling } from "@/lib/billing-plan";
 import { ensureStripeCustomer } from "@/lib/billing-customer";
-import { STRIPE_PRICE_IDS } from "@/config/stripePrices";
+import { PLAN_DISPLAY_NAME, PLAN_KEY_TO_ENUM, STRIPE_PRICE_IDS } from "@/config/stripePrices";
+import { headcountOverPlanError } from "@/lib/plan-headcount";
 import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
 import { z } from "zod";
@@ -62,6 +63,13 @@ export async function POST(request: Request) {
 
   if (!org) {
     return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+  }
+
+  // Starting a subscription: the team has to fit the plan chosen.
+  if (!org.stripeSubscriptionId) {
+    const planKey = parsed.data.planKey ?? planKeyForBilling(org);
+    const tooSmall = await headcountOverPlanError(orgId, PLAN_KEY_TO_ENUM[planKey], PLAN_DISPLAY_NAME[planKey]);
+    if (tooSmall) return NextResponse.json({ error: tooSmall }, { status: 409 });
   }
 
   try {

@@ -36,7 +36,13 @@ export async function GET(request: Request) {
       startDate: { lte: endDate },
       endDate: { gte: startDate },
     },
-    include: {
+    // Only what the warning shows. Any signed-in member can call this, so
+    // never whole rows (sickness notes, pay and earnings live on them).
+    select: {
+      id: true,
+      startDate: true,
+      endDate: true,
+      status: true,
       user: {
         select: {
           id: true,

@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import {
   CALENDAR_LEAVE_YEAR,
   companyCarryOverExpiry,
+  expiryDateError,
   firstDateAfterYear,
+  lastExpiryDay,
   leaveYearBounds,
   leaveYearLabel,
   leaveYearOf,
@@ -75,4 +77,14 @@ test("company carry-over expiry: flags a date that lasts the whole next year, or
   );
   // April year, 15 April: two weeks to use it.
   assert.equal(companyCarryOverExpiry(2026, april, 4, 15).withinFirstMonth, true);
+});
+
+test("carry-over expiry: impossible dates are refused, not rolled into March", () => {
+  assert.match(expiryDateError(2, 31)!, /February expiry has to be a day from 1 to 28/);
+  assert.match(expiryDateError(2, 29)!, /1 to 28/);
+  assert.match(expiryDateError(4, 31)!, /April expiry has to be a day from 1 to 30/);
+  assert.match(expiryDateError(3, 0)!, /1 to 31/);
+  assert.equal(expiryDateError(3, 31), null);
+  assert.equal(expiryDateError(2, 28), null);
+  assert.equal(lastExpiryDay(9), 30);
 });

@@ -693,7 +693,7 @@ export function coverOfferEmail(data: {
       </p>
       ${data.shifts.map(shiftLine).join("")}
       <p style="margin:0;font-size:14px;color:#6b7280;line-height:1.6;">
-        Please accept or decline ${many ? "each one" : ""} in Coverboard. If someone else covers a shift first, it'll show as covered there.
+        Please accept or decline ${many ? "each one" : ""} in Coverboard. If a shift is covered first, it'll show as no longer needed there.
       </p>
       ${button("Accept or decline", data.url)}
     `),

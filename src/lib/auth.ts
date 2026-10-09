@@ -167,25 +167,49 @@ export const authOptions: NextAuthOptions = {
         // update() — pick up the new org so the session carries it.
         await hydrateTokenFromEmail(token, token.email as string);
       }
-      // Refresh plan from DB on explicit update() or once per hour so the
-      // lock/middleware sees current state without forcing a re-login.
-      const HOUR = 60 * 60 * 1000;
-      const lastRefresh = (token.planRefreshedAt as number | undefined) ?? 0;
-      if (trigger === "update" || Date.now() - lastRefresh > HOUR) {
-        if (token.organizationId) {
-          const org = await prisma.organization.findUnique({
-            where: { id: token.organizationId as string },
-            select: { plan: true },
-          });
-          if (org) {
-            token.plan = org.plan;
-            token.planRefreshedAt = Date.now();
-          }
+      // update() after someone renames themselves: read the name back from
+      // the database (not from the client) so the header shows it straight away.
+      if (trigger === "update" && token.id) {
+        const me = await prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: { name: true },
+        });
+        if (me) token.name = me.name;
+      }
+      // Role and plan come from the database on every check, not from the
+      // login: someone demoted (or promoted) gets their new role on their next
+      // request, not up to 30 days later when the session expires, and a
+      // demoted admin can't use a stale session to promote themselves back.
+      // One primary-key lookup; the token is rewritten whenever the browser
+      // fetches its session, so middleware sees the change after a reload.
+      // Someone marked as left (or deleted) is signed out the same way: the
+      // token is flagged, the session callback hands back no session, and
+      // middleware clears the cookie.
+      if (token.id && !user) {
+        const me = await prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: {
+            isActive: true,
+            role: true,
+            memberType: true,
+            organization: { select: { plan: true, name: true } },
+          },
+        });
+        token.revoked = !me || !me.isActive;
+        if (me) {
+          token.role = me.role;
+          token.memberType = me.memberType;
+          token.plan = me.organization.plan;
+          token.organizationName = me.organization.name;
         }
       }
       return token;
     },
     async session({ session, token }) {
+      // No session at all, rather than one with the user's details blanked:
+      // getServerSession returns null, so every route's sign-in check refuses
+      // a leaver, and nothing reads a missing organisation ID.
+      if (token.revoked) return null as unknown as typeof session;
       if (session.user) {
         (session.user as Record<string, unknown>).id = token.id;
         (session.user as Record<string, unknown>).role = token.role;

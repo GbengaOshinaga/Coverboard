@@ -47,13 +47,13 @@ const PLANS: ReadonlyArray<{
     key: "growth",
     name: "Growth",
     priceGbp: 49,
-    blurb: "For teams of any size",
+    blurb: "For a care home or busy site",
     features: [
       "Everything in Starter",
-      "SSP / SMP / SPL trackers",
+      "Statutory pay worked out for payroll",
       "Bradford Factor reporting",
       "Right to work tracking",
-      "Unlimited employees, 5 admins",
+      "Up to 75 employees, 5 admins",
     ],
   },
   {
@@ -67,7 +67,7 @@ const PLANS: ReadonlyArray<{
       "Custom leave types",
       "Scheduled compliance reports",
       "Leave operations dashboard",
-      "Unlimited admins",
+      "Unlimited employees and admins",
     ],
   },
   {

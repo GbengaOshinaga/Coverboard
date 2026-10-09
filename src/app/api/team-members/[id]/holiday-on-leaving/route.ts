@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { featureGate } from "@/lib/plan-gate";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -16,6 +17,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (u.role !== "ADMIN" && u.role !== "MANAGER") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  const gated = featureGate(u, "holiday_pay_calculator", "Holiday owed on leaving");
+  if (gated) return gated;
   const { id } = await params;
   const member = await prisma.user.findFirst({
     where: { id, organizationId: u.organizationId as string },

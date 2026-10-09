@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { featureGate } from "@/lib/plan-gate";
 import { getWorkingWeek } from "@/lib/working-week-server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -48,6 +49,8 @@ export async function PUT(
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const sessionUser = session.user as Record<string, unknown>;
+  const gated = featureGate(sessionUser, "earnings_history", "Earnings history");
+  if (gated) return gated;
   const userRole = sessionUser.role as string;
   const orgId = sessionUser.organizationId as string;
 
@@ -112,6 +115,8 @@ export async function DELETE(
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const sessionUser = session.user as Record<string, unknown>;
+  const gated = featureGate(sessionUser, "earnings_history", "Earnings history");
+  if (gated) return gated;
   const userRole = sessionUser.role as string;
   const orgId = sessionUser.organizationId as string;
 

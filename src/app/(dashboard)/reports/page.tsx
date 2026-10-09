@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { formatGBP } from "@/lib/money";
 import { leaveYearBounds, leaveYearLabel } from "@/lib/leave-year";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
@@ -49,6 +50,8 @@ import {
   formatEmploymentType,
   isHoursAveragedEmploymentType,
 } from "@/lib/employment-types";
+import { hasFeatureForEnum } from "@/lib/planFeatures";
+import type { AnyPlan } from "@/lib/plans";
 
 type WeeklyHoursEntry = {
   id: string;
@@ -90,6 +93,8 @@ const REPORT_TABS = [
 ] as const;
 
 type ActiveTab = (typeof REPORT_TABS)[number];
+
+const DEFAULT_BRADFORD_THRESHOLD = 200;
 
 type Analytics = {
   year: number;
@@ -150,6 +155,8 @@ export default function ReportsPage() {
   // 14-day trial too.
   const hasAbsenceAnalytics =
     userPlan === "SCALE" || userPlan === "PRO" || userPlan === "TRIAL";
+  // Payroll and the statutory pay reports are Growth+ (planFeatures.ts).
+  const hasGrowthReports = hasFeatureForEnum((userPlan as AnyPlan | undefined) ?? null, "payroll_report");
 
   const [report, setReport] = useState<UKReport | null>(null);
   const [hasUkWorkforce, setHasUkWorkforce] = useState(true);
@@ -160,7 +167,10 @@ export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>(() =>
     hasAbsenceAnalytics ? "operations" : "analytics"
   );
-  const [threshold, setThreshold] = useState(200);
+  const [threshold, setThreshold] = useState(DEFAULT_BRADFORD_THRESHOLD);
+  const [thresholdDraft, setThresholdDraft] = useState(
+    String(DEFAULT_BRADFORD_THRESHOLD)
+  );
 
   // Links from emails open a tab directly, e.g. /reports?tab=right-to-work.
   useEffect(() => {
@@ -209,11 +219,11 @@ export default function ReportsPage() {
 
   const { toast } = useToast();
 
-  const fetchReport = useCallback(async () => {
+  const fetchReport = useCallback(async (bradfordThreshold: number) => {
     setLoading(true);
     try {
       const res = await fetch(
-        `/api/reports/uk-compliance?bradfordThreshold=${threshold}`
+        `/api/reports/uk-compliance?bradfordThreshold=${bradfordThreshold}`
       );
       if (res.ok) {
         setHasUkWorkforce(true);
@@ -231,11 +241,18 @@ export default function ReportsPage() {
       // ignore
     }
     setLoading(false);
-  }, [threshold]);
+  }, []);
 
   useEffect(() => {
-    void fetchReport();
+    void fetchReport(DEFAULT_BRADFORD_THRESHOLD);
   }, [fetchReport]);
+
+  function applyThreshold() {
+    const next = Math.max(0, parseInt(thresholdDraft || "0", 10) || 0);
+    setThreshold(next);
+    setThresholdDraft(String(next));
+    void fetchReport(next);
+  }
 
   useEffect(() => {
     if (
@@ -279,10 +296,11 @@ export default function ReportsPage() {
   }, [payrollFrom, payrollTo, toast]);
 
   useEffect(() => {
-    if (activeTab === "payroll" && !payrollReport) {
+    // A ?tab=payroll link on a lower plan shouldn't try to load it.
+    if (activeTab === "payroll" && !payrollReport && hasGrowthReports) {
       fetchPayroll();
     }
-  }, [activeTab, payrollReport, fetchPayroll]);
+  }, [activeTab, payrollReport, fetchPayroll, hasGrowthReports]);
 
   // The file comes from the API, which owns the columns (payroll-columns.ts),
   // so the download always matches the server's rows.
@@ -460,10 +478,12 @@ export default function ReportsPage() {
       adminOnly?: boolean;
       requiresUk?: boolean;
       requiresAnalytics?: boolean;
+      /** Plan feature the tab needs (planFeatures.ts); hidden without it. */
+      feature?: string;
     }[] = [
       { id: "operations", label: "Operations", requiresAnalytics: true },
       { id: "analytics", label: "Analytics" },
-      { id: "bradford", label: "Bradford Factor", requiresUk: true },
+      { id: "bradford", label: "Bradford Factor", requiresUk: true, feature: "bradford_factor" },
       {
         id: "absence-trends",
         label: "Absence trends",
@@ -475,13 +495,13 @@ export default function ReportsPage() {
         label: "Cover by location",
         requiresAnalytics: true,
       },
-      { id: "right-to-work", label: "Right to work", requiresUk: true },
+      { id: "right-to-work", label: "Right to work", requiresUk: true, feature: "right_to_work" },
       { id: "weekly-hours", label: "Weekly hours" },
       { id: "working-time", label: "Working time", requiresUk: true },
       { id: "holiday-usage", label: "Holiday usage", requiresUk: true },
-      { id: "ssp", label: "SSP liability", requiresUk: true },
-      { id: "parental", label: "Parental leave", requiresUk: true },
-      { id: "payroll", label: "Payroll export" },
+      { id: "ssp", label: "SSP liability", requiresUk: true, feature: "ssp_tracking" },
+      { id: "parental", label: "Parental leave", requiresUk: true, feature: "parental_leave_tracker" },
+      { id: "payroll", label: "Payroll export", feature: "payroll_report" },
       {
         id: "year-end",
         label: "Year-end rollover",
@@ -493,9 +513,10 @@ export default function ReportsPage() {
       (t) =>
         (!t.adminOnly || isAdmin) &&
         (!t.requiresUk || hasUkWorkforce) &&
-        (!t.requiresAnalytics || hasAbsenceAnalytics)
+        (!t.requiresAnalytics || hasAbsenceAnalytics) &&
+        (!t.feature || hasFeatureForEnum((userPlan as AnyPlan | undefined) ?? null, t.feature))
     );
-  }, [isAdmin, hasUkWorkforce, hasAbsenceAnalytics]);
+  }, [isAdmin, hasUkWorkforce, hasAbsenceAnalytics, userPlan]);
 
   useEffect(() => {
     const ids = tabs.map((t) => t.id);
@@ -640,6 +661,19 @@ export default function ReportsPage() {
               </button>
             ))}
           </div>
+          {userPlan && !hasGrowthReports && (
+            <p className="text-xs text-gray-500">
+              Bradford Factor, SSP, parental leave, right to work and the payroll
+              report with statutory pay are on the Growth plan.{" "}
+              {isAdmin ? (
+                <Link href="/settings/billing/change-plan" className="font-medium text-brand-600 hover:text-brand-700">
+                  See plans
+                </Link>
+              ) : (
+                "Ask an admin to upgrade."
+              )}
+            </p>
+          )}
           {/* Bradford Factor */}
           {activeTab === "bradford" && (
             <Card>
@@ -662,13 +696,11 @@ export default function ReportsPage() {
                       label="Threshold"
                       type="number"
                       min="0"
-                      value={String(threshold)}
-                      onChange={(e) =>
-                        setThreshold(parseInt(e.target.value || "0", 10))
-                      }
+                      value={thresholdDraft}
+                      onChange={(e) => setThresholdDraft(e.target.value)}
                       className="w-24"
                     />
-                    <Button size="sm" onClick={fetchReport}>
+                    <Button size="sm" onClick={applyThreshold}>
                       Apply
                     </Button>
                     <a
@@ -1298,7 +1330,7 @@ export default function ReportsPage() {
                                       );
                                       if (res.ok) {
                                         toast(`${kit.kind} days updated`, "success");
-                                        fetchReport();
+                                        void fetchReport(threshold);
                                       } else {
                                         const data = await res.json().catch(() => null);
                                         toast(data?.error ?? "Failed to update", "error");
@@ -1596,17 +1628,12 @@ export default function ReportsPage() {
                   <CardHeaderIntro>
                     <CardTitle>Payroll export</CardTitle>
                     <CardDescription>
-                      Approved leave in a date range with the legally
-                      compliant daily holiday pay rate (52-week average of
-                      gross earnings, zero-pay weeks excluded) multiplied
-                      by days taken. Rows show{" "}
-                      <code>captured_at_booking</code> when the rate was
-                      stored on the leave request or{" "}
-                      <code>recalculated</code> when computed now for
-                      annual leave requests lacking a stored rate. SSP
-                      absences show the SSP days in these dates, the daily
-                      rate and SSP pay; paternity leave shows Statutory
-                      Paternity Pay (SPP).
+                      Everything payroll needs for the period from approved
+                      leave: holiday pay at the 52-week average rate,
+                      statutory sick pay, maternity and adoption pay,
+                      paternity, shared parental and neonatal pay, and the
+                      holiday owed to anyone leaving. Each figure comes with
+                      its dates and how it was worked out.
                     </CardDescription>
                   </CardHeaderIntro>
                   {/* Only offered when there's leave in the period; an empty

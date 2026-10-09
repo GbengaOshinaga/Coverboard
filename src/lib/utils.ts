@@ -14,23 +14,24 @@ export function getInitials(name: string): string {
     .slice(0, 2);
 }
 
+/**
+ * A leave range the UK way: "20 Apr 2026", "13 – 16 May 2026",
+ * "28 May – 2 Jun 2026", "31 Dec 2026 – 2 Jan 2027". Leave dates are stored
+ * as UTC midnight, so they're read in UTC (otherwise they slip a day west of
+ * London).
+ */
 export function formatDateRange(start: Date, end: Date): string {
-  const startDate = new Date(start);
-  const endDate = new Date(end);
-  const opts: Intl.DateTimeFormatOptions = {
-    month: "short",
-    day: "numeric",
-  };
+  const s = new Date(start);
+  const e = new Date(end);
+  const f = (d: Date, opts: Intl.DateTimeFormatOptions) =>
+    d.toLocaleDateString("en-GB", { ...opts, timeZone: "UTC" });
+  const full: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" };
+  const ymd = (d: Date) => d.toISOString().slice(0, 10);
 
-  if (startDate.toDateString() === endDate.toDateString()) {
-    return startDate.toLocaleDateString("en-US", { ...opts, year: "numeric" });
-  }
-
-  if (startDate.getFullYear() === endDate.getFullYear()) {
-    return `${startDate.toLocaleDateString("en-US", opts)} – ${endDate.toLocaleDateString("en-US", { ...opts, year: "numeric" })}`;
-  }
-
-  return `${startDate.toLocaleDateString("en-US", { ...opts, year: "numeric" })} – ${endDate.toLocaleDateString("en-US", { ...opts, year: "numeric" })}`;
+  if (ymd(s) === ymd(e)) return f(s, full);
+  if (s.getUTCFullYear() !== e.getUTCFullYear()) return `${f(s, full)} – ${f(e, full)}`;
+  if (s.getUTCMonth() !== e.getUTCMonth()) return `${f(s, { day: "numeric", month: "short" })} – ${f(e, full)}`;
+  return `${f(s, { day: "numeric" })} – ${f(e, full)}`;
 }
 
 export function countWeekdays(start: Date, end: Date): number {

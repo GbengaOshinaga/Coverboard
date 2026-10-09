@@ -4,6 +4,7 @@ import { EmploymentType } from "@prisma/client";
 import { requireActiveSession } from "@/lib/require-active-session";
 import { leaveYearForOrg } from "@/lib/leave-year-server";
 import { rightToWorkAtRiskWhere } from "@/lib/right-to-work";
+import { sessionHasFeature } from "@/lib/plan-gate";
 import { prisma } from "@/lib/prisma";
 import { getUserLeaveBalances } from "@/lib/leave-balances";
 import { WhoIsOut } from "@/components/dashboard/who-is-out";
@@ -28,6 +29,9 @@ export default async function DashboardPage() {
   const currentUserId = (session.user as Record<string, unknown>).id as string;
   const userRole = (session.user as Record<string, unknown>).role as string;
   const canSeeComplianceAlerts = userRole === "ADMIN" || userRole === "MANAGER";
+  // Right-to-work checks are a Growth feature.
+  const canSeeRightToWork =
+    canSeeComplianceAlerts && sessionHasFeature(session.user as Record<string, unknown>, "right_to_work");
   const isAdmin = userRole === "ADMIN";
 
   const today = new Date();
@@ -90,7 +94,7 @@ export default async function DashboardPage() {
     // Current user's leave balances
     // Their team's current leave year.
     leaveYearForOrg(orgId).then((y) => getUserLeaveBalances(currentUserId, y)),
-    canSeeComplianceAlerts
+    canSeeRightToWork
       ? prisma.user.count({
           where: {
             organizationId: orgId,
@@ -99,7 +103,7 @@ export default async function DashboardPage() {
           },
         })
       : Promise.resolve(0),
-    canSeeComplianceAlerts
+    canSeeRightToWork
       ? prisma.user.count({
           where: {
             organizationId: orgId,
@@ -324,7 +328,7 @@ export default async function DashboardPage() {
         </Card>
       </Link>
 
-      {canSeeComplianceAlerts && rightToWorkRiskCount > 0 && (
+      {canSeeRightToWork && rightToWorkRiskCount > 0 && (
         <Card className="border-amber-200 bg-amber-50">
           <CardContent className="space-y-1 py-3 text-sm text-amber-800">
             <p>

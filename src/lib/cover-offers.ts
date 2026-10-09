@@ -235,7 +235,7 @@ export async function respondToCoverOffer(input: {
       status: 409,
       error:
         offer.status === "FILLED"
-          ? "Thanks — this shift has already been covered."
+          ? "Thanks — this shift doesn't need cover any more."
           : offer.status === "CANCELLED"
             ? "This request was withdrawn."
             : "You've already answered this request.",

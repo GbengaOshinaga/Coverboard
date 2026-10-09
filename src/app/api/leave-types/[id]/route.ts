@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { leaveTypeUpdateSchema } from "@/lib/validations";
+import { leaveTypeNameTaken } from "@/lib/leave-type-names";
 
 // Editing existing leave types is admin-gated but NOT plan-gated — even a
 // Free org can rename "Annual Leave" or tweak its default days. Creating
@@ -49,6 +50,11 @@ export async function PATCH(
   });
   if (!existing) {
     return NextResponse.json({ error: "Leave type not found" }, { status: 404 });
+  }
+
+  if (parsed.data.name !== undefined) {
+    const clash = await leaveTypeNameTaken(auth.orgId, parsed.data.name, id);
+    if (clash) return NextResponse.json({ error: clash }, { status: 409 });
   }
 
   // Empty-string countryCode is "clear the restriction" — normalise to null.

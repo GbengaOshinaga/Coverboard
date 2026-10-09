@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { headcountOverPlanError } from "@/lib/plan-headcount";
 import { getServerSession } from "next-auth";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
@@ -7,6 +8,7 @@ import { stripe } from "@/lib/stripe";
 import {
   STRIPE_PRICE_IDS,
   PLAN_DISPLAY_NAME,
+  PLAN_KEY_TO_ENUM,
   PLAN_MONTHLY_PRICE_GBP,
   planKeyFromPriceId,
   type StripePlanKey,
@@ -71,6 +73,13 @@ export async function POST(request: Request) {
   if (currentPlanKey === targetPlanKey) {
     return NextResponse.json({ error: "You are already on this plan." }, { status: 400 });
   }
+
+  const tooSmall = await headcountOverPlanError(
+    orgId,
+    PLAN_KEY_TO_ENUM[targetPlanKey],
+    PLAN_DISPLAY_NAME[targetPlanKey]
+  );
+  if (tooSmall) return NextResponse.json({ error: tooSmall }, { status: 409 });
 
   try {
     const sub = await stripe.subscriptions.retrieve(org.stripeSubscriptionId);

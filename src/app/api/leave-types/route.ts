@@ -6,6 +6,7 @@ import { leaveTypeSchema } from "@/lib/validations";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { hasFeatureForEnum } from "@/lib/planFeatures";
 import type { AnyPlan } from "@/lib/plans";
+import { leaveTypeNameTaken } from "@/lib/leave-type-names";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -62,6 +63,9 @@ export async function POST(request: Request) {
 
     const orgId = sessionUser.organizationId as string;
 
+    const clash = await leaveTypeNameTaken(orgId, parsed.data.name);
+    if (clash) return NextResponse.json({ error: clash }, { status: 409 });
+
     const leaveType = await prisma.leaveType.create({
       data: {
         ...parsed.data,
@@ -92,6 +96,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json(leaveType, { status: 201 });
   } catch (error) {
+    // Two saves of the same name at once: the unique index catches the second.
+    if ((error as { code?: string }).code === "P2002") {
+      return NextResponse.json({ error: "A leave type with that name already exists." }, { status: 409 });
+    }
     console.error("Create leave type error:", error);
     return NextResponse.json(
       { error: "Internal server error" },

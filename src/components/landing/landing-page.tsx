@@ -23,7 +23,7 @@ function HeroSection() {
 
       <div className="mx-auto max-w-4xl px-6 text-center">
         <div className="mb-6 text-sm font-semibold uppercase tracking-wider text-brand-700">
-          STAFF COVER FOR SHIFT-BASED TEAMS
+          STAFF COVER FOR UK SHIFT-BASED TEAMS
         </div>
 
         <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight text-gray-900 leading-[1.1]">
@@ -297,8 +297,8 @@ const findCoverPoints = [
 // Kept deliberately quiet: cover is the pitch. Per-plan detail lives in pricing.
 const hrEssentials = [
   "Holiday entitlement",
-  "statutory leave & SSP",
-  "payroll export",
+  "all UK statutory leave types",
+  "fit notes",
   "6-year holiday records",
   "audit trail",
 ];
@@ -413,6 +413,107 @@ function FindCoverSection() {
   );
 }
 
+// Mirrors the payroll report (src/lib/payroll-columns.ts). Figures use the
+// 2026/27 rates: SSP £123.25 a week (5-day week, so £24.65 a day), SMP and
+// SPP £194.32 a week, paid by calendar day (÷ 7). Keep claims to what the
+// report really works out.
+const payRows = [
+  { name: "Priya S.", type: "SSP", detail: "6 qualifying days", amount: "£147.90" },
+  { name: "Amara O.", type: "SMP", detail: "31 days at the flat rate", amount: "£860.56" },
+  { name: "Tom B.", type: "Paternity pay", detail: "2 weeks from 12 Oct", amount: "£388.64" },
+  { name: "Sam R.", type: "Leaver", detail: "4.5 days' holiday owed", amount: "£432.00" },
+];
+
+const statutoryPayPoints = [
+  {
+    title: "Sick pay from the first day off",
+    description:
+      "Qualifying days come from their working pattern, linked spells are joined up, and the right weekly rate is applied.",
+  },
+  {
+    title: "Maternity, adoption, paternity, shared parental and neonatal pay",
+    description:
+      "Earnings and service tests at the right week, the 90% weeks then the flat rate, and the weeks left to share.",
+  },
+  {
+    title: "Holiday pay, including for leavers",
+    description:
+      "A 52-week average rate on every day of holiday, and the holiday owed to anyone whose last day falls in the period.",
+  },
+  {
+    title: "Ready for your payroll",
+    description:
+      "One report per pay period, as CSV or Excel, with the dates and basis behind every figure.",
+  },
+];
+
+function StatutoryPaySection() {
+  return (
+    <section id="statutory-pay" className="py-20 md:py-28 bg-white">
+      <div className="mx-auto max-w-6xl px-6 grid md:grid-cols-2 gap-10 md:gap-14 items-center">
+        <div className="md:order-2">
+          <p className="text-sm font-semibold text-brand-600 mb-3">Statutory pay</p>
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight">
+            The pay that goes with the leave, worked out.
+          </h2>
+          <p className="mt-4 text-gray-600 text-lg">
+            Book the leave and Coverboard works out who qualifies, which weeks are paid and at
+            what rate. Each pay period, the payroll report lists every statutory payment, ready
+            for your payroll provider.
+          </p>
+          <ul className="mt-8 space-y-5">
+            {statutoryPayPoints.map((p) => (
+              <li key={p.title} className="flex gap-3">
+                <Check className="mt-0.5 h-5 w-5 shrink-0 text-brand-600" />
+                <div>
+                  <h3 className="font-semibold text-gray-900">{p.title}</h3>
+                  <p className="mt-0.5 text-sm text-gray-600 leading-relaxed">{p.description}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <Link
+            href="/guides/uk-statutory-leave-types"
+            className="mt-8 inline-flex items-center gap-1 text-sm font-medium text-brand-600 hover:text-brand-700"
+          >
+            UK statutory leave types explained
+            <ArrowRight size={14} aria-hidden />
+          </Link>
+        </div>
+
+        <div className="md:order-1 rounded-lg border border-gray-200 bg-white p-5" aria-hidden>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium text-gray-500">Payroll report</p>
+              <p className="mt-1 text-sm font-semibold text-gray-900">1 – 31 October 2026</p>
+            </div>
+            <div className="flex gap-1.5">
+              <span className="rounded-md border border-gray-200 px-2 py-0.5 text-[11px] font-medium text-gray-600">CSV</span>
+              <span className="rounded-md border border-gray-200 px-2 py-0.5 text-[11px] font-medium text-gray-600">Excel</span>
+            </div>
+          </div>
+          <ul className="mt-4 divide-y divide-gray-100 text-sm">
+            {payRows.map((r) => (
+              <li key={r.name} className="flex items-center justify-between gap-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-gray-900">
+                    {r.name} <span className="text-xs text-gray-500">· {r.type}</span>
+                  </p>
+                  <p className="text-xs text-gray-500">{r.detail}</p>
+                </div>
+                <span className="shrink-0 font-semibold tabular-nums text-gray-900">{r.amount}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-4 rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-600">
+            Every figure comes with its dates and basis, so your payroll provider can check it.
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 const steps = [
   {
     step: "01",
@@ -508,38 +609,6 @@ function CTASection() {
   );
 }
 
-const COUNTRIES = [
-  "UK",
-  "Nigeria",
-  "Kenya",
-  "South Africa",
-  "Ghana",
-  "Brazil",
-  "Mexico",
-  "Philippines",
-  "Indonesia",
-];
-
-function CountriesSection() {
-  return (
-    <section className="py-10 bg-white border-t border-gray-100">
-      <div className="mx-auto max-w-4xl px-6 text-center">
-        <p className="text-sm font-semibold text-gray-900">
-          Supporting teams across multiple countries
-        </p>
-        <p className="mt-2 text-sm text-gray-500">{COUNTRIES.join(" · ")}</p>
-        <Link
-          href="/guides/uk-statutory-leave-types"
-          className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-brand-600 hover:text-brand-700"
-        >
-          UK statutory compliance
-          <ArrowRight size={14} aria-hidden />
-        </Link>
-      </div>
-    </section>
-  );
-}
-
 export function LandingPage() {
   return (
     <div className="min-h-screen">
@@ -547,10 +616,10 @@ export function LandingPage() {
       <HeroSection />
       <FeaturesSection />
       <FindCoverSection />
+      <StatutoryPaySection />
       <HowItWorksSection />
       <PricingSection />
       <CTASection />
-      <CountriesSection />
       <LandingFooter />
     </div>
   );

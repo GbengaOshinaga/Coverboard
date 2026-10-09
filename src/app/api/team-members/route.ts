@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { sessionHasFeature } from "@/lib/plan-gate";
 import { qualifyingDaysFor } from "@/lib/working-week-server";
 import { ftesFor } from "@/lib/fte-server";
 import { unusablePasswordHash } from "@/lib/invite-links";
@@ -65,7 +66,20 @@ export async function GET(request: Request) {
   });
 
   const ftes = await ftesFor(orgId, members);
-  return NextResponse.json(members.map((m) => ({ ...m, fte: ftes.get(m.id) })));
+  // Right-to-work status is for admins and managers, on plans that include it.
+  const sessionUser = session.user as Record<string, unknown>;
+  const showRightToWork =
+    (sessionUser.role === "ADMIN" || sessionUser.role === "MANAGER") &&
+    sessionHasFeature(sessionUser, "right_to_work");
+  return NextResponse.json(
+    members.map((m) => ({
+      ...m,
+      ...(showRightToWork
+        ? {}
+        : { rightToWorkVerified: null, rightToWorkCheckedOn: null, rightToWorkExpiresOn: null }),
+      fte: ftes.get(m.id),
+    }))
+  );
 }
 
 export async function POST(request: Request) {
@@ -146,6 +160,10 @@ export async function POST(request: Request) {
         );
       }
 
+      if (role === "ADMIN" && userRole !== "ADMIN") {
+        return NextResponse.json({ error: "Only an admin can add another admin." }, { status: 403 });
+      }
+
       if (role === "ADMIN") {
         const maxAdmins = maxAdminsForPlan(org.plan);
         if (Number.isFinite(maxAdmins) && adminCount >= maxAdmins) {
@@ -176,7 +194,10 @@ export async function POST(request: Request) {
         daysWorkedPerWeek,
         qualifyingDaysPerWeek: qualifyingDaysFor(daysWorkedPerWeek),
         fteRatio,
-        rightToWorkVerified: rightToWorkVerified ?? null,
+        // A Growth feature: not recorded on lower plans.
+        rightToWorkVerified: sessionHasFeature(session.user as Record<string, unknown>, "right_to_work")
+          ? rightToWorkVerified ?? null
+          : null,
         department: department ?? null,
         countryCode,
         workCountry,

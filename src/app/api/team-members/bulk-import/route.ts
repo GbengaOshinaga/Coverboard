@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { sessionHasFeature } from "@/lib/plan-gate";
 import { qualifyingDaysFor } from "@/lib/working-week-server";
 import { unusablePasswordHash } from "@/lib/invite-links";
 import { getServerSession } from "next-auth";
@@ -29,6 +30,7 @@ export async function POST(request: Request) {
   }
 
   const sessionUser = session.user as Record<string, unknown>;
+  const canRecordRightToWork = sessionHasFeature(sessionUser, "right_to_work");
   const userRole = sessionUser.role as string;
   const orgId = sessionUser.organizationId as string;
 
@@ -113,6 +115,10 @@ export async function POST(request: Request) {
 
   // Enforce the plan-level admin seat cap across the whole batch.
   const newAdminCount = valid.filter((v) => v.data.role === "ADMIN").length;
+  // Only admins add admins.
+  if (newAdminCount > 0 && userRole !== "ADMIN") {
+    return NextResponse.json({ error: "Only an admin can add admins. Change those rows to Manager or Member." }, { status: 403 });
+  }
   const [org, currentAdmins, currentEmployees] = await Promise.all([
     prisma.organization.findUnique({
       where: { id: orgId },
@@ -205,7 +211,8 @@ export async function POST(request: Request) {
           daysWorkedPerWeek: data.daysWorkedPerWeek,
           qualifyingDaysPerWeek: qualifyingDaysFor(data.daysWorkedPerWeek),
           fteRatio: data.fteRatio,
-          rightToWorkVerified: data.rightToWorkVerified ?? null,
+          // A Growth feature: not recorded on lower plans.
+          rightToWorkVerified: canRecordRightToWork ? data.rightToWorkVerified ?? null : null,
           department: data.department ?? null,
           countryCode: data.countryCode,
           workCountry: data.workCountry,

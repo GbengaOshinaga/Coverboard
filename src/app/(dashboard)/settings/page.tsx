@@ -3,6 +3,8 @@
 import {
   CALENDAR_LEAVE_YEAR,
   companyCarryOverExpiry,
+  expiryDateError,
+  lastExpiryDay,
   leaveYearBounds,
   leaveYearLabel,
   leaveYearOf,
@@ -75,6 +77,9 @@ function describeLeaveYear(start: LeaveYearStart, opts: { short?: boolean } = {}
   const { start: from, end: to } = leaveYearBounds(year, start);
   return `${leaveYearLabel(year, start)}, ${fmtUtcDate(from)} to ${fmtUtcDate(to)}`;
 }
+
+/** A typed number as is (blank is NaN), so the API can refuse 12.5 rather than parseInt cutting it to 12. */
+const typedNumber = (v: string) => (v.trim() === "" ? NaN : Number(v));
 
 const MONTH_OPTIONS = [
   "January", "February", "March", "April", "May", "June",
@@ -365,7 +370,7 @@ export default function SettingsPage() {
     }
   }
 
-  async function saveOrgSettings(next: Partial<OrgSettings>): Promise<boolean> {
+  async function saveOrgSettings(next: Partial<OrgSettings>, savedMessage = "Settings updated"): Promise<boolean> {
     if (!orgSettings) return false;
     const previous = orgSettings;
     setOrgSettings({ ...orgSettings, ...next });
@@ -377,10 +382,11 @@ export default function SettingsPage() {
     if (!res.ok) {
       // Show what's actually saved, not the change that failed.
       setOrgSettings(previous);
-      toast("Failed to save settings", "error");
+      const data = await res.json().catch(() => null);
+      toast(data?.error ?? "Failed to save settings", "error");
       return false;
     }
-    toast("Settings updated", "success");
+    toast(savedMessage, "success");
     return true;
   }
 
@@ -448,10 +454,10 @@ export default function SettingsPage() {
         name: editName,
         color: editColor,
         isPaid: editIsPaid,
-        defaultDays: parseInt(editDays, 10),
+        defaultDays: typedNumber(editDays),
         category: editCategory,
         requiresEvidence: editRequiresEvidence,
-        minNoticeDays: parseInt(editMinNoticeDays, 10) || 0,
+        minNoticeDays: typedNumber(editMinNoticeDays) || 0,
         applyProRata: editApplyProRata,
         countryCode: editCountryCode.trim() || null,
       }),
@@ -508,8 +514,8 @@ export default function SettingsPage() {
       body: JSON.stringify({
         leaveTypeId: newPolicyType,
         countryCode: newPolicyCountry.toUpperCase(),
-        annualAllowance: parseInt(newPolicyAllowance, 10),
-        carryOverMax: parseInt(newPolicyCarryOver, 10),
+        annualAllowance: typedNumber(newPolicyAllowance),
+        carryOverMax: typedNumber(newPolicyCarryOver),
       }),
     });
     if (res.ok) {
@@ -538,9 +544,11 @@ export default function SettingsPage() {
     if (res.ok) {
       toast("Policy updated", "success");
       fetchPolicies();
-    } else {
-      toast("Failed to update", "error");
+      return true;
     }
+    const data = await res.json().catch(() => null);
+    toast(data?.error ?? "Failed to update", "error");
+    return false;
   }
 
   async function handleDeletePolicy(id: string) {
@@ -565,10 +573,10 @@ export default function SettingsPage() {
         name: newName,
         color: newColor,
         isPaid: newIsPaid,
-        defaultDays: parseInt(newDays),
+        defaultDays: typedNumber(newDays),
         category: newCategory,
         requiresEvidence: newRequiresEvidence,
-        minNoticeDays: parseInt(newMinNoticeDays, 10) || 0,
+        minNoticeDays: typedNumber(newMinNoticeDays) || 0,
         applyProRata: newApplyProRata,
         countryCode: newCountryCode.trim() || null,
       }),
@@ -925,7 +933,9 @@ export default function SettingsPage() {
                     onChange={(e) =>
                       saveOrgSettings({
                         ukCarryOverEnabled: e.target.checked,
-                        ukCarryOverMax: e.target.checked ? Math.min(8, Math.max(orgSettings.ukCarryOverMax, 1)) : 0,
+                        // Off keeps the limit for next time. A limit of 0 (saved
+                        // when switching off used to clear it) starts at 1.
+                        ...(e.target.checked && orgSettings.ukCarryOverMax === 0 ? { ukCarryOverMax: 1 } : {}),
                       })
                     }
                   />
@@ -945,8 +955,12 @@ export default function SettingsPage() {
                     value={carryOverMaxDraft ?? String(orgSettings.ukCarryOverMax)}
                     onChange={(e) => setCarryOverMaxDraft(e.target.value)}
                     onBlur={(e) => {
-                      const val = Math.min(8, Math.max(0, parseInt(e.target.value || "0", 10) || 0));
-                      setCarryOverMaxDraft(String(val));
+                      const val = Number(e.target.value);
+                      if (e.target.value.trim() === "" || !Number.isInteger(val) || val < 0 || val > 8) {
+                        toast("Carry-over max has to be a whole number of days from 0 to 8.", "error");
+                        setCarryOverMaxDraft(String(orgSettings.ukCarryOverMax));
+                        return;
+                      }
                       if (val !== orgSettings.ukCarryOverMax) {
                         saveOrgSettings({ ukCarryOverMax: val });
                       }
@@ -957,11 +971,20 @@ export default function SettingsPage() {
                       id="carryOverExpiryMonth"
                       label="Expiry month"
                       value={String(orgSettings.ukCarryOverExpiryMonth)}
-                      onChange={(e) =>
-                        saveOrgSettings({
-                          ukCarryOverExpiryMonth: parseInt(e.target.value, 10),
-                        })
-                      }
+                      onChange={(e) => {
+                        const month = parseInt(e.target.value, 10);
+                        const last = lastExpiryDay(month);
+                        if (orgSettings.ukCarryOverExpiryDay > last) {
+                          const label = MONTH_OPTIONS.find((o) => o.value === String(month))?.label ?? "";
+                          setExpiryDayDraft(String(last));
+                          void saveOrgSettings(
+                            { ukCarryOverExpiryMonth: month, ukCarryOverExpiryDay: last },
+                            `Expiry moved to ${last} ${label}, the last day it can fall on in ${label}.`
+                          );
+                        } else {
+                          void saveOrgSettings({ ukCarryOverExpiryMonth: month });
+                        }
+                      }}
                       options={MONTH_OPTIONS}
                     />
                     <Input
@@ -969,12 +992,20 @@ export default function SettingsPage() {
                       label="Expiry day"
                       type="number"
                       min="1"
-                      max="31"
+                      max={String(lastExpiryDay(orgSettings.ukCarryOverExpiryMonth))}
                       value={expiryDayDraft ?? String(orgSettings.ukCarryOverExpiryDay)}
                       onChange={(e) => setExpiryDayDraft(e.target.value)}
                       onBlur={(e) => {
-                        const val = Math.min(31, Math.max(1, parseInt(e.target.value || "1", 10) || 1));
-                        setExpiryDayDraft(String(val));
+                        const val = Number(e.target.value);
+                        const problem =
+                          e.target.value.trim() === ""
+                            ? expiryDateError(orgSettings.ukCarryOverExpiryMonth, NaN)
+                            : expiryDateError(orgSettings.ukCarryOverExpiryMonth, val);
+                        if (problem) {
+                          toast(problem, "error");
+                          setExpiryDayDraft(String(orgSettings.ukCarryOverExpiryDay));
+                          return;
+                        }
                         if (val !== orgSettings.ukCarryOverExpiryDay) {
                           saveOrgSettings({ ukCarryOverExpiryDay: val });
                         }
@@ -1313,12 +1344,17 @@ export default function SettingsPage() {
                             min="0"
                             max="365"
                             defaultValue={p.annualAllowance}
-                            onBlur={(e) => {
-                              const next = parseInt(e.target.value, 10);
-                              if (!isNaN(next) && next !== p.annualAllowance) {
-                                handleUpdatePolicy(p.id, {
-                                  annualAllowance: next,
-                                });
+                            onBlur={async (e) => {
+                              const input = e.currentTarget;
+                              // Number, not parseInt: 12.5 has to be refused, not saved as 12.
+                              const next = typedNumber(input.value);
+                              // A refused or empty value goes back to what's saved.
+                              if (isNaN(next)) {
+                                input.value = String(p.annualAllowance);
+                                return;
+                              }
+                              if (next !== p.annualAllowance && !(await handleUpdatePolicy(p.id, { annualAllowance: next }))) {
+                                input.value = String(p.annualAllowance);
                               }
                             }}
                             className="w-20 rounded border border-gray-200 px-2 py-1 text-right font-mono text-sm focus:border-brand-500 focus:outline-none"
@@ -1330,12 +1366,17 @@ export default function SettingsPage() {
                             min="0"
                             max="365"
                             defaultValue={p.carryOverMax}
-                            onBlur={(e) => {
-                              const next = parseInt(e.target.value, 10);
-                              if (!isNaN(next) && next !== p.carryOverMax) {
-                                handleUpdatePolicy(p.id, {
-                                  carryOverMax: next,
-                                });
+                            onBlur={async (e) => {
+                              const input = e.currentTarget;
+                              // Number, not parseInt: 12.5 has to be refused, not saved as 12.
+                              const next = typedNumber(input.value);
+                              // A refused or empty value goes back to what's saved.
+                              if (isNaN(next)) {
+                                input.value = String(p.carryOverMax);
+                                return;
+                              }
+                              if (next !== p.carryOverMax && !(await handleUpdatePolicy(p.id, { carryOverMax: next }))) {
+                                input.value = String(p.carryOverMax);
                               }
                             }}
                             className="w-20 rounded border border-gray-200 px-2 py-1 text-right font-mono text-sm focus:border-brand-500 focus:outline-none"

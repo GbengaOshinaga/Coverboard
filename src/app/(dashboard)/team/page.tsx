@@ -5,6 +5,8 @@ import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { rightToWorkAtRisk, rightToWorkStatus } from "@/lib/right-to-work";
+import { hasFeatureForEnum } from "@/lib/planFeatures";
+import type { AnyPlan } from "@/lib/plans";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/select";
@@ -65,7 +67,7 @@ function rtwAtRisk(m: {
 }
 
 export default function TeamPage() {
-  const { data: session } = useSession();
+  const { data: session, update: updateSession } = useSession();
   const searchParams = useSearchParams();
   const earningsFilter = searchParams.get("earnings");
   const [members, setMembers] = useState<Member[]>([]);
@@ -107,6 +109,9 @@ export default function TeamPage() {
     return best ?? (user?.countryCode as string | undefined) ?? "GB";
   }, [members, user]);
   const canManage = userRole === "ADMIN" || userRole === "MANAGER";
+  // Right-to-work checks are a Growth feature.
+  const showRightToWork =
+    canManage && hasFeatureForEnum((user?.plan as AnyPlan | undefined) ?? null, "right_to_work");
   const { toast } = useToast();
 
   // People who've left are kept for 6 years (holiday records); listed only on request.
@@ -353,6 +358,10 @@ export default function TeamPage() {
     }
 
     toast("Team member updated", "success");
+    // Editing yourself: refresh the session so the header shows the new name.
+    if (data.id === (session?.user as Record<string, unknown> | undefined)?.id) {
+      void updateSession();
+    }
     setEditMember(undefined);
     fetchMembers();
   }
@@ -537,7 +546,7 @@ export default function TeamPage() {
               key={member.id}
               member={member}
               regionsEnabled={regionsEnabled}
-              showRightToWorkAlerts={canManage}
+              showRightToWorkAlerts={showRightToWork}
               showViewLink={canManage}
               onEdit={canManage ? setEditMember : undefined}
               onAssignRegion={
@@ -548,7 +557,7 @@ export default function TeamPage() {
         </div>
       )}
 
-      {canManage && members.some(rtwAtRisk) && (
+      {showRightToWork && members.some(rtwAtRisk) && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <p>
             Compliance alert: some employees have no valid right-to-work check
@@ -579,6 +588,7 @@ export default function TeamPage() {
           }
           onSubmit={handleAddMember}
           onCancel={() => setShowForm(false)}
+          canSetRoles={userRole === "ADMIN"}
         />
       </Dialog>
 
@@ -597,6 +607,7 @@ export default function TeamPage() {
             }}
             onSubmit={handleEditMember}
             onCancel={() => setEditMember(undefined)}
+            canSetRoles={userRole === "ADMIN"}
           />
         )}
       </Dialog>

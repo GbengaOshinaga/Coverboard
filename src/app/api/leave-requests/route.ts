@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { sessionHasFeature, withoutGatedPay } from "@/lib/plan-gate";
 import { withCurrentSmp } from "@/lib/smp-request";
 import { countWorkingDays, resolveWorkingWeek, weekdaysFromPatterns } from "@/lib/working-week";
 import { getServerSession } from "next-auth";
@@ -114,12 +115,18 @@ export async function GET(request: Request) {
   // Days they'd have worked, on their working week when the leave starts —
   // the same count as their balance and the parental tracker (a 4-day
   // worker's four Mon–Fri weeks are 16 days, not 20).
-  const current = await withCurrentSmp(visibleRequests);
+  // Statutory pay figures are a Growth feature: not worked out, and taken
+  // out of the response, on lower plans.
+  const showPay = sessionHasFeature(sessionUser, "parental_leave_tracker");
+  const current = showPay ? await withCurrentSmp(visibleRequests) : visibleRequests;
   return NextResponse.json(
     current.map((r) => {
       const { workPatterns, daysWorkedPerWeek, ...user } = r.user;
       const week = resolveWorkingWeek(weekdaysFromPatterns(workPatterns, r.startDate), daysWorkedPerWeek);
-      return { ...r, user, workingDays: countWorkingDays(r.startDate, r.endDate, week.weekdays) };
+      return withoutGatedPay(
+        { ...r, user, workingDays: countWorkingDays(r.startDate, r.endDate, week.weekdays) },
+        sessionUser
+      );
     })
   );
 }
@@ -186,13 +193,13 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       {
-        ...result.request,
+        ...withoutGatedPay(result.request, sessionUser),
         balanceWarning: result.balanceWarning,
-        sspInfo: result.sspInfo,
-        smpInfo: result.smpInfo,
-        shppInfo: result.shppInfo,
-        sppInfo: result.sppInfo,
-        sncpInfo: result.sncpInfo,
+        // Pay worked out at booking only on plans that include it (Growth+).
+        sspInfo: sessionHasFeature(sessionUser, "ssp_tracking") ? result.sspInfo : null,
+        ...(sessionHasFeature(sessionUser, "parental_leave_tracker")
+          ? { smpInfo: result.smpInfo, shppInfo: result.shppInfo, sppInfo: result.sppInfo, sncpInfo: result.sncpInfo }
+          : { smpInfo: null, shppInfo: null, sppInfo: null, sncpInfo: null }),
         firstRequest: result.firstRequest,
       },
       { status: 201 }
