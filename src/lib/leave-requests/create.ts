@@ -13,7 +13,7 @@ import { getDailyHolidayPayRateForUser } from "@/lib/holidayPay";
 import { birthPayKind, shppClaimError, type BirthPayKind } from "@/lib/smp-dates";
 import { checkOnBehalf, isSicknessLeaveTypeName, noticeError } from "./rules";
 import { keepingInTouchError } from "@/lib/keeping-in-touch";
-import { uplError } from "@/lib/unpaid-parental";
+import { hasIrregularHours, uplError } from "@/lib/unpaid-parental";
 import { leaveYearForOrg } from "@/lib/leave-year-server";
 import {
   computeShpp,
@@ -300,10 +300,7 @@ export async function createLeaveRequest(
       weeksTakenElsewhere: child.weeksTakenElsewhere,
       daysPerWeek: workingWeek.daysPerWeek,
       weekdays: workingWeek.weekdays,
-      irregularHours:
-        parent?.employmentType === "ZERO_HOURS" ||
-        parent?.employmentType === "VARIABLE_HOURS" ||
-        !((parent?.daysWorkedPerWeek ?? 0) >= 1),
+      irregularHours: hasIrregularHours(parent),
     });
     if (uplProblem) return { ok: false, status: 400, error: uplProblem };
   }
@@ -551,10 +548,8 @@ export async function createLeaveRequest(
       organizationId: orgId,
       requestId: leaveRequest.id,
       userName: leaveRequest.user.name,
-      leaveTypeName: leaveRequest.leaveType.name,
       startDate,
       endDate,
-      note: note ?? null,
       daysRequested,
     }).catch((err) => console.error("Slack notification error:", err));
 

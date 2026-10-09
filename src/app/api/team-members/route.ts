@@ -13,6 +13,7 @@ import { hasUkStatutoryLeaveTypes } from "@/lib/uk-statutory";
 import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
 import { maxAdminsForPlan, maxEmployeesForPlan } from "@/lib/plans";
+import { planForLimits } from "@/lib/plan-headcount";
 
 export async function GET(request: Request) {
   const session = await getServerSession(authOptions);
@@ -137,10 +138,7 @@ export async function POST(request: Request) {
     }
 
     const [org, adminCount, employeeCount] = await Promise.all([
-      prisma.organization.findUnique({
-        where: { id: orgId },
-        select: { plan: true },
-      }),
+      planForLimits(orgId),
       prisma.user.count({
         where: { organizationId: orgId, role: "ADMIN", isActive: true },
       }),
@@ -154,7 +152,7 @@ export async function POST(request: Request) {
       if (Number.isFinite(maxEmployees) && employeeCount >= maxEmployees) {
         return NextResponse.json(
           {
-            error: `Your plan allows up to ${maxEmployees} team members. Upgrade to add more.`,
+            error: `${org.label} allows up to ${maxEmployees} team members. Upgrade to add more.`,
           },
           { status: 403 }
         );
@@ -169,7 +167,7 @@ export async function POST(request: Request) {
         if (Number.isFinite(maxAdmins) && adminCount >= maxAdmins) {
           return NextResponse.json(
             {
-              error: `Your plan allows up to ${maxAdmins} admin user${
+              error: `${org.label} allows up to ${maxAdmins} admin user${
                 maxAdmins === 1 ? "" : "s"
               }. Please upgrade or change an existing admin's role first.`,
             },

@@ -123,10 +123,6 @@ async function handleBlockAction(payload: {
           fields: [
             {
               type: "mrkdwn",
-              text: `*Type:*\n${result.request.leaveTypeName}`,
-            },
-            {
-              type: "mrkdwn",
               text: `*Days:*\n${result.request.daysRequested}`,
             },
           ],

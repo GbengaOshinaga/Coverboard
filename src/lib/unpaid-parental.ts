@@ -79,11 +79,29 @@ export function uplWholeWeeksError(input: {
   irregularHours?: boolean;
 }): string | null {
   const { daysPerWeek } = input;
-  if (!input.weekdays && (daysPerWeek !== 5 || input.irregularHours)) return null;
+  if (!uplWholeWeeksChecked(input)) return null;
   const days = countWorkingDays(input.request.startDate, input.request.endDate, input.weekdays);
   if (days > 0 && days % daysPerWeek === 0) return null;
   const week = daysPerWeek === 1 ? "1 working day" : `${daysPerWeek} working days`;
   return `Unpaid parental leave has to be taken in whole weeks. A week here is ${week}, and this booking is ${days}. Single days are only allowed when the child gets ${DISABILITY_BENEFITS} – tick that on the child if so.`;
+}
+
+/** Whether whole weeks can be checked for this working week (see uplWholeWeeksError). */
+export function uplWholeWeeksChecked(input: {
+  daysPerWeek: number;
+  weekdays: number[] | null;
+  irregularHours?: boolean;
+}): boolean {
+  return !!input.weekdays || (input.daysPerWeek === 5 && !input.irregularHours);
+}
+
+/** Zero-hours, variable-hours, or no days a week recorded: no fixed week. */
+export function hasIrregularHours(person: { employmentType: string | null; daysWorkedPerWeek: number | null } | null): boolean {
+  return (
+    person?.employmentType === "ZERO_HOURS" ||
+    person?.employmentType === "VARIABLE_HOURS" ||
+    !((person?.daysWorkedPerWeek ?? 0) >= 1)
+  );
 }
 
 /** The child's parental-leave year containing a date (first and last day). */
@@ -196,6 +214,50 @@ export function uplError(input: {
         0,
         used.capThisYear - before.daysThisYear
       )} days left that year.`;
+    }
+  }
+  return null;
+}
+
+/**
+ * Rechecks the leave already booked for a child against its changed details
+ * (dates, weeks taken elsewhere, disability benefit): every year within
+ * 4 weeks, 18 weeks in total, and whole weeks unless a disability benefit is
+ * ticked. Null when it all still fits. Bookings outside the child's dates are
+ * refused separately (childChangeError).
+ */
+export function uplBookedLeaveError(input: {
+  dateOfBirth: Date;
+  placedOn?: Date | null;
+  disabilityBenefit: boolean;
+  serviceStartDate: Date | null;
+  bookings: Range[];
+  weeksTakenElsewhere: number;
+  daysPerWeek: number;
+  weekdays: number[] | null;
+  irregularHours?: boolean;
+}): string | null {
+  if (input.bookings.length === 0) return null;
+  const f = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  const fix = "Cancel or shorten a booking first.";
+  if (!input.disabilityBenefit) {
+    const split = input.bookings.find((b) => uplWholeWeeksError({ ...input, request: b }));
+    if (split) {
+      return `The leave booked for ${f(split.startDate)} – ${f(split.endDate)} isn't in whole weeks, which is only allowed when the child gets ${DISABILITY_BENEFITS}. Change that booking first.`;
+    }
+  }
+  const entitledFrom = uplEntitledFrom(input, input.serviceStartDate);
+  const sorted = [...input.bookings].sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
+  const first = uplYearContaining(sorted[0].startDate, entitledFrom);
+  const total = uplUsage({ ...input, year: first });
+  if (total.daysTotal > total.capTotal) {
+    return `With this change the leave booked for this child, plus weeks taken elsewhere, comes to ${total.daysTotal} working days, over the ${UPL_WEEKS_PER_CHILD} weeks (${total.capTotal} days) allowed. ${fix}`;
+  }
+  const lastEnd = sorted.reduce((m, b) => (b.endDate > m ? b.endDate : m), sorted[0].endDate);
+  for (let year = first; year.start <= lastEnd; year = uplYearContaining(new Date(year.end.getTime() + 86_400_000), entitledFrom)) {
+    const used = uplUsage({ ...input, year });
+    if (used.daysThisYear > used.capThisYear) {
+      return `With this change ${used.daysThisYear} working days of the leave booked for this child fall in the year ${f(year.start)} – ${f(year.end)}, over the ${UPL_WEEKS_PER_CHILD_PER_YEAR} weeks (${used.capThisYear} days) allowed in a year. ${fix}`;
     }
   }
   return null;

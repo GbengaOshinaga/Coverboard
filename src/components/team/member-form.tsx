@@ -49,10 +49,13 @@ export function MemberForm({
   onSubmit,
   onCancel,
   canSetRoles = true,
+  isOnlyAdmin = false,
 }: {
   initialData?: MemberData;
   /** Admins only: managers can't change a role or add an admin. */
   canSetRoles?: boolean;
+  /** The team's only admin: their role is locked (the server refuses it too). */
+  isOnlyAdmin?: boolean;
   /**
    * Active locations, when the team uses them. Shown when adding someone, so
    * they don't land unassigned and silently miss cover.
@@ -157,14 +160,21 @@ export function MemberForm({
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Select
-          id="memberRole"
-          label="Role"
-          options={canSetRoles || isEdit ? roleOptions : roleOptions.filter((o) => o.value !== "ADMIN")}
-          value={role}
-          onChange={(e) => setRole(e.target.value)}
-          disabled={isEdit && !canSetRoles}
-        />
+        <div>
+          <Select
+            id="memberRole"
+            label="Role"
+            options={canSetRoles || isEdit ? roleOptions : roleOptions.filter((o) => o.value !== "ADMIN")}
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+            disabled={isEdit && (!canSetRoles || isOnlyAdmin)}
+          />
+          {isEdit && isOnlyAdmin && (
+            <p className="mt-1 text-xs text-gray-500">
+              This is the team&apos;s only admin. Make someone else an admin first.
+            </p>
+          )}
+        </div>
         <Select
           id="memberType"
           label="Type"

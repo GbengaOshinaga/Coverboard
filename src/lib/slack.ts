@@ -106,6 +106,9 @@ export async function postSlackCommandResponse(
 
 /**
  * Look up a Coverboard user by their Slack email within an organization.
+ * Only people still on the team: someone marked as left can't approve,
+ * book or check balances from a Slack account they still have. Their role is
+ * read here each time, so a demotion applies at once.
  */
 export async function resolveSlackUser(
   slackUserId: string,
@@ -119,7 +122,7 @@ export async function resolveSlackUser(
     if (!email) return null;
 
     const user = await prisma.user.findFirst({
-      where: { email, organizationId },
+      where: { email, organizationId, isActive: true },
       include: { organization: true },
     });
 

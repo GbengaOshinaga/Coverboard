@@ -1,6 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { eighteenthBirthday, uplEntitledFrom, uplError, uplUsage, uplWholeWeeksError, uplYearContaining } from "./unpaid-parental";
+import {
+  eighteenthBirthday,
+  hasIrregularHours,
+  uplBookedLeaveError,
+  uplEntitledFrom,
+  uplError,
+  uplUsage,
+  uplWholeWeeksChecked,
+  uplWholeWeeksError,
+  uplYearContaining,
+} from "./unpaid-parental";
 
 const d = (iso: string) => new Date(`${iso}T00:00:00Z`);
 const fiveDay = { daysPerWeek: 5, weekdays: null };
@@ -123,4 +133,37 @@ test("a booking with no working days in it is refused, not counted as 0", () => 
   assert.match(uplError({ ...base, request: weekend, daysPerWeek: 3, weekdays: [0, 2, 4] })!, /none of the days worked/);
   // Someone whose pattern includes weekends can book them.
   assert.equal(uplError({ ...base, request: weekend, daysPerWeek: 2, weekdays: [5, 6] }), null);
+});
+
+test("changing a child's details rechecks the leave already booked", () => {
+  const child = { dateOfBirth: d("2020-03-01"), disabilityBenefit: false, serviceStartDate: null, weeksTakenElsewhere: 0, ...fiveDay };
+  // 4 weeks in the year from 1 Mar 2026, split over February and March.
+  const bookings = [
+    { startDate: d("2026-02-02"), endDate: d("2026-02-13") },
+    { startDate: d("2026-03-02"), endDate: d("2026-03-13") },
+  ];
+  assert.equal(uplBookedLeaveError({ ...child, bookings }), null);
+  // Moving the birthday to 1 Feb puts all 4 weeks in one year: still fine.
+  assert.equal(uplBookedLeaveError({ ...child, dateOfBirth: d("2020-02-01"), bookings }), null);
+  // 15 weeks taken elsewhere plus 4 here is over 18.
+  assert.match(uplBookedLeaveError({ ...child, weeksTakenElsewhere: 15, bookings })!, /95 working days, over the 18 weeks \(90 days\)/);
+  // A fifth week in that year is over the yearly limit.
+  const five = [...bookings, { startDate: d("2026-04-06"), endDate: d("2026-04-10") }];
+  assert.match(uplBookedLeaveError({ ...child, dateOfBirth: d("2020-02-01"), bookings: five })!, /25 working days .* year 1 Feb 2026 – 31 Jan 2027/);
+  // Unticking the benefit with single days booked.
+  const oneDay = [{ startDate: d("2026-03-04"), endDate: d("2026-03-04") }];
+  assert.equal(uplBookedLeaveError({ ...child, disabilityBenefit: true, bookings: oneDay }), null);
+  assert.match(uplBookedLeaveError({ ...child, bookings: oneDay })!, /isn't in whole weeks/);
+  // ...unless hours vary, when days were always allowed.
+  assert.equal(uplBookedLeaveError({ ...child, irregularHours: true, bookings: oneDay }), null);
+});
+
+test("whole weeks only apply when the working week is known", () => {
+  assert.equal(hasIrregularHours({ employmentType: "ZERO_HOURS", daysWorkedPerWeek: 5 }), true);
+  assert.equal(hasIrregularHours({ employmentType: "FULL_TIME", daysWorkedPerWeek: null }), true);
+  assert.equal(hasIrregularHours({ employmentType: "FULL_TIME", daysWorkedPerWeek: 5 }), false);
+  assert.equal(uplWholeWeeksChecked({ ...fiveDay }), true);
+  assert.equal(uplWholeWeeksChecked({ ...fiveDay, irregularHours: true }), false);
+  assert.equal(uplWholeWeeksChecked({ daysPerWeek: 3, weekdays: null }), false);
+  assert.equal(uplWholeWeeksChecked({ daysPerWeek: 3, weekdays: [0, 2, 4], irregularHours: true }), true);
 });

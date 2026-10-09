@@ -5,6 +5,7 @@ import { requireActiveSession } from "@/lib/require-active-session";
 import { leaveYearForOrg } from "@/lib/leave-year-server";
 import { rightToWorkAtRiskWhere } from "@/lib/right-to-work";
 import { sessionHasFeature } from "@/lib/plan-gate";
+import { leaveTypeSeenBy } from "@/lib/leave-privacy";
 import { prisma } from "@/lib/prisma";
 import { getUserLeaveBalances } from "@/lib/leave-balances";
 import { WhoIsOut } from "@/components/dashboard/who-is-out";
@@ -136,13 +137,15 @@ export default async function DashboardPage() {
   const showTeamAbsencesFirst =
     userRole === "ADMIN" || userRole === "MANAGER";
 
+  // Staff see who's off, not why (see leave-privacy).
+  const viewer = { id: currentUserId, role: userRole };
   const absenceCards = (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <WhoIsOut
         absences={outToday.map((r: any) => ({
           id: r.id,
           user: { name: r.user.name, memberType: r.user.memberType },
-          leaveType: r.leaveType,
+          leaveType: leaveTypeSeenBy(r.leaveType, viewer, r.userId),
           startDate: r.startDate.toISOString(),
           endDate: r.endDate.toISOString(),
         }))}
@@ -151,7 +154,7 @@ export default async function DashboardPage() {
         absences={upcoming.map((r: any) => ({
           id: r.id,
           user: { name: r.user.name, memberType: r.user.memberType },
-          leaveType: r.leaveType,
+          leaveType: leaveTypeSeenBy(r.leaveType, viewer, r.userId),
           startDate: r.startDate.toISOString(),
           endDate: r.endDate.toISOString(),
           status: r.status,

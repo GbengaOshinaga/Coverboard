@@ -1,5 +1,6 @@
 import { PARENTAL_TRACKER_LEAVE_TYPES } from "@/lib/uk-compliance-columns";
 import { prisma } from "@/lib/prisma";
+import { hasFeatureForEnum } from "@/lib/planFeatures";
 import { createSetPasswordLink, INVITE_LINK_DAYS } from "@/lib/invite-links";
 import { sendEmail, resend, getFromAddress } from "@/lib/email";
 import { getAppBaseUrl } from "@/lib/app-url";
@@ -303,6 +304,13 @@ export async function emailSspCapReached(data: {
   sspEndDate: Date;
   organizationId: string;
 }) {
+  // SSP tracking is a Growth feature: no alert on lower plans.
+  const org = await prisma.organization.findUnique({
+    where: { id: data.organizationId },
+    select: { plan: true },
+  });
+  if (!org || !hasFeatureForEnum(org.plan, "ssp_tracking")) return;
+
   const admins: EmailRecipient[] = await prisma.user.findMany({
     where: {
       organizationId: data.organizationId,

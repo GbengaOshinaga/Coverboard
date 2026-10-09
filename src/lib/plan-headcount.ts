@@ -1,4 +1,7 @@
+import { format } from "date-fns";
 import { prisma } from "@/lib/prisma";
+import { stripe } from "@/lib/stripe";
+import { PLAN_DISPLAY_NAME, PLAN_KEY_TO_ENUM, planKeyFromPriceId } from "@/config/stripePrices";
 import { maxAdminsForPlan, maxEmployeesForPlan, type AnyPlan } from "@/lib/plans";
 
 /**
@@ -20,4 +23,58 @@ export async function headcountOverPlanError(organizationId: string, plan: AnyPl
     return `${planName} allows ${maxAdmins} admin${maxAdmins === 1 ? "" : "s"} and your team has ${admins}. Change some admins to managers first.`;
   }
   return null;
+}
+
+/**
+ * The plan whose limits apply when adding people or admins, and how to name
+ * it in a message ("Your plan allows up to…"). Usually the current plan, but
+ * when the team is about to move plan it's the one they're moving to, so
+ * they can't grow past it in the meantime: a trial that has chosen Growth
+ * becomes Growth when it ends, and a downgrade to Free takes effect at the
+ * end of the paid period. Both happen in Stripe's webhook, after payment,
+ * where the move can't be refused.
+ */
+export async function planForLimits(organizationId: string): Promise<{ plan: AnyPlan; label: string } | null> {
+  const org = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: {
+      plan: true,
+      stripePriceId: true,
+      stripeSubscriptionId: true,
+      cancelAtPeriodEnd: true,
+      trialEndsAt: true,
+      currentPeriodEnd: true,
+    },
+  });
+  if (!org) return null;
+
+  if (org.plan === "TRIAL" && org.stripePriceId) {
+    const key = planKeyFromPriceId(org.stripePriceId);
+    if (key) {
+      const when = org.trialEndsAt ? ` on ${format(org.trialEndsAt, "d MMM")}` : "";
+      return { plan: PLAN_KEY_TO_ENUM[key], label: `${PLAN_DISPLAY_NAME[key]}, your plan when the trial ends${when},` };
+    }
+  }
+
+  if (org.cancelAtPeriodEnd && org.stripeSubscriptionId && (await downgradingToFree(org.stripeSubscriptionId))) {
+    const when = org.currentPeriodEnd ? ` from ${format(org.currentPeriodEnd, "d MMM")}` : "";
+    return { plan: "FREE", label: `Free, your plan${when},` };
+  }
+
+  return { plan: org.plan, label: "Your plan" };
+}
+
+/**
+ * Whether a subscription ending at period end is a downgrade to Free (set by
+ * /api/billing/downgrade-to-free) rather than a plain cancellation. If Stripe
+ * can't say, assume Free: the team is leaving its paid plan either way.
+ */
+async function downgradingToFree(subscriptionId: string): Promise<boolean> {
+  if (!stripe) return true;
+  try {
+    const sub = await stripe.subscriptions.retrieve(subscriptionId);
+    return (sub.metadata?.downgrade_target ?? "").toLowerCase() === "free";
+  } catch {
+    return true;
+  }
 }

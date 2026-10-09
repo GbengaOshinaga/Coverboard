@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { recordAudit, recordReadAudit, requestAuditContext } from "@/lib/audit";
 import type { AnyPlan } from "@/lib/plans";
 import { maxAdminsForPlan } from "@/lib/plans";
+import { planForLimits } from "@/lib/plan-headcount";
 import {
   EMPLOYMENT_TYPES,
   normalizeEmploymentType,
@@ -202,13 +203,11 @@ export async function PATCH(
       });
 
       if (targetUser && targetUser.role !== "ADMIN") {
+        // People who've left don't count towards the admin limit.
         const [org, adminCount] = await Promise.all([
-          prisma.organization.findUnique({
-            where: { id: targetUser.organizationId },
-            select: { plan: true },
-          }),
+          planForLimits(targetUser.organizationId),
           prisma.user.count({
-            where: { organizationId: targetUser.organizationId, role: "ADMIN" },
+            where: { organizationId: targetUser.organizationId, role: "ADMIN", isActive: true },
           }),
         ]);
 
@@ -216,7 +215,7 @@ export async function PATCH(
         if (org && Number.isFinite(maxAdmins) && adminCount >= maxAdmins) {
           return NextResponse.json(
             {
-              error: `Your plan allows up to ${maxAdmins} admin user${
+              error: `${org.label} allows up to ${maxAdmins} admin user${
                 maxAdmins === 1 ? "" : "s"
               }. Please upgrade or change an existing admin's role first.`,
             },
