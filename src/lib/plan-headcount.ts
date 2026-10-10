@@ -34,7 +34,10 @@ export async function headcountOverPlanError(organizationId: string, plan: AnyPl
  * end of the paid period. Both happen in Stripe's webhook, after payment,
  * where the move can't be refused.
  */
-export async function planForLimits(organizationId: string): Promise<{ plan: AnyPlan; label: string } | null> {
+export async function planForLimits(
+  organizationId: string,
+  options: { askStripe?: boolean } = {}
+): Promise<{ plan: AnyPlan; label: string } | null> {
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
     select: {
@@ -56,7 +59,12 @@ export async function planForLimits(organizationId: string): Promise<{ plan: Any
     }
   }
 
-  if (org.cancelAtPeriodEnd && org.stripeSubscriptionId && (await downgradingToFree(org.stripeSubscriptionId))) {
+  if (
+    options.askStripe !== false &&
+    org.cancelAtPeriodEnd &&
+    org.stripeSubscriptionId &&
+    (await downgradingToFree(org.stripeSubscriptionId))
+  ) {
     const when = org.currentPeriodEnd ? ` from ${format(org.currentPeriodEnd, "d MMM")}` : "";
     return { plan: "FREE", label: `Free, your plan${when},` };
   }
@@ -77,4 +85,27 @@ async function downgradingToFree(subscriptionId: string): Promise<boolean> {
   } catch {
     return true;
   }
+}
+
+/**
+ * Whether a team is bigger than the plan it's paying for: a trial that has
+ * converted onto a plan it outgrew, say. Its admins are sent to Billing until
+ * it fits (middleware, from the session's overPlan). Trials and locked teams
+ * are never over: a trial has no limit until it ends, and a locked team has
+ * no plan.
+ */
+export async function overCurrentPlan(organizationId: string, plan: AnyPlan): Promise<boolean> {
+  if (plan === "TRIAL" || plan === "LOCKED") return false;
+  return (await headcountOverPlanError(organizationId, plan, "")) !== null;
+}
+
+/**
+ * The banner's warning for admins: the team doesn't fit its plan, or the plan
+ * its trial moves to. Without asking Stripe (it runs on every page), so a
+ * pending downgrade to Free isn't covered; that's refused when it's asked for.
+ */
+export async function planLimitWarning(organizationId: string): Promise<string | null> {
+  const limits = await planForLimits(organizationId, { askStripe: false });
+  if (!limits || limits.plan === "LOCKED") return null;
+  return headcountOverPlanError(organizationId, limits.plan, limits.label);
 }

@@ -79,6 +79,13 @@ const deps: WebhookDeps = {
   cancelScheduledDeletion,
   setTrialGracePeriod,
   headcountOverPlan: headcountOverPlanError,
+  async adminEmails(organizationId) {
+    const admins = await prisma.user.findMany({
+      where: { organizationId, role: "ADMIN", isActive: true },
+      select: { email: true },
+    });
+    return admins.map((a) => a.email);
+  },
   emailers: {
     trialEndingSoon: emailTrialEndingSoon,
     planTooSmall: emailPlanTooSmall,

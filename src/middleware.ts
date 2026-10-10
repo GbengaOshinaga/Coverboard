@@ -24,6 +24,15 @@ const ALLOWED_WHEN_LOCKED: RegExp[] = [
   /^\/logout(\/|$)/,
 ];
 
+const ALLOWED_WHEN_OVER_PLAN: RegExp[] = [
+  /^\/settings\/billing(\/|$)/,
+  /^\/settings\/profile(\/|$)/,
+  /^\/team(\/|$)/,
+  /^\/account(\/|$)/,
+  /^\/login(\/|$)/,
+  /^\/logout(\/|$)/,
+];
+
 export async function middleware(request: NextRequest) {
   const token = await getToken({
     req: request,
@@ -78,6 +87,17 @@ export async function middleware(request: NextRequest) {
   }
 
   const role = token.role as string | undefined;
+
+  // The team is bigger than the plan it pays for (e.g. a 90-person trial
+  // that converted onto Growth): admins go to Billing until it fits. They
+  // can still reach the team list to mark people who've left. Everyone else
+  // carries on; APIs aren't blocked, so nothing half-finished breaks.
+  if (token.overPlan && role === "ADMIN" && !path.startsWith("/api/") && !ALLOWED_WHEN_OVER_PLAN.some((re) => re.test(path))) {
+    const billingUrl = request.nextUrl.clone();
+    billingUrl.pathname = "/settings/billing";
+    billingUrl.search = "";
+    return NextResponse.redirect(billingUrl);
+  }
   if (role === "MEMBER" && isPathnameForbiddenForMember(path)) {
     const dashUrl = request.nextUrl.clone();
     dashUrl.pathname = "/dashboard";
