@@ -181,7 +181,7 @@ export function usageLine(c: ChildWithUsage): string {
   // The child's year runs from when the parent became entitled, not January.
   // Leave booked in a later year is listed with that year, not lost.
   const later = (c.laterYears ?? []).map((y) => ` · ${y.days} of ${c.usage.capThisYear} booked for ${f(y.start)} – ${f(y.end)}`).join("");
-  return `${c.usage.daysThisYear} of ${c.usage.capThisYear} days this year (${f(c.year.start)} – ${f(c.year.end)})${later} · ${c.usage.daysTotal} of ${c.usage.capTotal} in total · ${daysLeft(c)} days left now · ${c.disabilityBenefit ? "can be taken in days" : "whole weeks only"}`;
+  return `${c.usage.daysThisYear} of ${c.usage.capThisYear} days this year (${f(c.year.start)} – ${f(c.year.end)})${later} · ${c.usage.daysTotal} of ${c.usage.capTotal} in total · ${daysLeft(c)} days left now · ${c.wholeWeeksOnly ? "whole weeks only" : c.disabilityBenefit ? "can be taken in days" : "can be booked in days (no set working days)"}`;
 }
 
 /** Profile card: a member's children and their unpaid parental leave so far. */

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -101,6 +102,7 @@ function currentPlanKeyFromName(name: string | null): PlanKey | null {
 
 export default function ChangePlanPage() {
   const router = useRouter();
+  const { update: updateSession } = useSession();
   const { toast } = useToast();
   const [summary, setSummary] = useState<BillingSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -180,6 +182,9 @@ export default function ChangePlanPage() {
       const data = (await res.json()) as { planName: string };
       setPendingPlan(null);
       toast(`Switched to ${data.planName}`, "success");
+      // Pick up the new plan in the session, so a team held at Billing for
+      // outgrowing its plan is let back in straight away.
+      await updateSession();
       router.push("/settings/billing");
     } else {
       const data = (await res.json().catch(() => ({}))) as { error?: string };

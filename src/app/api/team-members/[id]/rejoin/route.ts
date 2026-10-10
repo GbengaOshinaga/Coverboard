@@ -3,7 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
-import { maxEmployeesForPlan } from "@/lib/plans";
+import { maxAdminsForPlan, maxEmployeesForPlan } from "@/lib/plans";
+import { planForLimits } from "@/lib/plan-headcount";
 
 /**
  * Someone who left comes back: their record (and its history) is reused, so
@@ -19,10 +20,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const orgId = u.organizationId as string;
   const { id } = await params;
 
-  const [target, org, activeCount] = await Promise.all([
-    prisma.user.findFirst({ where: { id, organizationId: orgId }, select: { name: true, isActive: true, leftOn: true } }),
-    prisma.organization.findUnique({ where: { id: orgId }, select: { plan: true } }),
+  const [target, org, activeCount, adminCount] = await Promise.all([
+    prisma.user.findFirst({ where: { id, organizationId: orgId }, select: { name: true, role: true, isActive: true, leftOn: true } }),
+    planForLimits(orgId),
     prisma.user.count({ where: { organizationId: orgId, isActive: true } }),
+    prisma.user.count({ where: { organizationId: orgId, role: "ADMIN", isActive: true } }),
   ]);
   if (!target) return NextResponse.json({ error: "Team member not found" }, { status: 404 });
   // Still here with a leaving date ahead: cancel the leaving date. Leave and
@@ -43,8 +45,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
   if (target.isActive) return NextResponse.json({ error: `${target.name} is already on the team` }, { status: 409 });
   const max = org ? maxEmployeesForPlan(org.plan) : Infinity;
-  if (Number.isFinite(max) && activeCount >= max) {
-    return NextResponse.json({ error: "Your plan's team size limit has been reached." }, { status: 403 });
+  if (org && Number.isFinite(max) && activeCount >= max) {
+    return NextResponse.json({ error: `${org.label} allows up to ${max} team members. Upgrade to add more.` }, { status: 403 });
+  }
+  // They come back with the role they left with.
+  const maxAdmins = org ? maxAdminsForPlan(org.plan) : Infinity;
+  if (org && target.role === "ADMIN" && Number.isFinite(maxAdmins) && adminCount >= maxAdmins) {
+    return NextResponse.json(
+      { error: `${org.label} allows up to ${maxAdmins} admin user${maxAdmins === 1 ? "" : "s"}. They rejoin as an admin, so change an existing admin to a manager first, or upgrade.` },
+      { status: 403 }
+    );
   }
 
   await prisma.user.update({ where: { id }, data: { isActive: true, leftOn: null } });

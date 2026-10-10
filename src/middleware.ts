@@ -24,6 +24,27 @@ const ALLOWED_WHEN_LOCKED: RegExp[] = [
   /^\/logout(\/|$)/,
 ];
 
+// What a held admin still needs: Billing and the team list to fix it, their
+// own leave and their staff's requests (leave still has to be approved), help,
+// the email links for verifying their address or resetting a password, and
+// onboarding (the dashboard sends an unfinished team there, so holding it
+// would bounce between the two).
+const ALLOWED_WHEN_OVER_PLAN: RegExp[] = [
+  /^\/settings\/billing(\/|$)/,
+  /^\/settings\/profile(\/|$)/,
+  /^\/team(\/|$)/,
+  /^\/requests(\/|$)/,
+  /^\/my-time-off(\/|$)/,
+  /^\/help(\/|$)/,
+  /^\/onboarding(\/|$)/,
+  /^\/account(\/|$)/,
+  /^\/verify-email(\/|$)/,
+  /^\/forgot-password(\/|$)/,
+  /^\/reset-password(\/|$)/,
+  /^\/login(\/|$)/,
+  /^\/logout(\/|$)/,
+];
+
 export async function middleware(request: NextRequest) {
   const token = await getToken({
     req: request,
@@ -78,6 +99,18 @@ export async function middleware(request: NextRequest) {
   }
 
   const role = token.role as string | undefined;
+
+  // The team is bigger than the plan it pays for (e.g. a 90-person trial
+  // that converted onto Growth): admins go to Billing until it fits. They
+  // can still reach the team list to mark people who've left, and the pages
+  // in ALLOWED_WHEN_OVER_PLAN. Everyone else
+  // carries on; APIs aren't blocked, so nothing half-finished breaks.
+  if (token.overPlan && role === "ADMIN" && !path.startsWith("/api/") && !ALLOWED_WHEN_OVER_PLAN.some((re) => re.test(path))) {
+    const billingUrl = request.nextUrl.clone();
+    billingUrl.pathname = "/settings/billing";
+    billingUrl.search = "";
+    return NextResponse.redirect(billingUrl);
+  }
   if (role === "MEMBER" && isPathnameForbiddenForMember(path)) {
     const dashUrl = request.nextUrl.clone();
     dashUrl.pathname = "/dashboard";

@@ -11,6 +11,7 @@ import { sendTeamInviteEmail } from "@/lib/email-notifications";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { hasUkStatutoryLeaveTypes } from "@/lib/uk-statutory";
 import { maxAdminsForPlan, maxEmployeesForPlan } from "@/lib/plans";
+import { planForLimits } from "@/lib/plan-headcount";
 
 // Cap the batch size to keep single-request latency bounded and avoid abuse.
 // Larger imports should be split client-side.
@@ -120,10 +121,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Only an admin can add admins. Change those rows to Manager or Member." }, { status: 403 });
   }
   const [org, currentAdmins, currentEmployees] = await Promise.all([
-    prisma.organization.findUnique({
-      where: { id: orgId },
-      select: { plan: true },
-    }),
+    planForLimits(orgId),
     prisma.user.count({
       where: { organizationId: orgId, role: "ADMIN", isActive: true },
     }),
@@ -143,7 +141,7 @@ export async function POST(request: Request) {
       currentAdmins + newAdminCount > maxAdmins
     ) {
       const remaining = Math.max(0, maxAdmins - currentAdmins);
-      adminCapMessage = `Your plan allows up to ${maxAdmins} admin user${
+      adminCapMessage = `${org.label} allows up to ${maxAdmins} admin user${
         maxAdmins === 1 ? "" : "s"
       } (${currentAdmins} already used). Reduce admin rows to ${remaining} or upgrade.`;
       errors.push({ index: -1, field: "role", message: adminCapMessage });
@@ -155,7 +153,7 @@ export async function POST(request: Request) {
       currentEmployees + valid.length > maxEmployees
     ) {
       const remaining = Math.max(0, maxEmployees - currentEmployees);
-      employeeCapMessage = `Your plan allows up to ${maxEmployees} team members (${currentEmployees} already added). Reduce the import to ${remaining} rows or upgrade.`;
+      employeeCapMessage = `${org.label} allows up to ${maxEmployees} team members (${currentEmployees} already added). Reduce the import to ${remaining} rows or upgrade.`;
       errors.push({ index: -1, field: "email", message: employeeCapMessage });
     }
   }

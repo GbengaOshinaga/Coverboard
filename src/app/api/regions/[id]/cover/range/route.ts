@@ -58,6 +58,6 @@ export async function GET(
     region,
     days: canSeeCoverCandidates(sessionUser.role as string)
       ? days
-      : dailyWithoutCoverCandidates(days),
+      : dailyWithoutCoverCandidates(days, sessionUser.id as string),
   });
 }

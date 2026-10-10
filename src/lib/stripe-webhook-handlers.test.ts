@@ -14,8 +14,10 @@ type EmailCall = { name: string; args: unknown };
 
 function makeDeps(
   initial: OrgRecord | null,
-  options: { scheduledDeletionExists?: boolean } = {}
+  options: { scheduledDeletionExists?: boolean; overPlan?: string; paidBefore?: boolean } = {}
 ) {
+  const seenEvents = new Set<string>();
+  let paidPlanStarted = options.paidBefore ?? false;
   const updates: OrgUpdate[] = [];
   const emails: EmailCall[] = [];
   const calls: { name: string; args: unknown }[] = [];
@@ -43,8 +45,26 @@ function makeDeps(
       calls.push({ name: "setTrialGracePeriod", args });
       return { graceEndsAt: new Date("2026-06-10T00:00:00Z") };
     },
+    async adminEmails() {
+      return ["admin@example.com", "second-admin@example.com"];
+    },
+    async markPaidPlanStarted() {
+      if (paidPlanStarted) return false;
+      paidPlanStarted = true;
+      return true;
+    },
+    async claimEvent(eventId) {
+      if (seenEvents.has(eventId)) return false;
+      seenEvents.add(eventId);
+      return true;
+    },
+    async headcountOverPlan(_orgId, plan) {
+      calls.push({ name: "headcountOverPlan", args: plan });
+      return options.overPlan ?? null;
+    },
     emailers: {
       trialEndingSoon: spy("trialEndingSoon"),
+      planTooSmall: spy("planTooSmall"),
       paymentFailed: spy("paymentFailed"),
       subscriptionCanceled: spy("subscriptionCanceled"),
       welcomeActive: spy("welcomeActive"),
@@ -72,12 +92,14 @@ function makeOrg(overrides: Partial<OrgRecord> = {}): OrgRecord {
 
 function subscriptionEvent(
   type: string,
-  sub: Partial<Stripe.Subscription> & { customer: string }
+  sub: Partial<Stripe.Subscription> & { customer: string },
+  previous?: Partial<Stripe.Subscription>,
+  id = "evt_test"
 ): Stripe.Event {
   return {
-    id: "evt_test",
+    id,
     type,
-    data: { object: sub as Stripe.Subscription },
+    data: { object: sub as Stripe.Subscription, ...(previous ? { previous_attributes: previous } : {}) },
   } as unknown as Stripe.Event;
 }
 
@@ -347,7 +369,7 @@ test("subscription.paused → status=paused, plan=LOCKED, grace period set, acco
 
 // ---------- invoice.payment_succeeded ----------
 
-test("invoice.payment_succeeded from trialing → active, cardAdded, plan from price, welcome email", async () => {
+test("invoice.payment_succeeded for £0 (starting a trial) → active, cardAdded, plan from price, no email", async () => {
   const { deps, updates, emails, calls } = makeDeps(
     makeOrg({ plan: "TRIAL", subscriptionStatus: "trialing" })
   );
@@ -375,8 +397,7 @@ test("invoice.payment_succeeded from trialing → active, cardAdded, plan from p
     calls.filter((c) => c.name === "cancelScheduledDeletion").length,
     1
   );
-  assert.equal(emails.length, 1, "trial → active sends exactly one email");
-  assert.equal(emails[0]!.name, "welcomeActive");
+  assert.equal(emails.length, 0);
 });
 
 test("invoice.payment_succeeded from already-active → no welcome email", async () => {
@@ -424,7 +445,7 @@ test("invoice.payment_succeeded also fires deletionCanceled when a deletion was 
     deps
   );
   const names = emails.map((e) => e.name).sort();
-  assert.deepEqual(names, ["deletionCanceled", "welcomeActive"]);
+  assert.deepEqual(names, ["deletionCanceled"]);
 });
 
 test("invoice.payment_succeeded with object-form customer is handled", async () => {
@@ -480,4 +501,99 @@ test("dispatcher ignores unknown event types without throwing", async () => {
   );
   assert.equal(updates.length, 0);
   assert.equal(emails.length, 0);
+});
+
+// ---------- outgrown plan ----------
+
+const tooBig = "Growth is for up to 75 people and your team has 90.";
+
+test("trial_will_end warns every admin instead when the team has outgrown the chosen plan", async () => {
+  const { deps, emails, updates } = makeDeps(makeOrg({ stripePriceId: STRIPE_PRICE_IDS.growth }), { overPlan: tooBig });
+  await dispatchStripeEvent(subscriptionEvent("customer.subscription.trial_will_end", { customer: "cus_1" }), deps);
+  assert.deepEqual(emails, [
+    { name: "planTooSmall", args: { to: "admin@example.com", problem: tooBig, trialEnding: true } },
+    { name: "planTooSmall", args: { to: "second-admin@example.com", problem: tooBig, trialEnding: true } },
+  ]);
+  assert.equal(updates.length, 0);
+});
+
+const activeGrowth = {
+  customer: "cus_1",
+  status: "active",
+  items: { data: [{ price: { id: STRIPE_PRICE_IDS.growth }, current_period_end: 1_750_000_000 }] },
+} as unknown as Partial<Stripe.Subscription> & { customer: string };
+
+test("trial ending is told from what the event changed, whichever event arrives first", async () => {
+  // payment_succeeded got here first and already marked the team active.
+  const { deps, emails } = makeDeps(makeOrg({ plan: "GROWTH", subscriptionStatus: "active" }));
+  await dispatchStripeEvent(subscriptionEvent("customer.subscription.updated", activeGrowth, { status: "trialing" }), deps);
+  assert.deepEqual(emails, [{ name: "welcomeActive", args: { to: "admin@example.com", planName: "Growth" } }]);
+  // A later update (no status change) sends nothing.
+  const later = makeDeps(makeOrg({ plan: "GROWTH", subscriptionStatus: "active" }));
+  await dispatchStripeEvent(subscriptionEvent("customer.subscription.updated", activeGrowth, { cancel_at_period_end: true }), later.deps);
+  assert.equal(later.emails.length, 0);
+});
+
+test("converting onto an outgrown plan keeps the plan but tells every admin", async () => {
+  const { deps, emails, updates } = makeDeps(makeOrg({ plan: "TRIAL", subscriptionStatus: "trialing" }), { overPlan: tooBig });
+  await dispatchStripeEvent(subscriptionEvent("customer.subscription.updated", activeGrowth, { status: "trialing" }), deps);
+  assert.equal(updates[0]!.plan, "GROWTH");
+  assert.deepEqual(emails.map((e) => [e.name, (e.args as { to: string }).to]), [
+    ["welcomeActive", "admin@example.com"],
+    ["planTooSmall", "admin@example.com"],
+    ["planTooSmall", "second-admin@example.com"],
+  ]);
+});
+
+test("a duplicate delivery of the same event is skipped", async () => {
+  const { deps, emails } = makeDeps(makeOrg());
+  const event = subscriptionEvent("customer.subscription.updated", activeGrowth, { status: "trialing" }, "evt_dup");
+  await dispatchStripeEvent(event, deps);
+  await dispatchStripeEvent(event, deps);
+  assert.deepEqual(emails.map((e) => e.name), ["welcomeActive"]);
+});
+
+test("a first payment going through after failing (trialing → past_due → active) sends the welcome once", async () => {
+  const { deps, emails } = makeDeps(makeOrg({ subscriptionStatus: "past_due" }));
+  await dispatchStripeEvent(subscriptionEvent("customer.subscription.updated", activeGrowth, { status: "past_due" }, "evt_a"), deps);
+  assert.deepEqual(emails.map((e) => e.name), ["welcomeActive"]);
+  // A later failed renewal that recovers is not a new start.
+  await dispatchStripeEvent(subscriptionEvent("customer.subscription.updated", activeGrowth, { status: "past_due" }, "evt_b"), deps);
+  assert.deepEqual(emails.map((e) => e.name), ["welcomeActive"]);
+});
+
+test("a paying team recovering from a failed renewal gets no welcome", async () => {
+  const { deps, emails } = makeDeps(makeOrg({ plan: "GROWTH", subscriptionStatus: "past_due" }), { paidBefore: true });
+  await dispatchStripeEvent(subscriptionEvent("customer.subscription.updated", activeGrowth, { status: "past_due" }), deps);
+  assert.equal(emails.length, 0);
+});
+
+const paidInvoice = (id: string): Stripe.Event => ({
+  ...invoiceEvent("invoice.payment_succeeded", {
+    customer: "cus_1",
+    amount_paid: 1500,
+    lines: { data: [{ pricing: { price_details: { price: STRIPE_PRICE_IDS.growth } } }] },
+  } as unknown as Partial<Stripe.Invoice> & { customer: string }),
+  id,
+}) as Stripe.Event;
+
+test("a team that starts paying without a trial is welcomed on its first payment, and not again after a failed renewal", async () => {
+  const { deps, emails } = makeDeps(makeOrg({ plan: "FREE", subscriptionStatus: null }));
+  await dispatchStripeEvent(paidInvoice("evt_first"), deps);
+  assert.deepEqual(emails.map((e) => e.name), ["welcomeActive"]);
+  await dispatchStripeEvent(subscriptionEvent("customer.subscription.updated", activeGrowth, { status: "past_due" }, "evt_recover"), deps);
+  await dispatchStripeEvent(paidInvoice("evt_renewal"), deps);
+  assert.deepEqual(emails.map((e) => e.name), ["welcomeActive"]);
+});
+
+test("a trial converting sends one welcome whether the invoice or the subscription update arrives first", async () => {
+  const invoiceFirst = makeDeps(makeOrg());
+  await dispatchStripeEvent(paidInvoice("evt_inv"), invoiceFirst.deps);
+  await dispatchStripeEvent(subscriptionEvent("customer.subscription.updated", activeGrowth, { status: "trialing" }, "evt_sub"), invoiceFirst.deps);
+  assert.deepEqual(invoiceFirst.emails.map((e) => e.name), ["welcomeActive"]);
+
+  const updateFirst = makeDeps(makeOrg());
+  await dispatchStripeEvent(subscriptionEvent("customer.subscription.updated", activeGrowth, { status: "trialing" }, "evt_sub"), updateFirst.deps);
+  await dispatchStripeEvent(paidInvoice("evt_inv"), updateFirst.deps);
+  assert.deepEqual(updateFirst.emails.map((e) => e.name), ["welcomeActive"]);
 });

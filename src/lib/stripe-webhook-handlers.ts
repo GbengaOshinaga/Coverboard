@@ -54,8 +54,23 @@ export type WebhookDeps = {
   setTrialGracePeriod(params: {
     organizationId: string;
   }): Promise<{ graceEndsAt: Date }>;
+  /** Why the team doesn't fit a plan (more people or admins), or null. */
+  headcountOverPlan(organizationId: string, plan: PlanEnum, planName: string): Promise<string | null>;
+  /** Every active admin's email, leaving ones aside (billing warnings go to all of them). */
+  adminEmails(organizationId: string): Promise<string[]>;
+  /**
+   * Records that the team has started paying, the first time only. True if
+   * this call recorded it, so the welcome goes once.
+   */
+  markPaidPlanStarted(organizationId: string): Promise<boolean>;
+  /**
+   * Records a Stripe event ID. False if it was already recorded: Stripe can
+   * deliver an event twice, and the second is skipped.
+   */
+  claimEvent(eventId: string, type: string): Promise<boolean>;
   emailers: {
     trialEndingSoon(args: { to: string; daysLeft: number }): Promise<void>;
+    planTooSmall(args: { to: string; problem: string; trialEnding: boolean }): Promise<void>;
     paymentFailed(args: { to: string }): Promise<void>;
     subscriptionCanceled(args: { to: string }): Promise<void>;
     welcomeActive(args: { to: string; planName: string }): Promise<void>;
@@ -71,7 +86,9 @@ export type WebhookDeps = {
 
 export async function handleSubscriptionUpdated(
   sub: Stripe.Subscription,
-  deps: WebhookDeps
+  deps: WebhookDeps,
+  /** What this event changed, as Stripe sends it (event.data.previous_attributes). */
+  previous?: Partial<Stripe.Subscription>
 ): Promise<void> {
   const org = await deps.findOrgByCustomerId(sub.customer as string);
   if (!org) return;
@@ -99,6 +116,42 @@ export async function handleSubscriptionUpdated(
   if (sub.status === "past_due" && org.adminEmail) {
     await deps.emailers.paymentFailed({ to: org.adminEmail });
   }
+
+  // The subscription has just become active: a trial ending, or a first
+  // payment going through after failing (trialing → past_due → active).
+  // Told by what Stripe says this event changed, not by our stored status,
+  // since Stripe doesn't promise an order. Whether it's the team's first
+  // paid plan is up to startedPaying.
+  if (sub.status === "active" && previous?.status && previous.status !== "active") {
+    await startedPaying(org, priceId, deps);
+  }
+}
+
+/**
+ * The team's first payment: welcome it, and warn if it has outgrown the plan.
+ * Called from the subscription becoming active and from a paid invoice,
+ * whichever Stripe sends first; markPaidPlanStarted lets only the first one
+ * through, so it happens once per team, whether it came from a trial, from
+ * Free, or reactivated a locked team. A team that has paid before and comes
+ * back from a failed renewal isn't welcomed again.
+ */
+async function startedPaying(org: OrgRecord, priceId: string | null, deps: WebhookDeps): Promise<void> {
+  if (!(await deps.markPaidPlanStarted(org.id))) return;
+  const planKey = priceId ? planKeyFromPriceId(priceId) : null;
+  if (org.adminEmail) {
+    await deps.emailers.welcomeActive({ to: org.adminEmail, planName: planKey ? PLAN_DISPLAY_NAME[planKey] : "Coverboard" });
+  }
+  // Started on a plan the team has outgrown: the app sends admins to Billing
+  // until it fits (overPlan in the session); tell them, and us.
+  const problem = await planTooSmallFor(org, priceId, deps);
+  if (problem) {
+    console.warn(`[billing] org ${org.id} started paying for a plan it has outgrown: ${problem}`);
+    await emailAllAdmins(org.id, deps, (to) => deps.emailers.planTooSmall({ to, problem, trialEnding: false }));
+  }
+}
+
+async function emailAllAdmins(organizationId: string, deps: WebhookDeps, send: (to: string) => Promise<void>) {
+  for (const to of await deps.adminEmails(organizationId)) await send(to);
 }
 
 export async function handleSubscriptionDeleted(
@@ -183,7 +236,27 @@ export async function handleTrialWillEnd(
 ): Promise<void> {
   const org = await deps.findOrgByCustomerId(sub.customer as string);
   if (!org?.adminEmail) return;
+  // Grown past the plan they chose: say so while there's time to pick a
+  // bigger one, since the trial turns into it without asking.
+  const priceId = sub.items?.data[0]?.price?.id ?? org.stripePriceId;
+  const problem = await planTooSmallFor(org, priceId, deps);
+  if (problem) {
+    await emailAllAdmins(org.id, deps, (to) => deps.emailers.planTooSmall({ to, problem, trialEnding: true }));
+    return;
+  }
   await deps.emailers.trialEndingSoon({ to: org.adminEmail, daysLeft: 3 });
+}
+
+/**
+ * Whether the team has outgrown the plan a price is for. Adding people past
+ * the chosen plan is refused during a trial (planForLimits), so this catches
+ * teams that grew before that rule, or by rejoining or plan changes in Stripe.
+ * The plan isn't changed for them: moving to a dearer plan needs their say.
+ */
+async function planTooSmallFor(org: OrgRecord, priceId: string | null | undefined, deps: WebhookDeps): Promise<string | null> {
+  const planKey = priceId ? planKeyFromPriceId(priceId) : null;
+  if (!planKey) return null;
+  return deps.headcountOverPlan(org.id, PLAN_KEY_TO_ENUM[planKey], PLAN_DISPLAY_NAME[planKey]);
 }
 
 export async function handleInvoicePaymentSucceeded(
@@ -197,7 +270,6 @@ export async function handleInvoicePaymentSucceeded(
   const org = await deps.findOrgByCustomerId(customerId);
   if (!org) return;
 
-  const wasTrialing = org.subscriptionStatus === "trialing";
   const rawPrice = invoice.lines.data[0]?.pricing?.price_details?.price;
   const priceId =
     typeof rawPrice === "string"
@@ -217,12 +289,13 @@ export async function handleInvoicePaymentSucceeded(
     canceledBy: "invoice.payment_succeeded",
   });
 
-  if (wasTrialing && org.adminEmail) {
-    const planName = planKey ? PLAN_DISPLAY_NAME[planKey] : "Coverboard";
-    await deps.emailers.welcomeActive({ to: org.adminEmail, planName });
-  }
   if (wasScheduled && org.adminEmail) {
     await deps.emailers.deletionCanceled({ to: org.adminEmail });
+  }
+
+  // Money taken, not a £0 invoice from starting a trial.
+  if ((invoice.amount_paid ?? 0) > 0) {
+    await startedPaying(org, priceId, deps);
   }
 }
 
@@ -245,19 +318,24 @@ export async function handleInvoicePaymentFailed(
 }
 
 /**
- * Routes a verified Stripe event to its handler. Unhandled types are a no-op
- * so Stripe doesn't retry.
+ * Routes a verified Stripe event to its handler, once per event ID.
+ * Unhandled types are a no-op so Stripe doesn't retry.
  */
 export async function dispatchStripeEvent(
   event: Stripe.Event,
   deps: WebhookDeps
 ): Promise<void> {
+  if (!(await deps.claimEvent(event.id, event.type))) return;
   switch (event.type) {
     case "customer.subscription.trial_will_end":
       await handleTrialWillEnd(event.data.object as Stripe.Subscription, deps);
       return;
     case "customer.subscription.updated":
-      await handleSubscriptionUpdated(event.data.object as Stripe.Subscription, deps);
+      await handleSubscriptionUpdated(
+        event.data.object as Stripe.Subscription,
+        deps,
+        (event.data as { previous_attributes?: Partial<Stripe.Subscription> }).previous_attributes
+      );
       return;
     case "customer.subscription.deleted":
       await handleSubscriptionDeleted(event.data.object as Stripe.Subscription, deps);

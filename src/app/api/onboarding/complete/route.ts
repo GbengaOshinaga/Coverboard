@@ -14,6 +14,7 @@ import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
 import { sendTeamInviteEmail } from "@/lib/email-notifications";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
+import { peopleLimit } from "@/lib/plan-headcount";
 import { z } from "zod";
 
 const onboardingSchema = z.object({
@@ -68,6 +69,26 @@ export async function POST(request: Request) {
     }
 
     const { countries, industry, regionsEnabled, invites } = parsed.data;
+
+    // Invites count towards the plan's limit like anyone added later, so a
+    // new Free team can't start over it (and be held at Billing). Checked
+    // before anything is saved. People who already have an account aren't
+    // invited, so they don't count.
+    if (invites && invites.length > 0) {
+      const emails = [...new Set(invites.map((i) => i.email.toLowerCase()))];
+      const taken = await prisma.user.count({ where: { email: { in: emails, mode: "insensitive" } } });
+      const limit = await peopleLimit(orgId);
+      const room = limit ? Math.max(0, limit.max - limit.used) : Infinity;
+      if (emails.length - taken > room) {
+        return NextResponse.json(
+          {
+            error: `${limit!.label} is for up to ${limit!.max} people, including you, so you can invite ${room} now. Remove ${emails.length - taken - room}, and invite them from the Team page once you've chosen a bigger plan.`,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     const currentYear = new Date().getFullYear();
 
     // Update the admin user's default and work country to the first selected country

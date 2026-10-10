@@ -3,7 +3,14 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getWorkingWeek } from "@/lib/working-week-server";
-import { eighteenthBirthday, uplEntitledFrom, uplUsage, uplYearContaining } from "@/lib/unpaid-parental";
+import {
+  eighteenthBirthday,
+  hasIrregularHours,
+  uplEntitledFrom,
+  uplUsage,
+  uplWholeWeeksChecked,
+  uplYearContaining,
+} from "@/lib/unpaid-parental";
 
 /**
  * Children are needed for unpaid parental leave, which is per child. The
@@ -50,6 +57,11 @@ export type ChildWithUsage = {
   year: { start: string; end: string };
   /** Later years with leave already booked in them, and the working days booked. */
   laterYears: { start: string; end: string; days: number }[];
+  /**
+   * Bookings must be whole weeks: no disability benefit, and a working week
+   * the booking can be checked against (the same test as when booking).
+   */
+  wholeWeeksOnly: boolean;
 };
 
 /** A member's children with their unpaid parental leave used so far. */
@@ -67,9 +79,13 @@ export async function listChildren(userId: string): Promise<ChildWithUsage[]> {
       },
     }),
     getWorkingWeek(userId),
-    prisma.user.findUnique({ where: { id: userId }, select: { serviceStartDate: true } }),
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { serviceStartDate: true, employmentType: true, daysWorkedPerWeek: true },
+    }),
   ]);
   const ymd = (d: Date) => d.toISOString().slice(0, 10);
+  const weeksChecked = uplWholeWeeksChecked({ ...week, irregularHours: hasIrregularHours(parent) });
   return children.map((c) => {
     const entitledFrom = uplEntitledFrom(c, parent?.serviceStartDate ?? null);
     // Not before they're entitled (a placement still to come).
@@ -106,6 +122,7 @@ export async function listChildren(userId: string): Promise<ChildWithUsage[]> {
       usage: usageIn(year),
       year: { start: ymd(year.start), end: ymd(year.end) },
       laterYears,
+      wholeWeeksOnly: !c.disabilityBenefit && weeksChecked,
     };
   });
 }

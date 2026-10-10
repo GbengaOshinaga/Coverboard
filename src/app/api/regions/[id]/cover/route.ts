@@ -46,7 +46,7 @@ export async function GET(
   const day = (
     canSeeCoverCandidates(sessionUser.role as string)
       ? days
-      : dailyWithoutCoverCandidates(days)
+      : dailyWithoutCoverCandidates(days, sessionUser.id as string)
   )[0];
   if (!day) {
     return NextResponse.json({

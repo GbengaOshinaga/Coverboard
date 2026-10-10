@@ -1,3 +1,4 @@
+import { lastAdminError } from "@/lib/admin-continuity";
 import { prisma } from "@/lib/prisma";
 import { dbDate, endWorkPatternOps } from "@/lib/workPattern";
 import { recomputeAllSspSpells } from "@/lib/leave-requests/ssp-spell";
@@ -46,7 +47,7 @@ export function isLeavingLater(lastDay: string, today: string): boolean {
  * Records a leaving date and does everything that follows from it. Returns
  * counts for the audit log.
  */
-export async function recordLeaving(input: { userId: string; lastDay: string; today: string }) {
+export async function recordLeaving(input: { userId: string; organizationId: string; lastDay: string; today: string }) {
   const lastDay = dbDate(input.lastDay);
   const dayAfter = new Date(lastDay.getTime() + DAY_MS);
   const leftNow = !isLeavingLater(input.lastDay, input.today);
@@ -62,26 +63,32 @@ export async function recordLeaving(input: { userId: string; lastDay: string; to
     select: { id: true, leaveType: { select: { name: true } } },
   });
 
-  const [, , , cancelledLeave, cancelledCover, trimmedLeave] = await prisma.$transaction([
-    prisma.user.update({
+  const outcome = await prisma.$transaction(async (tx) => {
+    // An admin leaving mustn't leave the team without one (admin-continuity).
+    const error = await lastAdminError(tx, input.organizationId, input.userId);
+    if (error) return { error };
+    await tx.user.update({
       where: { id: input.userId },
       data: { leftOn: lastDay, ...(leftNow ? { isActive: false } : {}) },
-    }),
+    });
     // Patterns run to the last day; cover after it no longer counts them.
-    ...endWorkPatternOps(input.userId, dayAfter),
-    prisma.leaveRequest.updateMany({
+    for (const op of endWorkPatternOps(input.userId, dayAfter, tx)) await op;
+    const cancelledLeave = await tx.leaveRequest.updateMany({
       where: { userId: input.userId, status: { in: ["PENDING", "APPROVED"] }, startDate: { gt: lastDay } },
       data: { status: "CANCELLED" },
-    }),
-    prisma.coverOffer.updateMany({
+    });
+    const cancelledCover = await tx.coverOffer.updateMany({
       where: { userId: input.userId, status: { in: ["PENDING", "ACCEPTED"] }, date: { gt: lastDay } },
       data: { status: "WITHDRAWN" },
-    }),
-    prisma.leaveRequest.updateMany({
+    });
+    const trimmedLeave = await tx.leaveRequest.updateMany({
       where: { id: { in: spanning.map((r) => r.id) } },
       data: { endDate: lastDay },
-    }),
-  ]);
+    });
+    return { cancelledLeave, cancelledCover, trimmedLeave };
+  });
+  if ("error" in outcome) return { error: outcome.error };
+  const { cancelledLeave, cancelledCover, trimmedLeave } = outcome;
 
   // SSP stops when employment ends: recalculate if sickness was cut short.
   if (spanning.some((r) => isSicknessLeaveTypeName(r.leaveType.name))) {

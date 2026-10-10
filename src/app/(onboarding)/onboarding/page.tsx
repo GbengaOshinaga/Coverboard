@@ -48,6 +48,18 @@ export default function OnboardingPage() {
   const [invites, setInvites] = useState<Invite[]>([{ name: "", email: "", countryCode: "" }]);
   const [loading, setLoading] = useState(false);
   const [setupStep, setSetupStep] = useState(0);
+  // The plan's room for people (null: unlimited). Finishing setup checks it too.
+  const [inviteLimit, setInviteLimit] = useState<{ max: number; room: number } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/onboarding/invite-limit")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.max != null) setInviteLimit({ max: data.max, room: data.room });
+      })
+      .catch(() => {});
+  }, []);
+  const atInviteLimit = inviteLimit !== null && invites.length >= inviteLimit.room;
 
   // Cycle reassuring progress messages while the workspace is being created,
   // so "Setting up…" doesn't look frozen. (The request itself is a single call;
@@ -452,6 +464,14 @@ export default function OnboardingPage() {
               </p>
             </div>
 
+            {inviteLimit && (
+              <p className="mb-3 text-sm text-gray-600">
+                Your plan is for up to {inviteLimit.max} people, including you,
+                so you can invite {inviteLimit.room === 0 ? "no one" : `up to ${inviteLimit.room}`} now.
+                Choose a bigger plan from Billing to add more.
+              </p>
+            )}
+
             <div className="space-y-3">
               {invites.map((invite, i) => (
                 <div
@@ -506,13 +526,15 @@ export default function OnboardingPage() {
               ))}
             </div>
 
-            <button
-              onClick={addInviteRow}
-              className="mt-3 flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-500"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add another person
-            </button>
+            {!atInviteLimit && (
+              <button
+                onClick={addInviteRow}
+                className="mt-3 flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-500"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add another person
+              </button>
+            )}
 
             <div className="mt-6 flex justify-between">
               <Button variant="outline" onClick={() => setStep(1)}>

@@ -106,9 +106,15 @@ export async function POST(request: Request) {
 
     // Optimistic DB write so the billing page reflects the change immediately;
     // the customer.subscription.updated webhook will reconcile authoritative fields.
+    // A paying team gets its new plan now too (the webhook only sets the plan
+    // for active subscriptions), so a team held at Billing for outgrowing its
+    // plan isn't kept waiting for Stripe.
     await prisma.organization.update({
       where: { id: orgId },
-      data: { stripePriceId: targetPriceId },
+      data: {
+        stripePriceId: targetPriceId,
+        ...(org.subscriptionStatus === "active" ? { plan: PLAN_KEY_TO_ENUM[targetPlanKey] } : {}),
+      },
     });
 
     trackServer(

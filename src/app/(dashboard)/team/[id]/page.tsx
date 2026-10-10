@@ -640,7 +640,7 @@ export default function EmployeeProfilePage({
   params: Promise<{ id: string }>;
 }) {
   const { id: memberId } = use(params);
-  const { data: session } = useSession();
+  const { data: session, update: updateSession } = useSession();
   const { toast } = useToast();
   const userRole = (session?.user as Record<string, unknown> | undefined)?.role as string | undefined;
   const sessionUserId = (session?.user as Record<string, unknown> | undefined)?.id as
@@ -1090,6 +1090,8 @@ export default function EmployeeProfilePage({
                 }
                 setShowRemoveMember(false);
                 if (data.leftNow) {
+                  // One fewer may bring the team within its plan (overPlan).
+                  await updateSession();
                   toast(`${member.name} has been marked as left. Their records are kept.`, "success");
                   router.push("/team");
                 } else {

@@ -98,6 +98,10 @@ model Organization {
   // limited-volume outreach (first N orgs only) and (b) prevent
   // double-sends on re-verification.
   founderEmailSentAt      DateTime?
+  /// When the team first moved onto a paid plan (trial converting, or a
+  /// first payment going through after failing). Set once, by the Stripe
+  /// webhook, so the welcome email is sent once.
+  paidPlanStartedAt       DateTime?
   createdAt               DateTime          @default(now())
   updatedAt               DateTime          @updatedAt
 
@@ -691,4 +695,15 @@ enum RightToWorkMethod {
   ONLINE_SHARE_CODE
   MANUAL_DOCUMENTS
   IDENTITY_SERVICE_PROVIDER
+}
+
+/// Stripe events already handled. Stripe can deliver an event more than once
+/// (retries, duplicates); the webhook records each ID before acting on it and
+/// skips one it has seen, so emails aren't sent twice.
+model StripeWebhookEvent {
+  id         String   @id
+  type       String
+  receivedAt DateTime @default(now())
+
+  @@index([receivedAt])
 }
