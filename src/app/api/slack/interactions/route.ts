@@ -50,12 +50,18 @@ async function handleBlockAction(payload: {
   // Slack ignores the body of a reply to a button click, so anything the
   // person should read goes to the response_url instead.
   const tell = async (text: string) => {
+    // A failed post is logged rather than turned into a 500, which Slack
+    // would show as an error of its own (and the button's work may be done).
     if (payload.response_url) {
-      await postSlackCommandResponse(payload.response_url, {
-        response_type: "ephemeral",
-        replace_original: false,
-        text,
-      });
+      try {
+        await postSlackCommandResponse(payload.response_url, {
+          response_type: "ephemeral",
+          replace_original: false,
+          text,
+        });
+      } catch (err) {
+        console.error("[slack] could not post the reply to a button click:", err);
+      }
     }
     return new Response("", { status: 200 });
   };

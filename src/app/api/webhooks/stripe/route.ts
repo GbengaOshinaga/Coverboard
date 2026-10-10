@@ -18,6 +18,7 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   emailTrialEndingSoon,
@@ -50,10 +51,12 @@ async function findOrgByCustomerId(customerId: string): Promise<OrgRecord | null
   const org = await prisma.organization.findUnique({
     where: { stripeCustomerId: customerId },
     include: {
+      // The longest-serving admin who's staying; one with a leaving date
+      // only if there's no one else.
       users: {
-        where: { role: "ADMIN" },
+        where: { role: "ADMIN", isActive: true },
         select: { email: true },
-        orderBy: { createdAt: "asc" },
+        orderBy: [{ leftOn: { sort: "asc", nulls: "first" } }, { createdAt: "asc" }],
         take: 1,
       },
     },
@@ -81,10 +84,26 @@ const deps: WebhookDeps = {
   headcountOverPlan: headcountOverPlanError,
   async adminEmails(organizationId) {
     const admins = await prisma.user.findMany({
-      where: { organizationId, role: "ADMIN", isActive: true },
+      where: { organizationId, role: "ADMIN", isActive: true, leftOn: null },
       select: { email: true },
     });
     return admins.map((a) => a.email);
+  },
+  async markPaidPlanStarted(organizationId) {
+    const { count } = await prisma.organization.updateMany({
+      where: { id: organizationId, paidPlanStartedAt: null },
+      data: { paidPlanStartedAt: new Date() },
+    });
+    return count === 1;
+  },
+  async claimEvent(eventId, type) {
+    try {
+      await prisma.stripeWebhookEvent.create({ data: { id: eventId, type } });
+      return true;
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") return false;
+      throw err;
+    }
   },
   emailers: {
     trialEndingSoon: emailTrialEndingSoon,

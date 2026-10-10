@@ -14,8 +14,10 @@ type EmailCall = { name: string; args: unknown };
 
 function makeDeps(
   initial: OrgRecord | null,
-  options: { scheduledDeletionExists?: boolean; overPlan?: string } = {}
+  options: { scheduledDeletionExists?: boolean; overPlan?: string; paidBefore?: boolean } = {}
 ) {
+  const seenEvents = new Set<string>();
+  let paidPlanStarted = options.paidBefore ?? false;
   const updates: OrgUpdate[] = [];
   const emails: EmailCall[] = [];
   const calls: { name: string; args: unknown }[] = [];
@@ -45,6 +47,16 @@ function makeDeps(
     },
     async adminEmails() {
       return ["admin@example.com", "second-admin@example.com"];
+    },
+    async markPaidPlanStarted() {
+      if (paidPlanStarted) return false;
+      paidPlanStarted = true;
+      return true;
+    },
+    async claimEvent(eventId) {
+      if (seenEvents.has(eventId)) return false;
+      seenEvents.add(eventId);
+      return true;
     },
     async headcountOverPlan(_orgId, plan) {
       calls.push({ name: "headcountOverPlan", args: plan });
@@ -81,10 +93,11 @@ function makeOrg(overrides: Partial<OrgRecord> = {}): OrgRecord {
 function subscriptionEvent(
   type: string,
   sub: Partial<Stripe.Subscription> & { customer: string },
-  previous?: Partial<Stripe.Subscription>
+  previous?: Partial<Stripe.Subscription>,
+  id = "evt_test"
 ): Stripe.Event {
   return {
-    id: "evt_test",
+    id,
     type,
     data: { object: sub as Stripe.Subscription, ...(previous ? { previous_attributes: previous } : {}) },
   } as unknown as Stripe.Event;
@@ -530,4 +543,27 @@ test("converting onto an outgrown plan keeps the plan but tells every admin", as
     ["planTooSmall", "admin@example.com"],
     ["planTooSmall", "second-admin@example.com"],
   ]);
+});
+
+test("a duplicate delivery of the same event is skipped", async () => {
+  const { deps, emails } = makeDeps(makeOrg());
+  const event = subscriptionEvent("customer.subscription.updated", activeGrowth, { status: "trialing" }, "evt_dup");
+  await dispatchStripeEvent(event, deps);
+  await dispatchStripeEvent(event, deps);
+  assert.deepEqual(emails.map((e) => e.name), ["welcomeActive"]);
+});
+
+test("a first payment going through after failing (trialing → past_due → active) sends the welcome once", async () => {
+  const { deps, emails } = makeDeps(makeOrg({ subscriptionStatus: "past_due" }));
+  await dispatchStripeEvent(subscriptionEvent("customer.subscription.updated", activeGrowth, { status: "past_due" }, "evt_a"), deps);
+  assert.deepEqual(emails.map((e) => e.name), ["welcomeActive"]);
+  // A later failed renewal that recovers is not a new start.
+  await dispatchStripeEvent(subscriptionEvent("customer.subscription.updated", activeGrowth, { status: "past_due" }, "evt_b"), deps);
+  assert.deepEqual(emails.map((e) => e.name), ["welcomeActive"]);
+});
+
+test("a paying team recovering from a failed renewal gets no welcome", async () => {
+  const { deps, emails } = makeDeps(makeOrg({ plan: "GROWTH", subscriptionStatus: "past_due" }), { paidBefore: true });
+  await dispatchStripeEvent(subscriptionEvent("customer.subscription.updated", activeGrowth, { status: "past_due" }), deps);
+  assert.equal(emails.length, 0);
 });

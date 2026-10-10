@@ -358,10 +358,10 @@ export default function TeamPage() {
     }
 
     toast("Team member updated", "success");
-    // Editing yourself: refresh the session so the header shows the new name.
-    if (data.id === (session?.user as Record<string, unknown> | undefined)?.id) {
-      void updateSession();
-    }
+    // Refresh the session: editing yourself changes the name in the header,
+    // and changing anyone's role can bring the team within its plan's admin
+    // limit, which lifts the hold at Billing.
+    void updateSession();
     setEditMember(undefined);
     fetchMembers();
   }

@@ -44,7 +44,7 @@ export default async function DashboardLayout({
   const planWarning = isAdmin ? await planLimitWarning(orgId) : null;
   const banner = org ? (
     <>
-      <PlanLimitBanner warning={planWarning} />
+      <PlanLimitBanner warning={planWarning} held={sessionUser.plan !== "TRIAL"} />
       <DeletionScheduledBanner
         deletionScheduledFor={org.deletionScheduledFor}
         isAdmin={isAdmin}

@@ -198,8 +198,9 @@ export const authOptions: NextAuthOptions = {
         });
         token.revoked = !me || !me.isActive;
         // Bigger than the plan it pays for: middleware holds admins at Billing.
+        // Only admins are held, so only they pay for the two counts.
         token.overPlan =
-          !!me && !token.revoked && !!token.organizationId
+          !!me && !token.revoked && me.role === "ADMIN" && !!token.organizationId
             ? await overCurrentPlan(token.organizationId as string, me.organization.plan)
             : false;
         if (me) {

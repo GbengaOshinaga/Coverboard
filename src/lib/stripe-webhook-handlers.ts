@@ -56,8 +56,18 @@ export type WebhookDeps = {
   }): Promise<{ graceEndsAt: Date }>;
   /** Why the team doesn't fit a plan (more people or admins), or null. */
   headcountOverPlan(organizationId: string, plan: PlanEnum, planName: string): Promise<string | null>;
-  /** Every active admin's email (billing warnings go to all of them). */
+  /** Every active admin's email, leaving ones aside (billing warnings go to all of them). */
   adminEmails(organizationId: string): Promise<string[]>;
+  /**
+   * Records that the team has started paying, the first time only. True if
+   * this call recorded it, so the welcome goes once.
+   */
+  markPaidPlanStarted(organizationId: string): Promise<boolean>;
+  /**
+   * Records a Stripe event ID. False if it was already recorded: Stripe can
+   * deliver an event twice, and the second is skipped.
+   */
+  claimEvent(eventId: string, type: string): Promise<boolean>;
   emailers: {
     trialEndingSoon(args: { to: string; daysLeft: number }): Promise<void>;
     planTooSmall(args: { to: string; problem: string; trialEnding: boolean }): Promise<void>;
@@ -107,11 +117,19 @@ export async function handleSubscriptionUpdated(
     await deps.emailers.paymentFailed({ to: org.adminEmail });
   }
 
-  // The trial has just ended and the plan begun. Told by what Stripe says
-  // this event changed, not by our stored status: the payment-succeeded
-  // event can arrive first and mark the team active, and Stripe doesn't
-  // promise an order.
-  if (previous?.status === "trialing" && sub.status === "active") {
+  // The team has just started paying: a trial ending, or a first payment
+  // going through after failing (trialing → past_due → active). Told by what
+  // Stripe says this event changed, not by our stored status: the
+  // payment-succeeded event can arrive first and mark the team active, and
+  // Stripe doesn't promise an order. A team that has paid before and comes
+  // back from a failed renewal was welcomed already; markPaidPlanStarted
+  // only says yes the first time.
+  if (
+    sub.status === "active" &&
+    previous?.status &&
+    previous.status !== "active" &&
+    (await deps.markPaidPlanStarted(org.id))
+  ) {
     if (org.adminEmail) {
       await deps.emailers.welcomeActive({ to: org.adminEmail, planName: planKey ? PLAN_DISPLAY_NAME[planKey] : "Coverboard" });
     }
@@ -290,13 +308,14 @@ export async function handleInvoicePaymentFailed(
 }
 
 /**
- * Routes a verified Stripe event to its handler. Unhandled types are a no-op
- * so Stripe doesn't retry.
+ * Routes a verified Stripe event to its handler, once per event ID.
+ * Unhandled types are a no-op so Stripe doesn't retry.
  */
 export async function dispatchStripeEvent(
   event: Stripe.Event,
   deps: WebhookDeps
 ): Promise<void> {
+  if (!(await deps.claimEvent(event.id, event.type))) return;
   switch (event.type) {
     case "customer.subscription.trial_will_end":
       await handleTrialWillEnd(event.data.object as Stripe.Subscription, deps);
