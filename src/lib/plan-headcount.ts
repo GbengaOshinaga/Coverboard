@@ -109,3 +109,17 @@ export async function planLimitWarning(organizationId: string): Promise<string |
   if (!limits || limits.plan === "LOCKED") return null;
   return headcountOverPlanError(organizationId, limits.plan, limits.label);
 }
+
+/**
+ * How many people the team's plan has room for (the plan from planForLimits,
+ * so a trial's chosen plan) and how many active people it has, admins
+ * included. `max` is Infinity for unlimited plans.
+ */
+export async function peopleLimit(
+  organizationId: string
+): Promise<{ max: number; used: number; label: string } | null> {
+  const limits = await planForLimits(organizationId);
+  if (!limits) return null;
+  const used = await prisma.user.count({ where: { organizationId, isActive: true } });
+  return { max: maxEmployeesForPlan(limits.plan), used, label: limits.label };
+}

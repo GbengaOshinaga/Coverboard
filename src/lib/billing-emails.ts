@@ -70,7 +70,7 @@ export async function emailWelcomeActive({ to, planName }: { to: string; planNam
     to,
     subject: "Welcome to Coverboard",
     html: base(`
-      <h2 style="margin:0 0 12px">Your trial has ended — welcome aboard</h2>
+      <h2 style="margin:0 0 12px">Welcome aboard</h2>
       <p>Your ${planName} plan is now active. Thank you for choosing Coverboard.</p>
       <p><a href="${getAppBaseUrl()}/dashboard" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Open dashboard</a></p>
     `),

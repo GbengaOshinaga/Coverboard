@@ -369,7 +369,7 @@ test("subscription.paused → status=paused, plan=LOCKED, grace period set, acco
 
 // ---------- invoice.payment_succeeded ----------
 
-test("invoice.payment_succeeded from trialing → active, cardAdded, plan from price, no email (subscription.updated sends it)", async () => {
+test("invoice.payment_succeeded for £0 (starting a trial) → active, cardAdded, plan from price, no email", async () => {
   const { deps, updates, emails, calls } = makeDeps(
     makeOrg({ plan: "TRIAL", subscriptionStatus: "trialing" })
   );
@@ -566,4 +566,34 @@ test("a paying team recovering from a failed renewal gets no welcome", async () 
   const { deps, emails } = makeDeps(makeOrg({ plan: "GROWTH", subscriptionStatus: "past_due" }), { paidBefore: true });
   await dispatchStripeEvent(subscriptionEvent("customer.subscription.updated", activeGrowth, { status: "past_due" }), deps);
   assert.equal(emails.length, 0);
+});
+
+const paidInvoice = (id: string): Stripe.Event => ({
+  ...invoiceEvent("invoice.payment_succeeded", {
+    customer: "cus_1",
+    amount_paid: 1500,
+    lines: { data: [{ pricing: { price_details: { price: STRIPE_PRICE_IDS.growth } } }] },
+  } as unknown as Partial<Stripe.Invoice> & { customer: string }),
+  id,
+}) as Stripe.Event;
+
+test("a team that starts paying without a trial is welcomed on its first payment, and not again after a failed renewal", async () => {
+  const { deps, emails } = makeDeps(makeOrg({ plan: "FREE", subscriptionStatus: null }));
+  await dispatchStripeEvent(paidInvoice("evt_first"), deps);
+  assert.deepEqual(emails.map((e) => e.name), ["welcomeActive"]);
+  await dispatchStripeEvent(subscriptionEvent("customer.subscription.updated", activeGrowth, { status: "past_due" }, "evt_recover"), deps);
+  await dispatchStripeEvent(paidInvoice("evt_renewal"), deps);
+  assert.deepEqual(emails.map((e) => e.name), ["welcomeActive"]);
+});
+
+test("a trial converting sends one welcome whether the invoice or the subscription update arrives first", async () => {
+  const invoiceFirst = makeDeps(makeOrg());
+  await dispatchStripeEvent(paidInvoice("evt_inv"), invoiceFirst.deps);
+  await dispatchStripeEvent(subscriptionEvent("customer.subscription.updated", activeGrowth, { status: "trialing" }, "evt_sub"), invoiceFirst.deps);
+  assert.deepEqual(invoiceFirst.emails.map((e) => e.name), ["welcomeActive"]);
+
+  const updateFirst = makeDeps(makeOrg());
+  await dispatchStripeEvent(subscriptionEvent("customer.subscription.updated", activeGrowth, { status: "trialing" }, "evt_sub"), updateFirst.deps);
+  await dispatchStripeEvent(paidInvoice("evt_inv"), updateFirst.deps);
+  assert.deepEqual(updateFirst.emails.map((e) => e.name), ["welcomeActive"]);
 });

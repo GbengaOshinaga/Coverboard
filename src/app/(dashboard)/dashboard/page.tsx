@@ -83,8 +83,8 @@ export default async function DashboardPage() {
       orderBy: { startDate: "asc" },
       take: 10,
     }),
-    // Team size
-    prisma.user.count({ where: { organizationId: orgId } }),
+    // Team size: people still here, as on the Team page and the plan limit.
+    prisma.user.count({ where: { organizationId: orgId, isActive: true } }),
     // Pending requests
     prisma.leaveRequest.count({
       where: {

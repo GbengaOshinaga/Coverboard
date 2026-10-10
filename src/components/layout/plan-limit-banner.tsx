@@ -12,7 +12,7 @@ export function PlanLimitBanner({ warning, held }: { warning: string | null; hel
       <span>
         {warning}
         {held &&
-          " Until then, admin pages other than Team, Requests, My time off and Help open Billing. Your staff aren't affected."}
+          " Until then, most pages take you to Billing. Team, Requests, My time off, Help and your profile still work. Your staff aren't affected."}
       </span>
       <Link href="/settings/billing" className="font-medium text-amber-800 underline underline-offset-2 hover:text-amber-950">
         Choose a plan →

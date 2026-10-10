@@ -62,7 +62,7 @@ export async function GET(request: Request) {
   });
 
   const teamCount = await prisma.user.count({
-    where: { organizationId: orgId },
+    where: { organizationId: orgId, isActive: true },
   });
 
   const uniqueUsersOut = new Set(overlapping.map((r) => r.user.id)).size;

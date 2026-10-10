@@ -26,7 +26,9 @@ const ALLOWED_WHEN_LOCKED: RegExp[] = [
 
 // What a held admin still needs: Billing and the team list to fix it, their
 // own leave and their staff's requests (leave still has to be approved), help,
-// and the email links for verifying their address or resetting a password.
+// the email links for verifying their address or resetting a password, and
+// onboarding (the dashboard sends an unfinished team there, so holding it
+// would bounce between the two).
 const ALLOWED_WHEN_OVER_PLAN: RegExp[] = [
   /^\/settings\/billing(\/|$)/,
   /^\/settings\/profile(\/|$)/,
@@ -34,6 +36,7 @@ const ALLOWED_WHEN_OVER_PLAN: RegExp[] = [
   /^\/requests(\/|$)/,
   /^\/my-time-off(\/|$)/,
   /^\/help(\/|$)/,
+  /^\/onboarding(\/|$)/,
   /^\/account(\/|$)/,
   /^\/verify-email(\/|$)/,
   /^\/forgot-password(\/|$)/,

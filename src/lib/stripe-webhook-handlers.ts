@@ -117,29 +117,36 @@ export async function handleSubscriptionUpdated(
     await deps.emailers.paymentFailed({ to: org.adminEmail });
   }
 
-  // The team has just started paying: a trial ending, or a first payment
-  // going through after failing (trialing → past_due → active). Told by what
-  // Stripe says this event changed, not by our stored status: the
-  // payment-succeeded event can arrive first and mark the team active, and
-  // Stripe doesn't promise an order. A team that has paid before and comes
-  // back from a failed renewal was welcomed already; markPaidPlanStarted
-  // only says yes the first time.
-  if (
-    sub.status === "active" &&
-    previous?.status &&
-    previous.status !== "active" &&
-    (await deps.markPaidPlanStarted(org.id))
-  ) {
-    if (org.adminEmail) {
-      await deps.emailers.welcomeActive({ to: org.adminEmail, planName: planKey ? PLAN_DISPLAY_NAME[planKey] : "Coverboard" });
-    }
-    // Converted onto a plan the team has outgrown: the app sends admins to
-    // Billing until it fits (overPlan in the session); tell them, and us.
-    const problem = await planTooSmallFor(org, priceId, deps);
-    if (problem) {
-      console.warn(`[billing] org ${org.id} converted from trial onto a plan it has outgrown: ${problem}`);
-      await emailAllAdmins(org.id, deps, (to) => deps.emailers.planTooSmall({ to, problem, trialEnding: false }));
-    }
+  // The subscription has just become active: a trial ending, or a first
+  // payment going through after failing (trialing → past_due → active).
+  // Told by what Stripe says this event changed, not by our stored status,
+  // since Stripe doesn't promise an order. Whether it's the team's first
+  // paid plan is up to startedPaying.
+  if (sub.status === "active" && previous?.status && previous.status !== "active") {
+    await startedPaying(org, priceId, deps);
+  }
+}
+
+/**
+ * The team's first payment: welcome it, and warn if it has outgrown the plan.
+ * Called from the subscription becoming active and from a paid invoice,
+ * whichever Stripe sends first; markPaidPlanStarted lets only the first one
+ * through, so it happens once per team, whether it came from a trial, from
+ * Free, or reactivated a locked team. A team that has paid before and comes
+ * back from a failed renewal isn't welcomed again.
+ */
+async function startedPaying(org: OrgRecord, priceId: string | null, deps: WebhookDeps): Promise<void> {
+  if (!(await deps.markPaidPlanStarted(org.id))) return;
+  const planKey = priceId ? planKeyFromPriceId(priceId) : null;
+  if (org.adminEmail) {
+    await deps.emailers.welcomeActive({ to: org.adminEmail, planName: planKey ? PLAN_DISPLAY_NAME[planKey] : "Coverboard" });
+  }
+  // Started on a plan the team has outgrown: the app sends admins to Billing
+  // until it fits (overPlan in the session); tell them, and us.
+  const problem = await planTooSmallFor(org, priceId, deps);
+  if (problem) {
+    console.warn(`[billing] org ${org.id} started paying for a plan it has outgrown: ${problem}`);
+    await emailAllAdmins(org.id, deps, (to) => deps.emailers.planTooSmall({ to, problem, trialEnding: false }));
   }
 }
 
@@ -282,10 +289,13 @@ export async function handleInvoicePaymentSucceeded(
     canceledBy: "invoice.payment_succeeded",
   });
 
-  // The welcome and outgrown-plan emails go from the subscription-updated
-  // event, which says when the trial ended whatever order events arrive in.
   if (wasScheduled && org.adminEmail) {
     await deps.emailers.deletionCanceled({ to: org.adminEmail });
+  }
+
+  // Money taken, not a £0 invoice from starting a trial.
+  if ((invoice.amount_paid ?? 0) > 0) {
+    await startedPaying(org, priceId, deps);
   }
 }
 
