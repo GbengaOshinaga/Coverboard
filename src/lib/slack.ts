@@ -43,7 +43,19 @@ export async function getSlackIntegrationByOrgId(organizationId: string) {
 export async function getSlackIntegrationByTeamId(teamId: string) {
   return prisma.slackIntegration.findUnique({
     where: { teamId },
+    include: { organization: { select: { plan: true } } },
   });
+}
+
+/**
+ * Slack is a way into Coverboard, so it stops when the app does: a locked
+ * team (trial lapsed, subscription ended) can't book or approve from Slack
+ * either. The web app's lock is in middleware, which Slack requests skip.
+ */
+export function slackLockedMessage(integration: { organization: { plan: string } }): string | null {
+  return integration.organization.plan === "LOCKED"
+    ? "Your team's Coverboard plan has ended, so Slack is paused. An admin can choose a plan in Coverboard to turn it back on."
+    : null;
 }
 
 export async function getSlackClientForOrg(organizationId: string): Promise<{
@@ -106,6 +118,9 @@ export async function postSlackCommandResponse(
 
 /**
  * Look up a Coverboard user by their Slack email within an organization.
+ * Only people still on the team: someone marked as left can't approve,
+ * book or check balances from a Slack account they still have. Their role is
+ * read here each time, so a demotion applies at once.
  */
 export async function resolveSlackUser(
   slackUserId: string,
@@ -119,7 +134,7 @@ export async function resolveSlackUser(
     if (!email) return null;
 
     const user = await prisma.user.findFirst({
-      where: { email, organizationId },
+      where: { email, organizationId, isActive: true },
       include: { organization: true },
     });
 

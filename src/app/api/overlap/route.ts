@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { leaveTypeSeenBy } from "@/lib/leave-privacy";
 
 export async function GET(request: Request) {
   const session = await getServerSession(authOptions);
@@ -67,8 +68,10 @@ export async function GET(request: Request) {
   const uniqueUsersOut = new Set(overlapping.map((r) => r.user.id)).size;
   const coverageRatio = teamCount > 0 ? (teamCount - uniqueUsersOut) / teamCount : 1;
 
+  // Staff see who's off, not why.
+  const viewer = session.user as Record<string, unknown>;
   return NextResponse.json({
-    overlapping,
+    overlapping: overlapping.map((r) => ({ ...r, leaveType: leaveTypeSeenBy(r.leaveType, { id: viewer.id, role: viewer.role }, r.user.id) })),
     teamCount,
     uniqueUsersOut,
     coverageRatio,

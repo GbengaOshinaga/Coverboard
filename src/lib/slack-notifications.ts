@@ -15,10 +15,8 @@ export async function notifyNewRequest(data: {
   organizationId: string;
   requestId: string;
   userName: string;
-  leaveTypeName: string;
   startDate: Date;
   endDate: Date;
-  note: string | null;
   daysRequested: number;
 }) {
   if (!isSlackAppConfigured()) return;
@@ -33,7 +31,7 @@ export async function notifyNewRequest(data: {
     await slack.chat.postMessage({
       channel: integration.notificationChannel,
       blocks,
-      text: `New leave request from ${data.userName}: ${data.leaveTypeName} (${data.daysRequested} days)`,
+      text: `New leave request from ${data.userName} (${data.daysRequested} days)`,
     });
   } catch (error) {
     console.error("Failed to send new request notification to Slack:", error);

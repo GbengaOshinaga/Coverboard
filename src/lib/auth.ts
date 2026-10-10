@@ -1,3 +1,4 @@
+import { overCurrentPlan } from "@/lib/plan-headcount";
 import type { NextAuthOptions } from "next-auth";
 import type { JWT } from "next-auth/jwt";
 import CredentialsProvider from "next-auth/providers/credentials";
@@ -196,6 +197,11 @@ export const authOptions: NextAuthOptions = {
           },
         });
         token.revoked = !me || !me.isActive;
+        // Bigger than the plan it pays for: middleware holds admins at Billing.
+        token.overPlan =
+          !!me && !token.revoked && !!token.organizationId
+            ? await overCurrentPlan(token.organizationId as string, me.organization.plan)
+            : false;
         if (me) {
           token.role = me.role;
           token.memberType = me.memberType;

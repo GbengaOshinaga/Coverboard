@@ -8,6 +8,7 @@ import {
   getSlackIntegrationByTeamId,
   createSlackClient,
   postSlackCommandResponse,
+  slackLockedMessage,
 } from "@/lib/slack";
 import { getLeaveYearStart } from "@/lib/leave-year-server";
 import { CALENDAR_LEAVE_YEAR, leaveYearLabel, leaveYearOf } from "@/lib/leave-year";
@@ -19,6 +20,7 @@ import {
   summarizeWhosOutText,
 } from "@/lib/slack-messages";
 import { createLeaveRequest } from "@/lib/leave-requests/create";
+import { AWAY_LEAVE_TYPE } from "@/lib/leave-privacy";
 
 type SlackCommandResponse = {
   response_type: "ephemeral" | "in_channel";
@@ -71,6 +73,9 @@ export async function POST(request: Request) {
       )
     );
   }
+
+  const locked = slackLockedMessage(integration);
+  if (locked) return NextResponse.json(ephemeral(locked));
 
   if (!responseUrl) {
     return NextResponse.json(
@@ -160,7 +165,6 @@ async function handleWhosOut(organizationId: string): Promise<SlackCommandRespon
       },
       include: {
         user: { select: { name: true } },
-        leaveType: { select: { name: true } },
       },
       orderBy: { startDate: "asc" },
     }),
@@ -172,22 +176,22 @@ async function handleWhosOut(organizationId: string): Promise<SlackCommandRespon
       },
       include: {
         user: { select: { name: true } },
-        leaveType: { select: { name: true } },
       },
       orderBy: { startDate: "asc" },
       take: 10,
     }),
   ]);
 
+  // Posted in the channel, so who's off but not why (see leave-privacy).
   const outTodayRows = outToday.map((r) => ({
     userName: r.user.name,
-    leaveTypeName: r.leaveType.name,
+    leaveTypeName: AWAY_LEAVE_TYPE.name,
     startDate: r.startDate,
     endDate: r.endDate,
   }));
   const upcomingRows = upcoming.map((r) => ({
     userName: r.user.name,
-    leaveTypeName: r.leaveType.name,
+    leaveTypeName: AWAY_LEAVE_TYPE.name,
     startDate: r.startDate,
     endDate: r.endDate,
   }));

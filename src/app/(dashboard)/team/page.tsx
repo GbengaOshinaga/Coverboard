@@ -608,6 +608,10 @@ export default function TeamPage() {
             onSubmit={handleEditMember}
             onCancel={() => setEditMember(undefined)}
             canSetRoles={userRole === "ADMIN"}
+            isOnlyAdmin={
+              editMember.role === "ADMIN" &&
+              members.filter((m) => m.role === "ADMIN" && m.isActive !== false).length === 1
+            }
           />
         )}
       </Dialog>

@@ -5,6 +5,8 @@ import {
   isSlackAppConfigured,
   getSlackIntegrationByTeamId,
   createSlackClient,
+  postSlackCommandResponse,
+  slackLockedMessage,
 } from "@/lib/slack";
 import { reviewLeaveRequest } from "@/lib/leave-requests/review";
 
@@ -43,7 +45,21 @@ async function handleBlockAction(payload: {
   actions: { action_id: string; value: string }[];
   message: { ts: string };
   channel: { id: string };
+  response_url?: string;
 }) {
+  // Slack ignores the body of a reply to a button click, so anything the
+  // person should read goes to the response_url instead.
+  const tell = async (text: string) => {
+    if (payload.response_url) {
+      await postSlackCommandResponse(payload.response_url, {
+        response_type: "ephemeral",
+        replace_original: false,
+        text,
+      });
+    }
+    return new Response("", { status: 200 });
+  };
+
   const action = payload.actions[0];
   if (!action) return new Response("OK", { status: 200 });
 
@@ -55,11 +71,12 @@ async function handleBlockAction(payload: {
 
   const integration = await getSlackIntegrationByTeamId(payload.team.id);
   if (!integration) {
-    return NextResponse.json({
-      response_type: "ephemeral",
-      text: "This Slack workspace is not connected to Coverboard.",
-      replace_original: false,
-    });
+    return tell("This Slack workspace is not connected to Coverboard.");
+  }
+
+  const locked = slackLockedMessage(integration);
+  if (locked) {
+    return tell(locked);
   }
 
   const slack = createSlackClient(integration.botToken);
@@ -71,11 +88,7 @@ async function handleBlockAction(payload: {
   );
 
   if (!reviewer) {
-    return NextResponse.json({
-      response_type: "ephemeral",
-      text: "Could not find your Coverboard account.",
-      replace_original: false,
-    });
+    return tell("Could not find your Coverboard account.");
   }
 
   const decision = action_id === "approve_leave" ? "APPROVED" : "REJECTED";
@@ -96,11 +109,7 @@ async function handleBlockAction(payload: {
   });
 
   if (!result.ok) {
-    return NextResponse.json({
-      response_type: "ephemeral",
-      text: result.message,
-      replace_original: false,
-    });
+    return tell(result.message);
   }
 
   const statusEmoji = decision === "APPROVED" ? ":white_check_mark:" : ":x:";
@@ -121,10 +130,6 @@ async function handleBlockAction(payload: {
         {
           type: "section",
           fields: [
-            {
-              type: "mrkdwn",
-              text: `*Type:*\n${result.request.leaveTypeName}`,
-            },
             {
               type: "mrkdwn",
               text: `*Days:*\n${result.request.daysRequested}`,

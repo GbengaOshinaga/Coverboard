@@ -21,6 +21,7 @@ import { stripe } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
 import {
   emailTrialEndingSoon,
+  emailPlanTooSmall,
   emailPaymentFailed,
   emailSubscriptionCanceled,
   emailWelcomeActive,
@@ -38,6 +39,8 @@ import {
   type OrgRecord,
   type WebhookDeps,
 } from "@/lib/stripe-webhook-handlers";
+
+import { headcountOverPlanError } from "@/lib/plan-headcount";
 
 export const runtime = "nodejs";
 // App Router does not parse the body when we read it as text, so signature
@@ -75,8 +78,17 @@ const deps: WebhookDeps = {
   scheduleDeletion,
   cancelScheduledDeletion,
   setTrialGracePeriod,
+  headcountOverPlan: headcountOverPlanError,
+  async adminEmails(organizationId) {
+    const admins = await prisma.user.findMany({
+      where: { organizationId, role: "ADMIN", isActive: true },
+      select: { email: true },
+    });
+    return admins.map((a) => a.email);
+  },
   emailers: {
     trialEndingSoon: emailTrialEndingSoon,
+    planTooSmall: emailPlanTooSmall,
     paymentFailed: emailPaymentFailed,
     subscriptionCanceled: emailSubscriptionCanceled,
     welcomeActive: emailWelcomeActive,

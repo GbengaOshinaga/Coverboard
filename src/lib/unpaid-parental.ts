@@ -79,11 +79,29 @@ export function uplWholeWeeksError(input: {
   irregularHours?: boolean;
 }): string | null {
   const { daysPerWeek } = input;
-  if (!input.weekdays && (daysPerWeek !== 5 || input.irregularHours)) return null;
+  if (!uplWholeWeeksChecked(input)) return null;
   const days = countWorkingDays(input.request.startDate, input.request.endDate, input.weekdays);
   if (days > 0 && days % daysPerWeek === 0) return null;
   const week = daysPerWeek === 1 ? "1 working day" : `${daysPerWeek} working days`;
   return `Unpaid parental leave has to be taken in whole weeks. A week here is ${week}, and this booking is ${days}. Single days are only allowed when the child gets ${DISABILITY_BENEFITS} – tick that on the child if so.`;
+}
+
+/** Whether whole weeks can be checked for this working week (see uplWholeWeeksError). */
+export function uplWholeWeeksChecked(input: {
+  daysPerWeek: number;
+  weekdays: number[] | null;
+  irregularHours?: boolean;
+}): boolean {
+  return !!input.weekdays || (input.daysPerWeek === 5 && !input.irregularHours);
+}
+
+/** Zero-hours, variable-hours, or no days a week recorded: no fixed week. */
+export function hasIrregularHours(person: { employmentType: string | null; daysWorkedPerWeek: number | null } | null): boolean {
+  return (
+    person?.employmentType === "ZERO_HOURS" ||
+    person?.employmentType === "VARIABLE_HOURS" ||
+    !((person?.daysWorkedPerWeek ?? 0) >= 1)
+  );
 }
 
 /** The child's parental-leave year containing a date (first and last day). */
@@ -197,6 +215,38 @@ export function uplError(input: {
         used.capThisYear - before.daysThisYear
       )} days left that year.`;
     }
+  }
+  return null;
+}
+
+/**
+ * Rechecks the leave already booked for a child after its details change
+ * (dates, weeks taken elsewhere, disability benefit). Each booking goes
+ * through the same check as booking it now (uplError), with the working week
+ * on its own start date, which is what was used when it was booked, and the
+ * others counted alongside it. Null when they all still fit.
+ */
+export function uplBookedLeaveError(input: {
+  childName: string;
+  dateOfBirth: Date;
+  placedOn?: Date | null;
+  disabilityBenefit: boolean;
+  serviceStartDate: Date | null;
+  weeksTakenElsewhere: number;
+  irregularHours?: boolean;
+  /** Live bookings, each with the working week on its start date. */
+  bookings: (Range & { daysPerWeek: number; weekdays: number[] | null })[];
+}): string | null {
+  const f = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  for (const b of input.bookings) {
+    const error = uplError({
+      ...input,
+      request: { startDate: b.startDate, endDate: b.endDate },
+      bookings: input.bookings.filter((o) => o !== b).map(({ startDate, endDate }) => ({ startDate, endDate })),
+      daysPerWeek: b.daysPerWeek,
+      weekdays: b.weekdays,
+    });
+    if (error) return `With this change, the leave booked for ${f(b.startDate)} – ${f(b.endDate)} wouldn't be allowed. ${error}`;
   }
   return null;
 }

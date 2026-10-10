@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireActiveSession } from "@/lib/require-active-session";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
+import { PlanLimitBanner } from "@/components/layout/plan-limit-banner";
+import { planLimitWarning } from "@/lib/plan-headcount";
 import { TrialBanner } from "@/components/layout/trial-banner";
 import { DeletionScheduledBanner } from "@/components/layout/deletion-scheduled-banner";
 import { EmailVerificationBanner } from "@/components/layout/email-verification-banner";
@@ -39,8 +41,10 @@ export default async function DashboardLayout({
   }
 
   const isAdmin = role === "ADMIN";
+  const planWarning = isAdmin ? await planLimitWarning(orgId) : null;
   const banner = org ? (
     <>
+      <PlanLimitBanner warning={planWarning} />
       <DeletionScheduledBanner
         deletionScheduledFor={org.deletionScheduledFor}
         isAdmin={isAdmin}

@@ -1,3 +1,4 @@
+import { AWAY_LEAVE_TYPE } from "@/lib/leave-privacy";
 import { eachDayOfInterval, parseISO, format } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import {
@@ -632,16 +633,34 @@ export function canSeeCoverCandidates(role: string | undefined): boolean {
   return role === "ADMIN" || role === "MANAGER";
 }
 
-export function withoutCoverCandidates(result: CoverCheckResult): CoverCheckResult {
+/** Staff see who's off, not why (see leave-privacy); their own leave keeps its type. */
+function offWithoutReasons<T extends { id: string; leaveType: string | null }>(staffOff: T[], viewerId: string): T[] {
+  return staffOff.map((p) => (p.id === viewerId ? p : { ...p, leaveType: AWAY_LEAVE_TYPE.name }));
+}
+
+export function withoutCoverCandidates(result: CoverCheckResult, viewerId: string): CoverCheckResult {
   return {
     ...result,
-    conflicts: result.conflicts.map((c) => ({ ...c, coverCandidates: [], ruledOut: [], offers: [] })),
+    conflicts: result.conflicts.map((c) => ({
+      ...c,
+      staffOff: offWithoutReasons(c.staffOff, viewerId),
+      coverCandidates: [],
+      ruledOut: [],
+      offers: [],
+    })),
   };
 }
 
-export function dailyWithoutCoverCandidates(days: DailyCover[]): DailyCover[] {
+export function dailyWithoutCoverCandidates(days: DailyCover[], viewerId: string): DailyCover[] {
   return days.map((d) => ({
     ...d,
-    shifts: d.shifts.map((s) => ({ ...s, coverCandidates: [], ruledOut: [], offers: [] })),
+    staffOff: offWithoutReasons(d.staffOff, viewerId),
+    shifts: d.shifts.map((s) => ({
+      ...s,
+      staffOff: offWithoutReasons(s.staffOff, viewerId),
+      coverCandidates: [],
+      ruledOut: [],
+      offers: [],
+    })),
   }));
 }

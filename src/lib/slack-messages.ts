@@ -39,7 +39,7 @@ export function buildWhosOutMessage(
   } else {
     const lines = outToday.map(
       (p) =>
-        `:palm_tree: *${p.userName}* — ${p.leaveTypeName} (${formatDateRange(p.startDate, p.endDate)})`
+        `• *${p.userName}* — ${p.leaveTypeName} (${formatDateRange(p.startDate, p.endDate)})`
     );
     blocks.push({
       type: "section",
@@ -174,15 +174,15 @@ function buildProgressBar(used: number, total: number): string {
 }
 
 /**
- * Build a notification message for a new leave request (with approve/reject buttons)
+ * Build a notification message for a new leave request (with approve/reject
+ * buttons). It goes to a channel, so it says who and when but not the leave
+ * type or note (sickness is health data); approvers see those in Coverboard.
  */
 export function buildNewRequestNotification(data: {
   requestId: string;
   userName: string;
-  leaveTypeName: string;
   startDate: Date;
   endDate: Date;
-  note: string | null;
   daysRequested: number;
 }): KnownBlock[] {
   const blocks: KnownBlock[] = [];
@@ -198,15 +198,11 @@ export function buildNewRequestNotification(data: {
   blocks.push({
     type: "section",
     fields: [
-      { type: "mrkdwn", text: `*Type:*\n${data.leaveTypeName}` },
       { type: "mrkdwn", text: `*Days:*\n${data.daysRequested} weekday${data.daysRequested !== 1 ? "s" : ""}` },
       {
         type: "mrkdwn",
         text: `*Dates:*\n${formatDateRange(data.startDate, data.endDate)}`,
       },
-      ...(data.note
-        ? [{ type: "mrkdwn" as const, text: `*Note:*\n${data.note}` }]
-        : []),
     ],
   });
 
