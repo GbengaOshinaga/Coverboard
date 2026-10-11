@@ -369,22 +369,32 @@ test("subscription.paused → status=paused, plan=LOCKED, grace period set, acco
 
 // ---------- invoice.payment_succeeded ----------
 
-test("invoice.payment_succeeded for £0 (starting a trial) → active, cardAdded, plan from price, no email", async () => {
+test("invoice.payment_succeeded for £0 (a trial starting) changes nothing: still trialing, no card, trial plan", async () => {
   const { deps, updates, emails, calls } = makeDeps(
     makeOrg({ plan: "TRIAL", subscriptionStatus: "trialing" })
   );
   await dispatchStripeEvent(
     invoiceEvent("invoice.payment_succeeded", {
       customer: "cus_1",
-      lines: {
-        data: [
-          {
-            pricing: {
-              price_details: { price: STRIPE_PRICE_IDS.growth },
-            },
-          },
-        ],
-      },
+      amount_paid: 0,
+      lines: { data: [{ pricing: { price_details: { price: STRIPE_PRICE_IDS.growth } } }] },
+    } as unknown as Partial<Stripe.Invoice> & { customer: string }),
+    deps
+  );
+  assert.equal(updates.length, 0);
+  assert.equal(calls.length, 0);
+  assert.equal(emails.length, 0);
+});
+
+test("invoice.payment_succeeded with money taken → active, cardAdded, plan from price, deletion cancelled", async () => {
+  const { deps, updates, calls } = makeDeps(
+    makeOrg({ plan: "TRIAL", subscriptionStatus: "trialing" })
+  );
+  await dispatchStripeEvent(
+    invoiceEvent("invoice.payment_succeeded", {
+      customer: "cus_1",
+      amount_paid: 4900,
+      lines: { data: [{ pricing: { price_details: { price: STRIPE_PRICE_IDS.growth } } }] },
     } as unknown as Partial<Stripe.Invoice> & { customer: string }),
     deps
   );
@@ -393,11 +403,7 @@ test("invoice.payment_succeeded for £0 (starting a trial) → active, cardAdded
   assert.equal(u.cardAdded, true);
   assert.equal(u.plan, "GROWTH");
   assert.equal(u.trialExpiredGraceEndsAt, null);
-  assert.equal(
-    calls.filter((c) => c.name === "cancelScheduledDeletion").length,
-    1
-  );
-  assert.equal(emails.length, 0);
+  assert.equal(calls.filter((c) => c.name === "cancelScheduledDeletion").length, 1);
 });
 
 test("invoice.payment_succeeded from already-active → no welcome email", async () => {
@@ -406,11 +412,13 @@ test("invoice.payment_succeeded from already-active → no welcome email", async
       plan: "GROWTH",
       subscriptionStatus: "active",
       stripePriceId: STRIPE_PRICE_IDS.growth,
-    })
+    }),
+    { paidBefore: true }
   );
   await dispatchStripeEvent(
     invoiceEvent("invoice.payment_succeeded", {
       customer: "cus_1",
+      amount_paid: 4900,
       lines: {
         data: [
           {
@@ -429,11 +437,12 @@ test("invoice.payment_succeeded from already-active → no welcome email", async
 test("invoice.payment_succeeded also fires deletionCanceled when a deletion was scheduled", async () => {
   const { deps, emails } = makeDeps(
     makeOrg({ plan: "TRIAL", subscriptionStatus: "trialing" }),
-    { scheduledDeletionExists: true }
+    { scheduledDeletionExists: true, paidBefore: true }
   );
   await dispatchStripeEvent(
     invoiceEvent("invoice.payment_succeeded", {
       customer: "cus_1",
+      amount_paid: 1900,
       lines: {
         data: [
           {
@@ -457,6 +466,7 @@ test("invoice.payment_succeeded with object-form customer is handled", async () 
       data: {
         object: {
           customer: { id: "cus_1" },
+          amount_paid: 9900,
           lines: {
             data: [
               {

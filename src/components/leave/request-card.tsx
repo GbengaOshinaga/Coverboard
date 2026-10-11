@@ -222,15 +222,19 @@ export function RequestCard({
 
           {balance && balance.allowance > 0 && canReview && request.status === "PENDING" && (
             <div className="mt-2 flex flex-wrap items-center gap-1 rounded bg-gray-50 px-2 py-1 sm:gap-2">
+              {/* `remaining` already takes off every pending request, this
+                  one included, so it's shown next to "pending" to add up, and
+                  approving this one only exceeds the allowance on top of
+                  what's already used. */}
               <span className="text-[11px] text-gray-500">
-                Balance: {balance.used} used / {balance.allowance} allowed
+                Balance: {balance.used} used &middot; {balance.pending} pending / {balance.allowance} allowed
               </span>
               <span className="text-[11px] font-medium text-gray-600">
-                &middot; {balance.remaining} remaining
+                &middot; {balance.remaining} left after pending
               </span>
-              {days > balance.remaining && (
+              {balance.used + days > balance.allowance && (
                 <span className="text-[11px] font-medium text-red-600">
-                  (exceeds by {days - balance.remaining})
+                  (exceeds by {balance.used + days - balance.allowance})
                 </span>
               )}
             </div>

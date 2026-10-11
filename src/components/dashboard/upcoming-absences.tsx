@@ -27,11 +27,12 @@ export function UpcomingAbsences({
           <CardTitle className="flex items-center gap-2">
             <CalendarClock className="h-5 w-5 text-gray-400" />
             Upcoming absences
+            <span className="text-xs font-normal text-gray-400">next 2 weeks</span>
           </CardTitle>
         </CardHeader>
         <CardContent>
           <p className="py-6 text-center text-sm text-gray-400">
-            No upcoming absences scheduled.
+            No absences in the next 2 weeks.
           </p>
         </CardContent>
       </Card>
@@ -44,6 +45,7 @@ export function UpcomingAbsences({
         <CardTitle className="flex items-center gap-2">
           <CalendarClock className="h-5 w-5 text-brand-500" />
           Upcoming absences
+          <span className="text-xs font-normal text-gray-400">next 2 weeks</span>
         </CardTitle>
       </CardHeader>
       <CardContent>

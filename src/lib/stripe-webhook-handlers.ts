@@ -267,6 +267,12 @@ export async function handleInvoicePaymentSucceeded(
     typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
   if (!customerId) return;
 
+  // A £0 invoice takes no money: Stripe sends one when a trial starts. It
+  // says nothing about a card or the plan, so it changes nothing; treating
+  // it as a payment marked every new trial as a paying customer with a card
+  // on file. The subscription-updated event carries the real status.
+  if ((invoice.amount_paid ?? 0) <= 0) return;
+
   const org = await deps.findOrgByCustomerId(customerId);
   if (!org) return;
 
@@ -293,10 +299,7 @@ export async function handleInvoicePaymentSucceeded(
     await deps.emailers.deletionCanceled({ to: org.adminEmail });
   }
 
-  // Money taken, not a £0 invoice from starting a trial.
-  if ((invoice.amount_paid ?? 0) > 0) {
-    await startedPaying(org, priceId, deps);
-  }
+  await startedPaying(org, priceId, deps);
 }
 
 export async function handleInvoicePaymentFailed(
