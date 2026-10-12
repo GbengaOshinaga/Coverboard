@@ -1,4 +1,4 @@
-<!-- Last updated: 2026-05-06 — auto-updated from codebase review -->
+<!-- Last updated: 2026-10-12 — cancelling and access rules checked against the deletion scheduler, cancel route and nightly job -->
 # Data deletion and trial expiry flow
 
 Coverboard never deletes your data the moment you close your account or run out of trial. Every deletion goes through a 30-day grace period, with audit-logged checkpoints along the way and an admin email at every step. This page explains how the flow works — what triggers it, how to back out, and what actually gets removed at the end.
@@ -24,12 +24,12 @@ Once scheduled, your account is in a 30-day window where:
 
 - **All data is still on disk, untouched.**
 - A persistent red banner appears on every dashboard page so the team knows what's happening.
-- The admin can cancel deletion at any point from **Settings → Danger zone** (see below).
+- The deletion can be cancelled at any point in the window (see below): by paying, if the team is locked, or from **Settings → Danger zone** if it isn't.
 
 What happens to access depends on which path triggered it:
 
 - **Billing-triggered** (paused / cancelled / payment failed) — the org `plan` is set to `LOCKED` and the lock screen takes over. Only `/settings/billing`, `/settings/profile`, `/account/delete`, `/api/billing`, `/api/account`, `/api/auth`, `/login`, `/signup`, `/logout` and `/locked` are reachable. The admin has to pay or add a card to recover.
-- **User-requested** (admin clicked Delete account) — the app keeps working normally. The `plan` is unchanged. This is deliberate: the admin needs the app to wind down (export data, finish pending approvals, communicate with the team) and changing their mind shouldn't require a billing change.
+- **User-requested** (admin clicked Delete account) — any Stripe subscription is cancelled straight away, so a team on a trial or a paid plan is then locked like the billing-triggered case. A Free team, with no subscription, keeps working normally during the window so the admin can wind down (export data, finish pending approvals, tell the team).
 
 For trial-expired cases the flow has two stages: first a `trialExpiredGraceEndsAt` is set 30 days out (`trial_grace_started` audit). When that date passes, a daily cron promotes the org to a full `scheduled` deletion (a second 30-day window). In effect, trial users get up to 60 days from trial end before any data is touched.
 
@@ -37,9 +37,11 @@ For trial-expired cases the flow has two stages: first a `trialExpiredGraceEndsA
 
 ## Cancelling a scheduled deletion
 
-For billing-triggered cases the easiest cancel is to **add a card and pay an invoice** (for paused/cancelled trials) or **reactivate the subscription** (for cancel-at-period-end). The Stripe webhook clears `deletionScheduledFor` and writes an audit entry.
+**A locked team keeps its data only by paying.** Add a card and pay, or reactivate the subscription for a cancel-at-period-end. That cancels the deletion and the trial's 30-day grace date, and the Stripe webhook writes an audit entry. **Cancel deletion and keep my data** (`POST /api/account/delete/cancel`) refuses while the team is locked: otherwise an unpaid team could keep its data forever.
 
-For user-requested deletions the admin can use **Cancel deletion and keep my data** on the Settings page (or `POST /api/account/delete/cancel`).
+**A team that isn't locked** (a Free team that asked for deletion) can use **Cancel deletion and keep my data** on the Settings page.
+
+The daily job only turns an expired grace date into a scheduled deletion for teams that are still locked, so a team that has come back is never scheduled.
 
 ---
 

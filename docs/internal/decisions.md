@@ -173,13 +173,20 @@ If you change one, update its entry and add the date. If you make a new decision
 - **The payment-failed email** goes only from `invoice.payment_failed`, once per failed attempt. It used to come from the subscription update as well, which doubled it.
 - **Where:** `handleSubscriptionUpdated()`, `src/components/layout/past-due-banner.tsx`.
 
-### 18. A team that comes back cancels its deletion and its grace period (2026-10-12)
-- **Decision:** when a subscription becomes active again:
-  - any scheduled deletion is cancelled;
-  - the 30-day grace date for a paused trial is cleared too, even if no deletion was scheduled yet.
-- **Why:** the nightly job turns any expired grace date into a scheduled deletion, without checking the team's status. A team that came back during its grace period would have been deleted.
-- **Safe for admin requests:** an admin's own deletion request cancels the subscription, so it can't be undone this way.
-- **Where:** `cancelScheduledDeletion()`, `src/app/api/cron/process-deletions/route.ts`.
+### 18. Only paying ends a lapsed team's deletion (2026-10-12)
+- **Decision:** a scheduled deletion, and a paused trial's 30-day grace date, end only when the team pays or its subscription becomes active again. The paths that do this clear the grace date themselves:
+  - adding a card;
+  - a paid invoice;
+  - the subscription becoming active.
+- **What `cancelScheduledDeletion()` does:** it never touches the grace date. It cancels a scheduled deletion once, with one conditional update, so the "deletion cancelled" email goes once.
+- **The admin's own cancel button** refuses while the team is locked: "add a payment method to keep your data".
+- **The nightly job** only turns an expired grace date into a scheduled deletion for teams that are still locked.
+- **Why:**
+  - a team that came back during its grace period was about to be deleted, because the job didn't check status;
+  - the first fix cleared the grace date inside `cancelScheduledDeletion()`, which let a locked team's admin cancel its way out of ever being deleted, since locked teams can still reach `/api/account`;
+  - checking status in the job is a cheap backstop against both.
+- **Safe for admin requests:** an admin's own deletion request cancels the subscription and locks the team. They keep their data by paying, like any locked team.
+- **Where:** `cancelScheduledDeletion()`, `src/app/api/account/delete/cancel/route.ts`, `promoteExpiredGraceToScheduled()` in `src/app/api/cron/process-deletions/route.ts`.
 
 ### 19. Switching to Free happens at period end, using Stripe metadata (2026-06-02)
 - **Decision:**

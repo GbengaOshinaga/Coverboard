@@ -91,19 +91,13 @@ export async function cancelScheduledDeletion(params: {
       deletionScheduledFor: null,
       deletionReason: null,
       deletionConfirmedAt: null,
-      trialExpiredGraceEndsAt: null,
     },
   });
-  if (count === 0) {
-    // Nothing scheduled yet, but a paused trial may be in its 30-day grace
-    // period: clear that too, or the nightly job would schedule the team
-    // for deletion after it has come back.
-    await prisma.organization.updateMany({
-      where: { id: org.id, trialExpiredGraceEndsAt: { not: null } },
-      data: { trialExpiredGraceEndsAt: null },
-    });
-    return { wasScheduled: false };
-  }
+  // The 30-day grace date of a paused trial is left alone: only a payment
+  // ends it, and the paths that take one (adding a card, a paid invoice, the
+  // subscription becoming active) clear it themselves. Clearing it here let
+  // an admin of a locked team cancel its way out of ever being deleted.
+  if (count === 0) return { wasScheduled: false };
 
   const adminEmail = await getAdminEmail(org.id);
 
