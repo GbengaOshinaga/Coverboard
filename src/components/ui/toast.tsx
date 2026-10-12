@@ -7,19 +7,23 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { CheckCircle, XCircle, AlertTriangle, Info, X } from "lucide-react";
 
 type ToastVariant = "success" | "error" | "warning" | "info";
 
+type ToastLink = { href: string; label: string };
+
 type Toast = {
   id: string;
   message: string;
   variant: ToastVariant;
+  link?: ToastLink;
 };
 
 type ToastContextType = {
-  toast: (message: string, variant?: ToastVariant) => void;
+  toast: (message: string, variant?: ToastVariant, link?: ToastLink) => void;
 };
 
 const ToastContext = createContext<ToastContextType>({
@@ -56,13 +60,14 @@ let toastCounter = 0;
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const addToast = useCallback((message: string, variant: ToastVariant = "success") => {
+  const addToast = useCallback((message: string, variant: ToastVariant = "success", link?: ToastLink) => {
     const id = `toast-${++toastCounter}`;
-    setToasts((prev) => [...prev, { id, message, variant }]);
+    setToasts((prev) => [...prev, { id, message, variant, link }]);
 
+    // A toast with a link stays longer so there's time to follow it.
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
+    }, link ? 8000 : 4000);
   }, []);
 
   const removeToast = useCallback((id: string) => {
@@ -87,7 +92,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               role="alert"
             >
               <Icon className={cn("h-4 w-4 mt-0.5 shrink-0", iconStyles[t.variant])} />
-              <p className="flex-1 text-sm font-medium">{t.message}</p>
+              <p className="flex-1 text-sm font-medium">
+                {t.message}
+                {t.link && (
+                  <>
+                    {" "}
+                    <Link href={t.link.href} onClick={() => removeToast(t.id)} className="underline underline-offset-2">
+                      {t.link.label}
+                    </Link>
+                  </>
+                )}
+              </p>
               <button
                 onClick={() => removeToast(t.id)}
                 className="shrink-0 rounded p-0.5 opacity-60 hover:opacity-100 transition-opacity"

@@ -612,7 +612,7 @@ _UPDATES = {
     "balances": dict(
         summary="Each person's allowance, days used, pending and remaining, per leave type and leave year. UK entitlement is 5.6 weeks of their working week, capped at 28 days.",
         how=["Entitlement = 5.6 × working days per week, rounded up, capped at 28: 28 for a 5-day week, 17 for 3 days.",
-             "Mid-year starters get their share of the leave year from their start date, rounded up (never down).",
+             "Mid-year starters get the months of the leave year they start in, as GOV.UK works it out: full entitlement × months started ÷ 12 (the start month counts in full), rounded up to the next half day but never above the full year. This is the share WTR reg 13(5) gives, worked out GOV.UK's way, which never gives less.",
              "Days taken only count days they'd actually have worked.",
              "Carry-over is used first, soonest-expiring first; when it expires only the unused part lapses.",
              "Everything counts within the team's leave year (see Leave year)."],
@@ -786,3 +786,143 @@ LIMITATIONS = [
     ("Holiday on leaving", "Covers the allowance the app knows; contract terms such as rounding up to half days are for the employer."),
     ("Not legal advice", "Coverboard implements published GOV.UK and legislation.gov.uk rules, but figures should be checked by your payroll provider before payment."),
 ]
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Updates, 11 Oct 2026: tester rounds of 8–11 Oct (plan limits, admin
+# continuity, leave privacy, leavers, Stripe and Slack).
+# ════════════════════════════════════════════════════════════════════════
+R.update({
+    "ukgdpr_art5": ("legislation.gov.uk – UK GDPR Article 5 (data minimisation)", "https://www.legislation.gov.uk/eur/2016/679/article/5"),
+    "ukgdpr_art9": ("legislation.gov.uk – UK GDPR Article 9 (health data)", "https://www.legislation.gov.uk/eur/2016/679/article/9"),
+    "ico_special": ("ICO – Special category data", "https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/lawful-basis/special-category-data/"),
+})
+
+
+def _feature(fid):
+    return next(f for f in FEATURES if f["id"] == fid)
+
+
+def _add(fid, how=(), code=(), refs=(), docs=(), related=()):
+    """Adds to an entry rather than replacing it."""
+    f = _feature(fid)
+    f["how"] = list(f["how"]) + list(how)
+    f["code"] = list(f["code"]) + list(code)
+    f["refs"] = list(f.get("refs", [])) + list(refs)
+    f["docs"] = list(f.get("docs", [])) + list(docs)
+    f["related"] = list(f.get("related", [])) + list(related)
+
+
+_feature("roles").update(
+    how=["Role and plan are read from the database on every request, so a demotion or plan change takes effect at once, not when the session expires.",
+         "Only admins change roles. A team is never left without an admin: demoting someone, or giving them a leaving date, is refused when every other admin has left or is leaving. Two admins acting at once are handled one after the other.",
+         "Members can't open Reports or Audit (middleware redirects them); Billing is for admins only.",
+         "You can't approve your own leave when another approver exists; a sole approver's request auto-approves and is labelled so.",
+         "Cover suggestions and who-was-asked lists are only shown to managers and admins.",
+         "Sickness notes are only visible to the person and admins; staff see colleagues' leave as “Away” (see Leave privacy)."])
+_add("roles", code=[("src/lib/auth.ts", "Role, plan and sign-out read on every request"),
+                    ("src/lib/admin-continuity.ts", "lastAdminError(): never leave the team without an admin")],
+     related=["leaveprivacy", "planlimits"])
+
+_add("team", how=["The dashboard's team size counts only people still here, like the Team page."])
+
+_add("onboarding", how=["Invites must fit the plan's people limit (the admin counts as one); the invite step shows how many can be invited, and setup refuses more before saving anything."],
+     code=[("src/app/api/onboarding/invite-limit/route.ts", "Invite limit for the screen")],
+     related=["planlimits"])
+
+_add("leavers", how=["Someone marked as left is signed out on their next request, not when their session expires.",
+                     "The last admin who's staying can't be given a leaving date; make someone else an admin first.",
+                     "Leavers stop counting towards the plan's people and admin limits; bringing someone back is checked against the plan."],
+     code=[("src/lib/admin-continuity.ts", "Last-admin check")],
+     related=["planlimits"])
+
+_add("otherfamily", how=["Refused when the person has no working days to count weeks from; zero-hours staff aren't forced into Monday–Friday weeks.",
+                         "Changing a child's details rechecks leave already booked for them, using the working pattern each booking was made with.",
+                         "A child can't be added twice; staff can't change their children's details, and a manager can't confirm their own; changes are logged.",
+                         "The booking form says when leave for that child can be taken in days."])
+
+_add("ssp", how=["The 28-week alert email only goes to teams whose plan includes SSP tracking."])
+
+_add("carryover", how=["Impossible expiry dates and out-of-range values are refused, not quietly adjusted; switching carry-over off keeps the limit for later."])
+
+_add("security", how=["Pay figures and right-to-work data are left out of API responses for staff and on plans without those features; the overlap check returns names and dates, not whole leave records.",
+                      "The Content Security Policy allows Stripe's card frames and payment API, so the card form and wallets work."])
+
+_feature("billing").update(
+    summary="Five plans (Free, Starter, Growth, Scale, Pro). Stripe handles subscriptions, payment methods, trials and VAT; plan changes are self-serve.",
+    how=["Stripe webhooks keep the plan in sync (paused or cancelled → locked; a downgrade to Free → Free at period end).",
+         "Each Stripe event is handled once: its ID is recorded first and a repeat delivery skipped. A handler that fails isn't retried.",
+         "The welcome email goes on a team's first payment, from a trial, from Free or reactivating a locked team, whichever Stripe event arrives first; never again after a recovered renewal.",
+         "Billing emails go to the longest-serving admin who isn't leaving; plan-too-small warnings go to every admin who isn't leaving.",
+         "Change plan: immediate and prorated on a paid plan; from Free through Add payment method, with no second trial; Switch to Free at the end of the paid period.",
+         "Past due (Stripe retrying a failed payment): the paid plan applies, so a trial whose first charge fails moves to the plan it chose (a locked team stays locked until it pays), and admins see a banner to update their card. The payment-failed email goes once per failed attempt.",
+         "A lapsed team that comes back has its 30-day grace period and any scheduled deletion cancelled; the cancellation is atomic, so its email goes once.",
+         "A £0 invoice (a trial starting) changes nothing; npm run resync:stripe-trials repaired trials marked as paying before 11 Oct 2026.",
+         "Feature access is checked by plan in the APIs as well as on screen (TRIAL = full access)."])
+_add("billing", code=[("src/app/api/billing/change-plan/route.ts", "Change plan"),
+                      ("src/components/layout/past-due-banner.tsx", "Past-due banner"),
+                      ("scripts/resync-stripe-trials.ts", "Repair for trials marked as paying"),
+                      ("src/app/api/billing/downgrade-to-free/route.ts", "Switch to Free"),
+                      ("src/lib/billing-emails.ts", "Billing emails")],
+     related=["planlimits"])
+
+_add("slack", how=["Paused while the team is locked: buttons and /requestleave reply that an admin needs to choose a plan.",
+                   "People who've left can't act from Slack.",
+                   "Replies to button clicks go to Slack's response URL so the person sees them; a reply that can't be posted is logged, not an error.",
+                   "Channel posts never show the leave type or note."],
+     code=[("src/lib/slack.ts", "slackLockedMessage(), response URL replies")],
+     related=["leaveprivacy"])
+
+_NEW_11OCT = [
+    ("signup", dict(id="planlimits", ch="start", title="Plan limits (people & admins)", plan="Free, Starter, Growth",
+         summary="Free allows 5 people and 1 admin, Starter 15 and 2, Growth 75 and 5; Scale and Pro are unlimited. People means everyone still on the team, admins included.",
+         how=["Checked when adding people, importing a CSV, inviting at onboarding, making someone an admin and bringing a leaver back.",
+              "During a trial, or before a downgrade to Free, the limits are the plan being moved to, so the team can't outgrow it in the meantime.",
+              "Moving to a plan the team doesn't fit is refused, with what to change first.",
+              "A team bigger than the plan it pays for: admins are held at Billing until it fits. Team, Requests, My time off, Help, their profile, onboarding and email links still work; staff aren't affected.",
+              "Admins see a banner saying why, also during a trial that has outgrown its chosen plan; every admin is emailed 3 days before the trial ends and when the team starts paying."],
+         code=[("src/lib/plans.ts", "PLAN_MAX_EMPLOYEES, PLAN_DEFAULT_MAX_ADMINS"),
+               ("src/lib/plan-headcount.ts", "planForLimits(), headcountOverPlanError(), overCurrentPlan()"),
+               ("src/middleware.ts", "Holding admins at Billing"),
+               ("src/components/layout/plan-limit-banner.tsx", "Banner")],
+         refs=[], docs=["stripe_billing"], related=["billing", "roles", "onboarding"])),
+    ("roles", dict(id="leaveprivacy", ch="start", title="Leave privacy (“Away”)", plan="All plans",
+         summary="Staff see a colleague's leave as “Away”, in one neutral colour, with no type or note. Admins and managers, who approve leave, see the type; everyone sees their own.",
+         how=["Every type is hidden from staff, not just sickness: hiding only sickness would make “Away” mean sick.",
+              "Applies on the dashboard and in the checks shown when booking (who else is off, cover); staff's calendar shows only their own leave.",
+              "Slack channel posts never carry the type or note.",
+              "Sickness notes stay with the person and admins."],
+         code=[("src/lib/leave-privacy.ts", "leaveTypeSeenBy(), AWAY_LEAVE_TYPE"),
+               ("src/app/(dashboard)/dashboard/page.tsx", "Dashboard"),
+               ("src/app/api/overlap/route.ts", "Who else is off"),
+               ("src/lib/regionCover.ts", "Cover checks")],
+         refs=["ukgdpr_art5", "ukgdpr_art9", "ico_special", "ico_employment"], docs=[], related=["roles", "slack"])),
+]
+for _after, _feature_new in _NEW_11OCT:
+    _i = next(i for i, f in enumerate(FEATURES) if f["id"] == _after)
+    FEATURES.insert(_i + 1, _feature_new)
+
+LIMITATIONS = LIMITATIONS[:-1] + [
+    ("Plan hold can lag a page", "Holding admins at Billing reads the session, refreshed after a page loads, so after Stripe moves a team onto a plan it has outgrown an admin may see one page before being held."),
+    ("Pending downgrade to Free", "The plan banner doesn't cover a team that won't fit Free when its downgrade takes effect; adding people past Free is refused meanwhile."),
+    ("Stripe handlers aren't retried", "The webhook replies OK even when a handler fails, and each event is only handled once, so a failure is logged and not redone."),
+    ("Leave privacy settings", "Staff never see colleagues' leave types and managers always do; there's no team or per-type setting to change this."),
+] + LIMITATIONS[-1:]
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Updates, 12 Oct 2026: checked against GOV.UK's own calculators.
+# ════════════════════════════════════════════════════════════════════════
+R.update({
+    "govuk_holiday_guidance": ("GOV.UK – Calculating holiday entitlement for workers (section 3.2, starters)", "https://www.gov.uk/government/publications/calculating-holiday-entitlement-for-workers/how-to-calculate-holiday-entitlement-for-workers-on-different-types-of-contract"),
+    "govuk_holiday_calc": ("GOV.UK – Calculate holiday entitlement", "https://www.gov.uk/calculate-your-holiday-entitlement"),
+    "govuk_ssp_calc": ("GOV.UK – Calculate your employee's statutory sick pay", "https://www.gov.uk/calculate-statutory-sick-pay"),
+    "govuk_parent_calc": ("GOV.UK – Maternity, adoption and paternity calculator for employers", "https://www.gov.uk/maternity-paternity-calculator"),
+})
+_add("balances", how=["Checked against GOV.UK's holiday calculator (full year, starters, leavers): src/lib/govuk-calculators.test.ts."],
+     code=[("src/lib/govuk-calculators.test.ts", "Cases checked against GOV.UK's calculators")],
+     refs=["wtr13", "govuk_holiday_guidance", "govuk_holiday_calc"])
+_add("ssp", how=["Average weekly earnings aren't rounded; 80% of them is rounded up to the penny, as GOV.UK's calculator does. Checked against it in src/lib/govuk-calculators.test.ts."],
+     refs=["govuk_ssp_calc"])
+_add("maternity", how=["Average weekly earnings aren't rounded (kept to 7 decimal places, as GOV.UK shows them); 90% is rounded up to the penny, for SMP, SAP, SPP, ShPP and neonatal pay alike. Checked against GOV.UK's calculator in src/lib/govuk-calculators.test.ts."],
+     refs=["govuk_parent_calc"])

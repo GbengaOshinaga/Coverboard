@@ -20,7 +20,7 @@
  *   • https://www.gov.uk/employers-maternity-pay-leave
  */
 
-import { UK_LEL_WEEKLY } from "@/lib/uk-compliance";
+import { UK_LEL_WEEKLY, roundUpToPenny } from "@/lib/uk-compliance";
 import { formatGBP } from "@/lib/money";
 import { latestStartForService, qualifyingWeek } from "@/lib/smp-dates";
 
@@ -55,7 +55,11 @@ export function calculateAWE(
   const weeks = Math.max(1, Math.round(periodWeeks));
   const slice = weeklyEarnings.slice(-weeks);
   const total = slice.reduce((sum, w) => sum + Number(w || 0), 0);
-  return Number((total / weeks).toFixed(2));
+  // Not rounded to the penny: GOV.UK says average weekly earnings mustn't be
+  // rounded up or down, and the pay worked out from them is rounded up. Kept
+  // to 7 decimal places, as GOV.UK shows them, which also drops floating-point
+  // noise (£129 must not become £128.99999999 against the earnings limit).
+  return Number((total / weeks).toFixed(7));
 }
 
 export type SMPPhaseRates = {
@@ -76,9 +80,8 @@ export function calculateSMPPhaseRates(
   awe: number,
   flatRate: number = SMP_FLAT_RATE
 ): SMPPhaseRates {
-  const ninetyPercent = awe * 0.9;
-  const phase1 = Number(ninetyPercent.toFixed(2));
-  const phase2 = Number(Math.min(flatRate, ninetyPercent).toFixed(2));
+  const phase1 = roundUpToPenny(awe * 0.9);
+  const phase2 = Math.min(flatRate, phase1);
   return { phase1Weekly: phase1, phase2Weekly: phase2 };
 }
 

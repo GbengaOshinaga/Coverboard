@@ -1,47 +1,63 @@
-<!-- Last updated: 2026-05-06 — auto-updated from codebase review -->
+<!-- Last updated: 2026-10-12 — checked against src/lib/plans.ts, src/config/pricing.ts and the Stripe webhook -->
 # Stripe billing and trial management
 
-Coverboard uses Stripe for monthly subscription billing in GBP. Every new signup gets a 14-day free trial — no card required to start. When the trial ends, the account either auto-charges (if a card has been added) or pauses until one is.
+Coverboard bills monthly in GBP through Stripe. You can start on the Free plan, or start a 14-day free trial of a paid plan without a card. When a trial ends, Stripe either charges your card (if you've added one) or pauses the account until you add one.
 
-This page covers what admins need to know day-to-day.
+This page covers what admins need to know day to day.
 
 ---
 
-## The four plans
+## The five plans
 
-| Plan | Monthly | Tagline |
-|---|---|---|
-| Starter | £19 | Core leave management |
-| Growth | £49 | Compliance & reporting |
-| Scale | £99 | Advanced HR operations |
-| Pro | £179 | Enterprise-ready |
+| Plan | Monthly | People | Admins |
+|---|---|---|---|
+| Free | £0 | Up to 5 | 1 |
+| Starter | £19 | Up to 15 | 2 |
+| Growth | £49 | Up to 75 | 5 |
+| Scale | £99 | Unlimited | Unlimited |
+| Pro | £179 | Unlimited | Unlimited |
 
-All plans bill **monthly only** (no annual billing) and have **no employee count limits** — you pay for the feature set, not by seat. Starter is capped at 2 admin users; Growth and above have unlimited admins.
+All plans are billed **monthly only**; there's no annual billing. VAT is added on top through Stripe Tax.
 
-The exact feature included in each tier is defined in `src/lib/planFeatures.ts`. A few headline gates:
+**"People"** means everyone still on the team, admins included. Leavers stop counting once they've been marked as left. The limits are set in `src/lib/plans.ts` and checked by the server, not just the screen. What each plan includes is on the [pricing page](https://coverboard.io/pricing); the checks in the app are in `src/lib/planFeatures.ts`.
 
-- **Bradford Factor, SSP tracking, pro-rata, right to work, bank holiday region config** — Growth and above
-- **Parental tracker, KIT/SPLIT day tracking, holiday pay 52-week averaging, carry-over rules, absence analytics, full UK compliance report pack** — Scale and above
-- **Custom leave policies, GDPR data residency configuration, audit trail exports, API access** — Pro
-
-During the **14-day free trial** every new org gets the full Pro feature set so you can test what you'd actually be paying for.
+During a **trial** you get every feature, but the people and admin limits of the plan you chose already apply (see [Plan limits](#plan-limits)), because that's the plan the trial turns into.
 
 ---
 
 ## Signup and trial
 
-There is no card capture at signup. When a user creates an account:
+There's no card at signup.
 
-1. A `User` and `Organization` are created with `plan = TRIAL` and `trialEndsAt = now + 14 days`
-2. A Stripe customer and trialing subscription are provisioned in the background (if Stripe is unreachable, the user still gets an account — they can add a card later)
-3. The trial subscription is configured with `trial_settings.end_behavior.missing_payment_method: "pause"` — meaning if the trial ends without a card on file, Stripe pauses rather than retries
+- **Free** — the team starts on Free straight away. There's no trial and no Stripe subscription.
+- **A paid plan** — the team starts on a 14-day trial of that plan. Coverboard creates a Stripe customer and a trialing subscription. If Stripe can't be reached, you still get your account and can add a card later. The subscription is set to **pause**, not retry, if the trial ends without a card.
 
-Throughout the trial, every dashboard page renders a banner for admins. Its colour escalates as the deadline approaches:
+During a trial, admins see a banner on every page. Its colour changes as the deadline gets closer:
 - **Blue** — more than 3 days left
 - **Amber** — 2 to 3 days left
 - **Red** — final day
 
-The banner disappears once a card is added.
+The banner goes once a card is added. Three days before the trial ends, admins get a reminder email.
+
+---
+
+## Plan limits
+
+Limits are checked whenever the team would grow:
+- adding someone, or importing a CSV;
+- inviting people during onboarding;
+- making someone an admin;
+- bringing someone back who'd left.
+
+If the change would take you over, it's refused with a message saying why.
+
+During a trial, or while a move to Free is pending, the limits are those of the plan you're moving to. That way the team can't grow past it before the switch.
+
+Moving to a plan the team doesn't fit is refused too, for example 90 people choosing Growth. Mark people who've left, or change admins to managers, first.
+
+A team can still end up bigger than its plan, for example if it grew before these checks existed. If so:
+- **During a trial**, admins see a banner saying the plan they've chosen is too small. Three days before the end, every admin gets an email instead of the usual reminder.
+- **Once paying**, admins are held at **Settings → Billing** until the team fits. Team, Requests, My time off, Help and their profile still work, so they can record leavers and approve leave. Staff and managers aren't affected. The hold lifts as soon as the team fits, after an upgrade or after marking leavers. Every admin is emailed when the team first starts paying for a plan it has outgrown.
 
 ---
 
@@ -49,44 +65,85 @@ The banner disappears once a card is added.
 
 **Settings → Billing → Add payment method.**
 
-The form uses Stripe Elements (PaymentElement) — your card details never touch Coverboard's servers. We create a `SetupIntent`, Stripe tokenises the card client-side, and the resulting payment method is attached to the customer and set as the subscription default. Card-only payment methods (no BACS or SEPA today).
+The form uses Stripe Elements, so your card details never touch Coverboard's servers. We create a `SetupIntent`, Stripe handles the card in the browser, and the card is set as the subscription's default. Only cards are accepted (no BACS or SEPA).
 
-**On declined cards:**
+**Declined cards:**
 - `card_declined` → "Your card was declined. Please try a different card."
-- Other errors → message propagated from Stripe; generic fallback if none
+- Other errors → Stripe's message, or a general one if Stripe gives none.
+
+---
+
+## Changing plan
+
+**Settings → Billing → Change plan.**
+
+- **On a paid plan** — the change takes effect straight away, and Stripe adds the prorated difference to the next invoice. During a trial it sets the plan the trial turns into.
+- **On Free** — choosing a plan takes you to Add payment method with that plan selected. Moving up from Free starts paying straight away; there's no second trial.
+- **Back to Free** — **Switch to Free** stops the subscription at the end of the period you've paid for. You keep your paid features until then, and then move to Free instead of being locked. You can undo it with **Reactivate** before then. The team must fit Free's limits (5 people, 1 admin).
 
 ---
 
 ## What happens at trial end
 
-**With a card on file** — Stripe auto-charges on day 14, the `invoice.payment_succeeded` webhook fires, the org's `plan` is promoted to whichever tier the price ID maps to, `subscriptionStatus` becomes `active`, and a welcome email goes out.
+**With a card on file** — Stripe charges on day 14. The plan becomes the one you chose, and the admin gets a welcome email.
 
-**Without a card** — Stripe pauses the subscription, the `customer.subscription.paused` webhook fires, the org's `plan` is set to `LOCKED`, and the lock screen takes over the dashboard. The admin is emailed a reactivation link. From the lock screen they can still reach **Settings → Billing → Add payment method** to recover.
+**If that first charge fails** — the trial has still ended: the team moves to the plan it chose while Stripe retries the card, and admins see a red banner asking them to update their card. When a retry succeeds, the welcome email goes then.
+
+**Without a card** — Stripe pauses the subscription and the team is **locked**: everyone sees the lock screen. Admins are emailed a link to reactivate. From the lock screen they can still reach **Settings → Billing → Add payment method**. If nobody adds a card, the account goes into the [30-day data deletion grace period](data-deletion-and-trial-expiry.md).
+
+While a team is locked, Slack's buttons and commands are paused, and reply that an admin needs to choose a plan.
+
+---
+
+## Failed payments
+
+When a payment fails, the subscription is **past due** while Stripe retries it. The team keeps its plan, and admins see a red banner with a link to update the card. The main admin (the longest-serving admin who isn't leaving, not the billing email held in Stripe) is emailed once for each failed attempt. When a retry succeeds, everything carries on as normal.
+
+A locked team that resubscribes and whose payment fails straight away stays locked until a payment goes through.
+
+If a lapsed team comes back (a paused trial gets a card, or a payment goes through after all), its 30-day grace period ends and any deletion scheduled when it lapsed is cancelled. The "deletion cancelled" email goes once.
 
 ---
 
 ## Cancellation
 
-Cancellation is always **at period end** — you keep access until the next billing date.
+Cancelling always takes effect **at period end**: you keep access until the next billing date.
 
-**Settings → Billing → Cancel subscription** opens a confirmation dialog explaining the date you'll lose access. On confirm, Stripe is updated with `cancel_at_period_end: true` and the billing page shows an amber banner with a **Reactivate** button.
+**Settings → Billing → Cancel subscription** opens a confirmation showing the date you'll lose access. Once confirmed, Stripe is told to cancel at period end, and the billing page shows an amber banner with a **Reactivate** button.
 
-If you change your mind before period end, click **Reactivate** — Stripe undoes the scheduled cancellation and the banner clears. If you let it run out, Stripe fires `customer.subscription.deleted`, the plan is set to `LOCKED`, and the org enters the [30-day data deletion grace period](data-deletion-and-trial-expiry.md).
+If you change your mind before the period ends, click **Reactivate**. If you let it run out, the team is locked and goes into the [30-day data deletion grace period](data-deletion-and-trial-expiry.md). To keep using Coverboard for free instead, use **Switch to Free** rather than Cancel.
+
+---
+
+## Billing emails
+
+All billing emails are sent from `src/lib/billing-emails.ts`.
+
+| Email | When | Who gets it |
+|---|---|---|
+| Trial ending soon | 3 days before a trial ends | The main admin |
+| Plan too small | Instead of the trial reminder when the team has outgrown the chosen plan, and when a team starts paying for a plan it has outgrown | Every admin who isn't leaving |
+| Welcome | The team's first payment, whether from a trial, from Free or reactivating a locked team. Sent once; not again after a failed payment is recovered | The main admin |
+| Payment failed | Each failed payment attempt | The main admin |
+| Account paused, subscription cancelled, deletion scheduled or cancelled | As named | The main admin |
+
+The **main admin** is the longest-serving admin who isn't leaving. If every admin has a leaving date, it falls back to one of them. Emails go to their Coverboard address, not to the billing email held in Stripe.
 
 ---
 
 ## Invoices and receipts
 
-The billing page shows your last 5 invoices with a direct link to each Stripe-hosted PDF. There's no separate receipts feature — Stripe is the source of truth for invoice history. If you need an older invoice, ask support and we can pull it from Stripe.
+The billing page shows your last 5 invoices, each with a link to its PDF on Stripe. Stripe holds the full invoice history; if you need an older invoice, ask support.
 
 ---
 
 ## Operational notes
 
-- **All billing emails** (trial ending, payment failed, cancelled, paused, welcome) come from Resend via `src/lib/billing-emails.ts`. If `RESEND_API_KEY` is unset, the email is logged to the server console and the flow continues.
-- **The webhook is the source of truth for subscription state.** If something looks out of sync between Stripe and Coverboard, check the webhook delivery log in the Stripe Dashboard before touching the database.
-- **There is no self-serve plan change yet.** `/settings/billing/change-plan` is a stub that points users at email. To upgrade or downgrade, contact support — Stripe handles the proration on the next invoice.
-- **One subscription per organisation** — there's no concept of add-on subscriptions today.
+- **Stripe's webhook decides subscription state.** Each Stripe event is handled once: the webhook records the event's ID, so a repeat delivery is skipped and doesn't send emails twice. If Stripe and Coverboard disagree, check the webhook delivery log in the Stripe Dashboard before touching the database.
+- **A failed handler isn't retried.** The webhook replies OK even when a handler fails, so Stripe doesn't resend. The error is logged.
+- **Repairing trials marked as paying (11 Oct 2026).** Until then, the £0 invoice Stripe sends when a trial starts was treated as a payment, so new trials showed as active with a card on file and their paid plan. `npm run resync:stripe-trials` lists the changes it would make (it doesn't save them), and `-- --apply` writes them. It only changes teams Stripe has as trialing (status, trial end, trial plan, card, and the first-payment date if nothing has been paid) or paused (card only; expired cards don't count). It lists every other team and leaves it alone, so payers on a 100% coupon or with a card that isn't their default aren't touched. A team Stripe can't be read for is reported and skipped, and re-running is safe. Deploy the webhook fix before running it with `--apply`.
+- **Email needs `RESEND_API_KEY`.** Without it, emails are written to the server log and everything else carries on.
+- **One subscription per team.** There are no add-on subscriptions.
 
 ---
 
@@ -94,7 +151,9 @@ The billing page shows your last 5 invoices with a direct link to each Stripe-ho
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| "Your trial has ended" lock screen | No card was added before day 14, or the card was declined | Add or update a card from **Settings → Billing → Add payment method** (still reachable from the lock screen) |
-| Payment succeeded in Stripe but the app still shows the old plan | Webhook delivery failed | Replay the latest `customer.subscription.updated` from Stripe Dashboard → Webhooks → Events |
-| Need to extend a trial | Only via Stripe Dashboard | Update `trial_end` on the subscription; the webhook syncs `trialEndsAt` and clears any lock state |
-| Refund needed | Not stored in Coverboard's DB | Refund in the Stripe Dashboard — invoices are read live from Stripe |
+| Lock screen saying "Your trial has ended" | No card was added before day 14, or the card was declined | Add or update a card from **Settings → Billing → Add payment method** (still reachable from the lock screen) |
+| An admin keeps landing on Billing | The team is bigger than the plan it pays for (see the banner) | Choose a bigger plan, mark people who've left, or change admins to managers |
+| "You can invite N now" during onboarding | Invites would take the team over its plan | Invite fewer people now, and the rest from the Team page after choosing a bigger plan |
+| Payment went through in Stripe but the app shows the old plan | Webhook delivery failed | Resend the latest `customer.subscription.updated` from Stripe Dashboard → Webhooks → Events |
+| Need to extend a trial | Only possible in the Stripe Dashboard | Change `trial_end` on the subscription; the webhook updates `trialEndsAt` |
+| Refund needed | Refunds aren't stored in Coverboard | Refund in the Stripe Dashboard; invoices are read live from Stripe |

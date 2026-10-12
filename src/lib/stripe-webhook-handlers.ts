@@ -96,11 +96,17 @@ export async function handleSubscriptionUpdated(
   const priceId = sub.items.data[0]?.price?.id ?? org.stripePriceId ?? null;
   const planKey = priceId ? planKeyFromPriceId(priceId) : null;
 
-  // Only promote the Prisma plan enum when the subscription is fully active.
-  // Trialing/past-due/etc. keep whatever plan they had so feature gating stays
-  // consistent (TRIAL → pro bundle; LOCKED → none).
+  // The plan they pay for applies once the subscription is active, and while
+  // Stripe retries a failed payment (past_due): a trial whose first charge
+  // fails has ended, so it moves to the plan it chose rather than keeping
+  // every feature, and admins see a past-due banner. A locked team coming
+  // back straight into past_due has paid nothing, so it stays locked until a
+  // payment goes through. Trialing and other states keep whatever plan they
+  // had (TRIAL → everything; LOCKED → none).
   const nextPlan: PlanEnum =
-    sub.status === "active" && planKey ? PLAN_KEY_TO_ENUM[planKey] : org.plan;
+    planKey && (sub.status === "active" || (sub.status === "past_due" && org.plan !== "LOCKED"))
+      ? PLAN_KEY_TO_ENUM[planKey]
+      : org.plan;
 
   const accessEnd = subscriptionAccessEndDate(sub);
 
@@ -111,11 +117,13 @@ export async function handleSubscriptionUpdated(
     cancelAtPeriodEnd: sub.cancel_at_period_end ?? false,
     trialEndsAt: sub.trial_end ? new Date(sub.trial_end * 1000) : org.trialEndsAt,
     currentPeriodEnd: accessEnd ?? org.currentPeriodEnd,
+    // Active again: a paused trial's 30-day grace period no longer applies.
+    ...(sub.status === "active" ? { trialExpiredGraceEndsAt: null } : {}),
   });
 
-  if (sub.status === "past_due" && org.adminEmail) {
-    await deps.emailers.paymentFailed({ to: org.adminEmail });
-  }
+  // The payment-failed email goes from invoice.payment_failed, once per
+  // failed attempt; sending it here too doubled it, and repeated it on every
+  // later update while past due.
 
   // The subscription has just become active: a trial ending, or a first
   // payment going through after failing (trialing → past_due → active).
@@ -123,6 +131,17 @@ export async function handleSubscriptionUpdated(
   // since Stripe doesn't promise an order. Whether it's the team's first
   // paid plan is up to startedPaying.
   if (sub.status === "active" && previous?.status && previous.status !== "active") {
+    // Back from being paused or past due, possibly without a charge (a
+    // resumed subscription can start on a trial or a £0 invoice): the
+    // deletion scheduled when it lapsed no longer applies. An admin's own
+    // deletion request cancels the subscription, so it can't get here.
+    const { wasScheduled } = await deps.cancelScheduledDeletion({
+      organizationId: org.id,
+      canceledBy: "customer.subscription.updated",
+    });
+    if (wasScheduled && org.adminEmail) {
+      await deps.emailers.deletionCanceled({ to: org.adminEmail });
+    }
     await startedPaying(org, priceId, deps);
   }
 }
@@ -267,6 +286,12 @@ export async function handleInvoicePaymentSucceeded(
     typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
   if (!customerId) return;
 
+  // A £0 invoice takes no money: Stripe sends one when a trial starts. It
+  // says nothing about a card or the plan, so it changes nothing; treating
+  // it as a payment marked every new trial as a paying customer with a card
+  // on file. The subscription-updated event carries the real status.
+  if ((invoice.amount_paid ?? 0) <= 0) return;
+
   const org = await deps.findOrgByCustomerId(customerId);
   if (!org) return;
 
@@ -293,10 +318,7 @@ export async function handleInvoicePaymentSucceeded(
     await deps.emailers.deletionCanceled({ to: org.adminEmail });
   }
 
-  // Money taken, not a £0 invoice from starting a trial.
-  if ((invoice.amount_paid ?? 0) > 0) {
-    await startedPaying(org, priceId, deps);
-  }
+  await startedPaying(org, priceId, deps);
 }
 
 export async function handleInvoicePaymentFailed(

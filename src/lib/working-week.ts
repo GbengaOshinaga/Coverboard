@@ -76,9 +76,18 @@ export function weeksToWorkingDays(weeks: number, daysPerWeek: number): number {
 
 /**
  * Pro-rata a full-year entitlement for someone who starts part-way through
- * the leave year: the share of the year from their start date, rounded UP to
- * a whole day (rounding down is not allowed). No change if they started
- * before the year.
+ * the leave year, the way GOV.UK does: the full entitlement × the months of
+ * the leave year they've started ÷ 12 (the month they start in counts in
+ * full), rounded up to the next half or whole day, but never above the full
+ * year (22.4 days stays 22.4, not 22.5). Months run from the leave
+ * year's start date (a year from 6 April has months from the 6th). No change
+ * if they started before the year.
+ * The entitlement is WTR reg 13(5)'s share of the leave year; the method and
+ * rounding are GOV.UK's, and never give less than 13(5)'s share of days left.
+ * (Reg 15A is a separate rule, on how much of it can be taken during the
+ * first year of employment; Coverboard doesn't limit that.)
+ * WTR reg 13(5): https://www.legislation.gov.uk/uksi/1998/1833/regulation/13
+ * GOV.UK, section 3.2: https://www.gov.uk/government/publications/calculating-holiday-entitlement-for-workers/how-to-calculate-holiday-entitlement-for-workers-on-different-types-of-contract
  */
 export function prorateForStartDate(
   fullEntitlement: number,
@@ -88,8 +97,27 @@ export function prorateForStartDate(
 ): number {
   if (!serviceStartDate || serviceStartDate <= yearStart) return fullEntitlement;
   if (serviceStartDate > yearEnd) return 0;
-  // Whole days, inclusive: yearEnd may be its last moment (23:59:59.999).
-  const yearDays = Math.floor((yearEnd.getTime() - yearStart.getTime()) / DAY_MS) + 1;
-  const remaining = Math.floor((yearEnd.getTime() - serviceStartDate.getTime()) / DAY_MS) + 1;
-  return Math.ceil((fullEntitlement * remaining) / yearDays);
+  const monthsStarted = 12 - leaveYearMonthIndex(serviceStartDate, yearStart);
+  return Math.min(fullEntitlement, roundUpToHalf((fullEntitlement * monthsStarted) / 12));
+}
+
+/** Which month of the leave year (0–11) a date falls in. */
+function leaveYearMonthIndex(date: Date, yearStart: Date): number {
+  const y = yearStart.getUTCFullYear();
+  const m = yearStart.getUTCMonth();
+  const day = yearStart.getUTCDate();
+  let index = 0;
+  for (let k = 1; k < 12; k++) {
+    // The k-th month starts on the same day of the month, or the month's last
+    // day when it's shorter (a year from 31 January has a month from 28 February).
+    const lastDay = new Date(Date.UTC(y, m + k + 1, 0)).getUTCDate();
+    const boundary = new Date(Date.UTC(y, m + k, Math.min(day, lastDay)));
+    if (boundary <= date) index = k;
+  }
+  return index;
+}
+
+/** Up to the next half or whole day; never down. */
+function roundUpToHalf(days: number): number {
+  return Math.ceil(Number((days * 2).toFixed(6))) / 2;
 }

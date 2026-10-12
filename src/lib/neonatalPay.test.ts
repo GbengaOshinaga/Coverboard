@@ -123,3 +123,8 @@ test("the week before the baby went into neonatal care sets pay when there's no 
   assert.equal(day(w.start), "2027-02-21");
   assert.equal(day(w.end), "2027-02-27");
 });
+
+test("weekly rate rounds 90% of earnings up to the penny", () => {
+  // AWE £150.005: 90% = £135.0045 → £135.01.
+  assert.equal(calculateNeonatalWeeklyRate(150.005, 194.32), 135.01);
+});

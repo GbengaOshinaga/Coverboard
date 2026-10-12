@@ -78,18 +78,26 @@ export async function cancelScheduledDeletion(params: {
       deletionReason: true,
     },
   });
-  if (!org || !org.deletionScheduledFor) return { wasScheduled: false };
+  if (!org) return { wasScheduled: false };
 
-  await prisma.organization.update({
-    where: { id: org.id },
+  // Only one caller cancels a deletion: Stripe sends the payment and the
+  // subscription change together, and both call this. The update only
+  // matches while a deletion is scheduled, so the second finds nothing and
+  // doesn't send the "deletion cancelled" email again.
+  const { count } = await prisma.organization.updateMany({
+    where: { id: org.id, deletionScheduledFor: { not: null } },
     data: {
       deletionRequestedAt: null,
       deletionScheduledFor: null,
       deletionReason: null,
       deletionConfirmedAt: null,
-      trialExpiredGraceEndsAt: null,
     },
   });
+  // The 30-day grace date of a paused trial is left alone: only a payment
+  // ends it, and the paths that take one (adding a card, a paid invoice, the
+  // subscription becoming active) clear it themselves. Clearing it here let
+  // an admin of a locked team cancel its way out of ever being deleted.
+  if (count === 0) return { wasScheduled: false };
 
   const adminEmail = await getAdminEmail(org.id);
 

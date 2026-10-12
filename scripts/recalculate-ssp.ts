@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { SICKNESS_LEAVE_TYPE } from "@/lib/ssp-scope";
 import { computeSmpFields } from "@/lib/smp-request";
+import { syncUserAverageWeeklyEarnings } from "@/lib/smpCalculator";
 import { birthPayKind } from "@/lib/smp-dates";
 import { computeSspForSpell, recomputeAllSspSpells } from "@/lib/leave-requests/ssp-spell";
 
@@ -13,6 +14,10 @@ import { computeSspForSpell, recomputeAllSspSpells } from "@/lib/leave-requests/
  * working week as it was when the absence started, the 28-week cap across
  * linked absences, and the HMRC daily rate (stored from 5 Oct 2026; absences
  * booked before then have none).
+ *
+ * Also refreshes each person's saved average weekly earnings (unrounded from
+ * 12 Oct 2026, when SSP, SMP and the other 80%/90% rates began rounding up
+ * to the penny from unrounded earnings, as GOV.UK's calculators do).
  *
  *   npm run recalculate:ssp            # dry run: lists what would change
  *   npm run recalculate:ssp -- --apply # writes the changes
@@ -118,8 +123,15 @@ async function main() {
     );
   }
 
+  // Each person's saved average weekly earnings, kept unrounded from 12 Oct
+  // 2026 (it was rounded to the penny before), for anyone with earnings history.
+  const withEarnings = await prisma.user.findMany({
+    where: { weeklyEarnings: { some: {} } },
+    select: { id: true },
+  });
+
   if (!apply) {
-    console.log(`\n${changes} of ${spells.length} SSP absences and ${smpChanges.length} of ${maternity.length} maternity and adoption requests would change. Run with --apply to write them.`);
+    console.log(`\n${changes} of ${spells.length} SSP absences and ${smpChanges.length} of ${maternity.length} maternity and adoption requests would change, and ${withEarnings.length} people's average weekly earnings would be refreshed. Run with --apply to write them.`);
     return;
   }
 
@@ -130,7 +142,8 @@ async function main() {
   for (const c of smpChanges) {
     await prisma.leaveRequest.update({ where: { id: c.id }, data: c.fields });
   }
-  console.log(`\nUpdated ${written} of ${spells.length} SSP absences and ${smpChanges.length} of ${maternity.length} maternity and adoption requests.`);
+  for (const u of withEarnings) await syncUserAverageWeeklyEarnings(u.id);
+  console.log(`\nUpdated ${written} of ${spells.length} SSP absences and ${smpChanges.length} of ${maternity.length} maternity and adoption requests, and refreshed ${withEarnings.length} people's average weekly earnings.`);
 }
 
 main()

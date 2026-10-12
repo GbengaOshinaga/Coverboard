@@ -118,6 +118,9 @@ async function promoteExpiredGraceToScheduled(now: Date): Promise<number> {
     where: {
       trialExpiredGraceEndsAt: { lte: now },
       deletionScheduledFor: null,
+      // Only teams still locked. A grace date left on a team that has come
+      // back (a bug elsewhere) must never schedule it for deletion.
+      plan: "LOCKED",
     },
     select: { id: true },
   });

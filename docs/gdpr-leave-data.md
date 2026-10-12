@@ -1,4 +1,4 @@
-<!-- Last updated: 2026-05-12 — auto-updated from codebase review -->
+<!-- Last updated: 2026-10-11 — who-can-see-what checked against src/lib/leave-privacy.ts and the leave request API -->
 # GDPR & your leave data
 
 Leave management involves some of the most sensitive personal data your business holds. This page explains what data Coverboard stores, how it is protected, and what your obligations are as the employer.
@@ -25,8 +25,10 @@ When someone submits a sickness leave request, Coverboard records two distinct f
 The two are stored as separate columns on the leave request so the medical content can be wiped without losing the operational note. The **Evidence provided** flag can also be set on the request to record that a fit note has been received without storing its contents in Coverboard.
 
 **Who can see what:**
-- Company **admins** and **managers** — see all leave request fields, including the sickness note. Members can only see their own requests.
-- **Employees** — only their own records, never anyone else's.
+- **Admins** see every leave request field, including the sickness note.
+- **Managers** see colleagues' leave types and notes so they can approve leave and plan cover, but not sickness notes.
+- **Staff** see their own records in full, and only their own leave on the calendar. On the dashboard and in the checks shown when booking (who else is off, cover), a colleague's leave shows only as **Away**, in one neutral colour, with no type or note. Every type is hidden, not just sickness, because hiding only sickness would make "Away" mean "off sick". This follows data minimisation (UK GDPR Article 5(1)(c)) and the extra protection for health data (Article 9).
+- **Slack** channel posts never include the leave type or note, because everyone in the channel can read them.
 
 > Coverboard does not store fit note content (date received, GP name, document image) or return-to-work interview notes today. If you need to retain those, store them in your existing HR document system and use the **Evidence provided** flag in Coverboard to record that they exist.
 
@@ -50,7 +52,7 @@ Coverboard provides the technical controls, but you are the data controller — 
 
 **Only collect what you need.** You are not required to know an employee's specific diagnosis. "Respiratory condition" is sufficient — you do not need "asthma" unless there is a specific operational reason.
 
-**Do not share medical details unnecessarily.** A line manager does not need to know why someone is off sick in order to manage their team's workload. Coverboard does not enforce this for you — it is a process matter inside your team.
+**Do not share medical details unnecessarily.** A line manager does not need to know why someone is off sick in order to manage their team's workload. Coverboard keeps sickness notes from managers and keeps leave types from staff, but managers still see that someone is on sick leave, and what you share outside the app is for you to manage.
 
 **Respect employee rights.** Employees have the right to access their own data, request corrections, and in some circumstances request deletion. If an employee makes a Subject Access Request (SAR), you have one month to respond. Their own request and balance data is visible to them in-app, and admins can download a complete machine-readable export of every record Coverboard holds about a specific employee from **Team → [employee] → Export data (SAR)**. The export is a single JSON file covering the employee profile, every leave request, weekly hours and earnings, carry-over balances, region history and audit-log activity. Each export is itself recorded in the audit log so you can evidence when and by whom a SAR was fulfilled.
 
@@ -75,7 +77,7 @@ Admins can request deletion of the entire organisation under **Settings → Dang
 ## Frequently asked questions
 
 **Can employees see their own absence records?**
-Yes. Employees can view their own absence history and their own holiday pay rate from **Settings → Profile**. They cannot see anyone else's data.
+Yes. Employees can view their own absence history and their own holiday pay rate from **Settings → Profile**. Of colleagues, they see only when someone is away, never why.
 
 **What if an employee asks us to delete their sickness records?**
 The right to erasure under UK GDPR is not absolute. You are permitted to retain records for as long as is necessary for a legitimate purpose — employment records are typically retained for 6 years after the employment ends in case of a tribunal claim. The data retention endpoint (above) anonymises personal and sickness notes while preserving the statutory shell of the record. If an employee requests full deletion, seek legal advice before acting.

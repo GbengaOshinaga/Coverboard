@@ -50,14 +50,14 @@ test("rollover year: the one just ended until halfway through the next", () => {
   assert.equal(rolloverLeaveYear(d("2026-12-01"), april), 2026); // 2026/27 ends next March
 });
 
-test("a starter on 1 Oct 2026 in an April leave year gets half the year (182 of 365 days)", async () => {
+test("a starter on 1 Oct 2026 in an April leave year gets half the year (6 of 12 months started)", async () => {
   const { prorateForStartDate } = await import("./working-week");
   const { start, end } = leaveYearBounds(2026, april);
-  // 28 days × 182/365 = 13.96 → 14 (rounded up).
+  // 28 days × 6/12 = 14.
   assert.equal(prorateForStartDate(28, d("2026-10-01"), start, end), 14);
-  // 1 July in a calendar year: 184 of 365 days → 28 × 184/365 = 14.1 → 15.
+  // 1 July in a calendar year: July–December, 6 months → 14.
   const cal = leaveYearBounds(2026, CALENDAR_LEAVE_YEAR);
-  assert.equal(prorateForStartDate(28, d("2026-07-01"), cal.start, cal.end), 15);
+  assert.equal(prorateForStartDate(28, d("2026-07-01"), cal.start, cal.end), 14);
 });
 
 test("company carry-over expiry: flags a date that lasts the whole next year, or comes within a month", () => {

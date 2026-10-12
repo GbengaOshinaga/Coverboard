@@ -239,14 +239,19 @@ export function sspRateBasis(input: {
   if (awe === 0) {
     return "£0: every week recorded in the 8 weeks before was a no-pay week (SSP is 80% of average earnings).";
   }
-  const eighty = Number((awe * SSP_LOW_EARNER_FRACTION).toFixed(2));
+  const eighty = roundUpToPenny(awe * SSP_LOW_EARNER_FRACTION);
   return eighty < flat
     ? `80% of ${money(awe)} average weekly earnings = ${money(eighty)} a week`
     : `Flat rate of ${money(flat)} a week (80% of ${money(awe)} average weekly earnings is more)`;
 }
 
-/** Rounds a fraction of a penny up to the next whole penny. */
-function ceilPenny(amount: number): number {
+/**
+ * Rounds a fraction of a penny up to the next whole penny. Statutory pay
+ * worked out as a percentage of earnings (SSP's 80%; SMP, SAP, SPP, ShPP and
+ * neonatal pay's 90%) is rounded up, from average weekly earnings that are
+ * never rounded, as GOV.UK's calculators do.
+ */
+export function roundUpToPenny(amount: number): number {
   return Math.ceil(Number((amount * 100).toFixed(6))) / 100;
 }
 
@@ -267,8 +272,8 @@ export function sspPay(
   const q = qualifyingDaysPerWeek >= 1 && qualifyingDaysPerWeek <= 7 ? Math.round(qualifyingDaysPerWeek) : 5;
   const fullWeeks = Math.floor(days / q);
   const rest = days - fullWeeks * q;
-  const weekPay = ceilPenny(q * dailyRate);
-  return Number((fullWeeks * weekPay + ceilPenny(rest * dailyRate)).toFixed(2));
+  const weekPay = roundUpToPenny(q * dailyRate);
+  return Number((fullWeeks * weekPay + roundUpToPenny(rest * dailyRate)).toFixed(2));
 }
 
 /**
@@ -282,7 +287,7 @@ export function calculateSspWeeklyRate(
 ): number {
   const awe = Number(averageWeeklyEarnings);
   if (!Number.isFinite(awe) || averageWeeklyEarnings == null) return flatRate;
-  return Math.min(flatRate, Number((awe * SSP_LOW_EARNER_FRACTION).toFixed(2)));
+  return Math.min(flatRate, roundUpToPenny(awe * SSP_LOW_EARNER_FRACTION));
 }
 
 export type SspEligibilityInput = {

@@ -47,23 +47,26 @@ export async function GET() {
   // distinction matters in the UI — hard cancel triggers 30-day deletion;
   // a downgrade simply moves the org to FREE at period end.
   let pendingDowngradeToFree = false;
-  if (stripe && org.stripeSubscriptionId && org.cancelAtPeriodEnd) {
-    try {
-      const sub = await stripe.subscriptions.retrieve(org.stripeSubscriptionId);
-      const accessEnd = subscriptionAccessEndDate(sub);
-      if (accessEnd && !currentPeriodEnd) {
-        currentPeriodEnd = accessEnd;
-        await prisma.organization.update({
-          where: { id: orgId },
-          data: { currentPeriodEnd: accessEnd },
-        });
+  // The Stripe calls below don't depend on each other, so they run at the
+  // same time: one after another made Billing wait for each round trip.
+  const readSubscription = async () => {
+    if (stripe && org.stripeSubscriptionId && org.cancelAtPeriodEnd) {
+      try {
+        const sub = await stripe.subscriptions.retrieve(org.stripeSubscriptionId);
+        const accessEnd = subscriptionAccessEndDate(sub);
+        if (accessEnd && !currentPeriodEnd) {
+          currentPeriodEnd = accessEnd;
+          await prisma.organization.update({
+            where: { id: orgId },
+            data: { currentPeriodEnd: accessEnd },
+          });
+        }
+        pendingDowngradeToFree = (sub.metadata?.downgrade_target ?? "").toLowerCase() === "free";
+      } catch (err) {
+        console.error("Failed to hydrate subscription state:", err);
       }
-      pendingDowngradeToFree =
-        (sub.metadata?.downgrade_target ?? "").toLowerCase() === "free";
-    } catch (err) {
-      console.error("Failed to hydrate subscription state:", err);
     }
-  }
+  };
 
   const planKey = org.stripePriceId ? planKeyFromPriceId(org.stripePriceId) : null;
   const planName = planKey ? PLAN_DISPLAY_NAME[planKey] : null;
@@ -91,56 +94,68 @@ export async function GET() {
   };
   let taxIds: TaxIdDTO[] = [];
 
-  if (stripe && org.stripeCustomerId) {
-    try {
-      const customer = await stripe.customers.retrieve(org.stripeCustomerId, {
-        expand: ["invoice_settings.default_payment_method"],
-      });
-      if (customer && !("deleted" in customer && customer.deleted)) {
-        const pm = customer.invoice_settings?.default_payment_method;
-        if (pm && typeof pm === "object" && "card" in pm && pm.card) {
-          paymentMethodBrand = pm.card.brand ?? null;
-          paymentMethodLast4 = pm.card.last4 ?? null;
+  const readCustomer = async () => {
+    if (stripe && org.stripeCustomerId) {
+      try {
+        const customer = await stripe.customers.retrieve(org.stripeCustomerId, {
+          expand: ["invoice_settings.default_payment_method"],
+        });
+        if (customer && !("deleted" in customer && customer.deleted)) {
+          const pm = customer.invoice_settings?.default_payment_method;
+          if (pm && typeof pm === "object" && "card" in pm && pm.card) {
+            paymentMethodBrand = pm.card.brand ?? null;
+            paymentMethodLast4 = pm.card.last4 ?? null;
+          }
+          billingCountry = customer.address?.country ?? null;
         }
-        billingCountry = customer.address?.country ?? null;
+      } catch (err) {
+        console.error("Failed to retrieve Stripe customer:", err);
       }
-    } catch (err) {
-      console.error("Failed to retrieve Stripe customer:", err);
     }
+  };
 
-    try {
-      const list = await stripe.invoices.list({
-        customer: org.stripeCustomerId,
-        limit: 5,
-      });
-      invoices = list.data.map((inv) => ({
-        id: inv.id ?? "",
-        number: inv.number,
-        amount: inv.amount_paid,
-        currency: inv.currency,
-        status: inv.status,
-        created: inv.created,
-        pdf: inv.invoice_pdf ?? null,
-      }));
-    } catch (err) {
-      console.error("Failed to list Stripe invoices:", err);
+  const readInvoices = async () => {
+    if (stripe && org.stripeCustomerId) {
+      try {
+        const list = await stripe.invoices.list({
+          customer: org.stripeCustomerId,
+          limit: 5,
+        });
+        invoices = list.data.map((inv) => ({
+          id: inv.id ?? "",
+          number: inv.number,
+          amount: inv.amount_paid,
+          currency: inv.currency,
+          status: inv.status,
+          created: inv.created,
+          pdf: inv.invoice_pdf ?? null,
+        }));
+      } catch (err) {
+        console.error("Failed to list Stripe invoices:", err);
+      }
     }
+  };
 
-    try {
-      const taxList = await stripe.customers.listTaxIds(org.stripeCustomerId, {
-        limit: 20,
-      });
-      taxIds = taxList.data.map((t) => ({
-        id: t.id,
-        type: t.type,
-        typeLabel: TAX_ID_TYPE_LABELS[t.type] ?? t.type,
-        value: t.value,
-        verificationStatus: t.verification?.status ?? null,
-      }));
-    } catch (err) {
-      console.error("Failed to list Stripe tax IDs:", err);
+  const readTaxIds = async () => {
+    if (stripe && org.stripeCustomerId) {
+      try {
+        const taxList = await stripe.customers.listTaxIds(org.stripeCustomerId, {
+          limit: 20,
+        });
+        taxIds = taxList.data.map((t) => ({
+          id: t.id,
+          type: t.type,
+          typeLabel: TAX_ID_TYPE_LABELS[t.type] ?? t.type,
+          value: t.value,
+          verificationStatus: t.verification?.status ?? null,
+        }));
+      } catch (err) {
+        console.error("Failed to list Stripe tax IDs:", err);
+      }
     }
-  }
+  };
+
+  await Promise.all([readSubscription(), readCustomer(), readInvoices(), readTaxIds()]);
 
   return NextResponse.json({
     plan: org.plan,
