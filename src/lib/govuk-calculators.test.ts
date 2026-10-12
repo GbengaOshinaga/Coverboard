@@ -50,7 +50,7 @@ for (const [days, govuk] of [
 }
 
 // ── Holiday: starting part way through the leave year ──
-// GOV.UK (and its guidance, section 3.2, under WTR reg 15A): full entitlement
+// GOV.UK (and its guidance, section 3.2, for WTR reg 13(5)): full entitlement
 // × months started ÷ 12, rounded up to the next half or whole day.
 for (const c of [
   { start: "2026-06-01", yearStart: "2026-01-01", days: 5, govuk: 16.5 },

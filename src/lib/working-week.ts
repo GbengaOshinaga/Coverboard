@@ -82,7 +82,11 @@ export function weeksToWorkingDays(weeks: number, daysPerWeek: number): number {
  * year (22.4 days stays 22.4, not 22.5). Months run from the leave
  * year's start date (a year from 6 April has months from the 6th). No change
  * if they started before the year.
- * WTR reg 15A: https://www.legislation.gov.uk/uksi/1998/1833/regulation/15A
+ * The entitlement is WTR reg 13(5)'s share of the leave year; the method and
+ * rounding are GOV.UK's, and never give less than 13(5)'s share of days left.
+ * (Reg 15A is a separate rule, on how much of it can be taken during the
+ * first year of employment; Coverboard doesn't limit that.)
+ * WTR reg 13(5): https://www.legislation.gov.uk/uksi/1998/1833/regulation/13
  * GOV.UK, section 3.2: https://www.gov.uk/government/publications/calculating-holiday-entitlement-for-workers/how-to-calculate-holiday-entitlement-for-workers-on-different-types-of-contract
  */
 export function prorateForStartDate(
