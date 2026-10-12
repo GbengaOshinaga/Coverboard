@@ -78,7 +78,8 @@ export function weeksToWorkingDays(weeks: number, daysPerWeek: number): number {
  * Pro-rata a full-year entitlement for someone who starts part-way through
  * the leave year, the way GOV.UK does: the full entitlement × the months of
  * the leave year they've started ÷ 12 (the month they start in counts in
- * full), rounded up to the next half or whole day. Months run from the leave
+ * full), rounded up to the next half or whole day, but never above the full
+ * year (22.4 days stays 22.4, not 22.5). Months run from the leave
  * year's start date (a year from 6 April has months from the 6th). No change
  * if they started before the year.
  * WTR reg 15A: https://www.legislation.gov.uk/uksi/1998/1833/regulation/15A
@@ -93,7 +94,7 @@ export function prorateForStartDate(
   if (!serviceStartDate || serviceStartDate <= yearStart) return fullEntitlement;
   if (serviceStartDate > yearEnd) return 0;
   const monthsStarted = 12 - leaveYearMonthIndex(serviceStartDate, yearStart);
-  return roundUpToHalf((fullEntitlement * monthsStarted) / 12);
+  return Math.min(fullEntitlement, roundUpToHalf((fullEntitlement * monthsStarted) / 12));
 }
 
 /** Which month of the leave year (0–11) a date falls in. */

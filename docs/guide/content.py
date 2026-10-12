@@ -612,7 +612,7 @@ _UPDATES = {
     "balances": dict(
         summary="Each person's allowance, days used, pending and remaining, per leave type and leave year. UK entitlement is 5.6 weeks of their working week, capped at 28 days.",
         how=["Entitlement = 5.6 × working days per week, rounded up, capped at 28: 28 for a 5-day week, 17 for 3 days.",
-             "Mid-year starters get the months of the leave year they start in, as GOV.UK works it out: full entitlement × months started ÷ 12 (the start month counts in full), rounded up to the next half day (WTR reg 15A).",
+             "Mid-year starters get the months of the leave year they start in, as GOV.UK works it out: full entitlement × months started ÷ 12 (the start month counts in full), rounded up to the next half day but never above the full year (WTR reg 15A).",
              "Days taken only count days they'd actually have worked.",
              "Carry-over is used first, soonest-expiring first; when it expires only the unused part lapses.",
              "Everything counts within the team's leave year (see Leave year)."],

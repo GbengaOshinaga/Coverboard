@@ -69,3 +69,12 @@ test("prorateForStartDate runs months from the leave year's start date", () => {
   assert.equal(prorateForStartDate(28, d("2026-02-28"), jan31, jan31End), 26);
   assert.equal(prorateForStartDate(28, d("2026-02-27"), jan31, jan31End), 28);
 });
+
+test("prorateForStartDate never rounds above the full year", () => {
+  // 22.4 days (4 days a week): starting on 2 Jan is 12 months started, and
+  // rounding 22.4 up would give 22.5, more than someone there all year.
+  assert.equal(prorateForStartDate(22.4, d("2026-01-02"), d("2026-01-01"), d("2026-12-31")), 22.4);
+  assert.equal(prorateForStartDate(22.4, d("2026-01-01"), d("2026-01-01"), d("2026-12-31")), 22.4);
+  // Later starters still round up: 11 months of 22.4 is 20.53 → 21.
+  assert.equal(prorateForStartDate(22.4, d("2026-02-01"), d("2026-01-01"), d("2026-12-31")), 21);
+});
