@@ -612,7 +612,7 @@ _UPDATES = {
     "balances": dict(
         summary="Each person's allowance, days used, pending and remaining, per leave type and leave year. UK entitlement is 5.6 weeks of their working week, capped at 28 days.",
         how=["Entitlement = 5.6 × working days per week, rounded up, capped at 28: 28 for a 5-day week, 17 for 3 days.",
-             "Mid-year starters get their share of the leave year from their start date, rounded up (never down).",
+             "Mid-year starters get the months of the leave year they start in, as GOV.UK works it out: full entitlement × months started ÷ 12 (the start month counts in full), rounded up to the next half day (WTR reg 15A).",
              "Days taken only count days they'd actually have worked.",
              "Carry-over is used first, soonest-expiring first; when it expires only the unused part lapses.",
              "Everything counts within the team's leave year (see Leave year)."],
@@ -908,3 +908,21 @@ LIMITATIONS = LIMITATIONS[:-1] + [
     ("Stripe handlers aren't retried", "The webhook replies OK even when a handler fails, and each event is only handled once, so a failure is logged and not redone."),
     ("Leave privacy settings", "Staff never see colleagues' leave types and managers always do; there's no team or per-type setting to change this."),
 ] + LIMITATIONS[-1:]
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Updates, 12 Oct 2026: checked against GOV.UK's own calculators.
+# ════════════════════════════════════════════════════════════════════════
+R.update({
+    "wtr15a": ("legislation.gov.uk – WTR reg. 15A (leave in the first year)", "https://www.legislation.gov.uk/uksi/1998/1833/regulation/15A"),
+    "govuk_holiday_calc": ("GOV.UK – Calculate holiday entitlement", "https://www.gov.uk/calculate-your-holiday-entitlement"),
+    "govuk_ssp_calc": ("GOV.UK – Calculate your employee's statutory sick pay", "https://www.gov.uk/calculate-statutory-sick-pay"),
+    "govuk_parent_calc": ("GOV.UK – Maternity, adoption and paternity calculator for employers", "https://www.gov.uk/maternity-paternity-calculator"),
+})
+_add("balances", how=["Checked against GOV.UK's holiday calculator (full year, starters, leavers): src/lib/govuk-calculators.test.ts."],
+     code=[("src/lib/govuk-calculators.test.ts", "Cases checked against GOV.UK's calculators")],
+     refs=["wtr15a", "govuk_holiday_calc"])
+_add("ssp", how=["Average weekly earnings aren't rounded; 80% of them is rounded up to the penny, as GOV.UK's calculator does. Checked against it in src/lib/govuk-calculators.test.ts."],
+     refs=["govuk_ssp_calc"])
+_add("maternity", how=["Average weekly earnings aren't rounded (kept to 7 decimal places, as GOV.UK shows them); 90% is rounded up to the penny, for SMP, SAP, SPP, ShPP and neonatal pay alike. Checked against GOV.UK's calculator in src/lib/govuk-calculators.test.ts."],
+     refs=["govuk_parent_calc"])

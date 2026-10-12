@@ -1,5 +1,5 @@
 import { SMP_FLAT_RATE } from "@/lib/smpCalculator";
-import { UK_LEL_WEEKLY } from "@/lib/uk-compliance";
+import { UK_LEL_WEEKLY, roundUpToPenny } from "@/lib/uk-compliance";
 
 /**
  * Statutory Neonatal Care Pay (in force 6 April 2025).
@@ -36,7 +36,7 @@ export function calculateNeonatalWeeklyRate(
 ): number {
   const awe = Number(averageWeeklyEarnings);
   if (!Number.isFinite(awe) || awe <= 0) return 0;
-  return Number(Math.min(flatRate, awe * 0.9).toFixed(2));
+  return Math.min(flatRate, roundUpToPenny(awe * 0.9));
 }
 
 export type NeonatalPayResult =

@@ -131,7 +131,7 @@ model User {
   daysWorkedPerWeek         Float          @default(5)
   fteRatio                  Float          @default(1)
   qualifyingDaysPerWeek     Int            @default(5)
-  averageWeeklyEarnings     Decimal?       @db.Decimal(8, 2)
+  averageWeeklyEarnings     Decimal?       @db.Decimal(13, 7)
   bradfordScore             Float          @default(0)
   countryCode               String         @default("NG")
   workCountry               String?
@@ -272,10 +272,10 @@ model LeaveRequest {
   /// Average weekly earnings the SSP rate was worked out from (8 weeks
   /// before the absence); null when no pay was recorded, so the flat rate
   /// applied.
-  sspAverageWeeklyEarnings Decimal?    @db.Decimal(10, 2)
+  sspAverageWeeklyEarnings Decimal?    @db.Decimal(13, 7)
   /// SMP for maternity, SAP for adoption (same rates and phases); which one
   /// follows the leave type (birthPayKind in src/lib/smp-dates.ts).
-  smpAverageWeeklyEarnings Decimal?    @db.Decimal(8, 2)
+  smpAverageWeeklyEarnings Decimal?    @db.Decimal(13, 7)
   smpPhase1EndDate         DateTime?   @db.Date
   smpPhase2EndDate         DateTime?   @db.Date
   smpPhase1WeeklyRate      Decimal?    @db.Decimal(8, 2)

@@ -26,8 +26,10 @@ test("AWE handles mixed earnings with decimals", () => {
   const awe = calculateAWE([
     520.5, 480, 600, 550.25, 500, 475, 610.75, 495,
   ]);
-  // Total = 4231.5 → /8 = 528.9375 → 528.94
-  assert.equal(awe, 528.94);
+  // Total = 4231.5 → /8 = 528.9375, not rounded (GOV.UK: don't round AWE).
+  assert.equal(awe, 528.9375);
+  // 90% = 476.04375, rounded up to the penny.
+  assert.equal(calculateSMPPhaseRates(awe).phase1Weekly, 476.05);
 });
 
 test("AWE returns 0 when no earnings are supplied", () => {
@@ -296,4 +298,11 @@ test("weekly statutory pay: 2 weeks' paternity = 2 × the weekly rate; part week
   // 3 days = 3/7 of £194.32 = £83.2799… → rounded up to £83.28.
   assert.equal(weeklyStatutoryPayFor(194.32, 3), 83.28);
   assert.equal(weeklyStatutoryPayFor(194.32, 0), 0);
+});
+
+test("AWE just under the Lower Earnings Limit isn't rounded up to pass it", () => {
+  // £1,031.96 over 8 weeks = £128.995 a week: below £129, so no SMP (GOV.UK: AWE isn't rounded).
+  const awe = calculateAWE(Array(8).fill(1031.96 / 8));
+  assert.equal(awe, 128.995);
+  assert.equal(calculateSmpEntitlement(awe, { lelWeekly: 129 }).eligible, false);
 });
