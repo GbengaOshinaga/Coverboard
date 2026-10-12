@@ -18,13 +18,22 @@ import { stripe } from "@/lib/stripe";
  *   - Anything else, active payers included, is listed and left alone: a
  *     payer on a 100% coupon, or whose card isn't the default, must not lose
  *     their card flag or get a second welcome.
- * "Has a card" means a default payment method or any card on the customer.
+ * "Has a card" means a default payment method or any card on the customer,
+ * not counting cards that have expired.
  * A team Stripe can't be read for is reported and skipped; re-running is safe.
  *
  *   npm run resync:stripe-trials            # dry run: lists what would change
  *   npm run resync:stripe-trials -- --apply # writes the changes
  */
 const PAID_PLANS = new Set(["STARTER", "GROWTH", "SCALE", "PRO"]);
+
+/** A payment method Stripe could charge: not a card past its expiry month. */
+function usable(pm: Stripe.PaymentMethod): boolean {
+  if (pm.type !== "card" || !pm.card) return true;
+  const now = new Date();
+  const { exp_year, exp_month } = pm.card;
+  return exp_year > now.getFullYear() || (exp_year === now.getFullYear() && exp_month >= now.getMonth() + 1);
+}
 
 async function main() {
   const apply = process.argv.includes("--apply");
@@ -50,7 +59,9 @@ async function main() {
   const leftAlone: string[] = [];
   for (const org of orgs) {
     try {
-      const sub = await client.subscriptions.retrieve(org.stripeSubscriptionId!, { expand: ["customer"] });
+      const sub = await client.subscriptions.retrieve(org.stripeSubscriptionId!, {
+        expand: ["customer.invoice_settings.default_payment_method", "default_payment_method"],
+      });
       if (sub.status !== "trialing" && sub.status !== "paused") {
         leftAlone.push(`${org.id} (${org.name}): ${sub.status}`);
         continue;
@@ -58,9 +69,10 @@ async function main() {
 
       const customer = typeof sub.customer === "string" ? null : (sub.customer as Stripe.Customer);
       const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
-      const hasDefault = !!(sub.default_payment_method || customer?.invoice_settings?.default_payment_method);
+      const defaults = [sub.default_payment_method, customer?.invoice_settings?.default_payment_method];
       const hasCard =
-        hasDefault || (await client.customers.listPaymentMethods(customerId, { type: "card", limit: 1 })).data.length > 0;
+        defaults.some((pm) => pm && typeof pm === "object" && usable(pm)) ||
+        (await client.customers.listPaymentMethods(customerId, { type: "card", limit: 100 })).data.some(usable);
 
       const data: {
         subscriptionStatus?: string;

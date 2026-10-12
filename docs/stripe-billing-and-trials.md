@@ -97,9 +97,11 @@ While a team is locked, Slack's buttons and commands are paused, and reply that 
 
 ## Failed payments
 
-When a payment fails, the subscription is **past due** while Stripe retries it. The team keeps its plan, the billing contact is emailed, and admins see a red banner with a link to update the card. When a retry succeeds, everything carries on as normal.
+When a payment fails, the subscription is **past due** while Stripe retries it. The team keeps its plan, and admins see a red banner with a link to update the card. The main admin (the longest-serving admin who isn't leaving, not the billing email held in Stripe) is emailed once for each failed attempt. When a retry succeeds, everything carries on as normal.
 
-If a lapsed team comes back (a paused trial gets a card, or a payment goes through after all), any deletion scheduled when it lapsed is cancelled.
+A locked team that resubscribes and whose payment fails straight away stays locked until a payment goes through.
+
+If a lapsed team comes back (a paused trial gets a card, or a payment goes through after all), its 30-day grace period ends and any deletion scheduled when it lapsed is cancelled. The "deletion cancelled" email goes once.
 
 ---
 
@@ -119,13 +121,13 @@ All billing emails are sent from `src/lib/billing-emails.ts`.
 
 | Email | When | Who gets it |
 |---|---|---|
-| Trial ending soon | 3 days before a trial ends | The billing contact |
+| Trial ending soon | 3 days before a trial ends | The main admin |
 | Plan too small | Instead of the trial reminder when the team has outgrown the chosen plan, and when a team starts paying for a plan it has outgrown | Every admin who isn't leaving |
-| Welcome | The team's first payment, whether from a trial, from Free or reactivating a locked team. Sent once; not again after a failed payment is recovered | The billing contact |
-| Payment failed | A payment fails | The billing contact |
-| Account paused, subscription cancelled, deletion scheduled or cancelled | As named | The billing contact |
+| Welcome | The team's first payment, whether from a trial, from Free or reactivating a locked team. Sent once; not again after a failed payment is recovered | The main admin |
+| Payment failed | Each failed payment attempt | The main admin |
+| Account paused, subscription cancelled, deletion scheduled or cancelled | As named | The main admin |
 
-The **billing contact** is the longest-serving admin who isn't leaving. If every admin has a leaving date, it falls back to one of them.
+The **main admin** is the longest-serving admin who isn't leaving. If every admin has a leaving date, it falls back to one of them. Emails go to their Coverboard address, not to the billing email held in Stripe.
 
 ---
 
@@ -139,7 +141,7 @@ The billing page shows your last 5 invoices, each with a link to its PDF on Stri
 
 - **Stripe's webhook decides subscription state.** Each Stripe event is handled once: the webhook records the event's ID, so a repeat delivery is skipped and doesn't send emails twice. If Stripe and Coverboard disagree, check the webhook delivery log in the Stripe Dashboard before touching the database.
 - **A failed handler isn't retried.** The webhook replies OK even when a handler fails, so Stripe doesn't resend. The error is logged.
-- **Repairing trials marked as paying (11 Oct 2026).** Until then, the £0 invoice Stripe sends when a trial starts was treated as a payment, so new trials showed as active with a card on file and their paid plan. `npm run resync:stripe-trials` lists the changes it would make (it doesn't save them), and `-- --apply` writes them. It only changes teams Stripe has as trialing (status, trial end, trial plan, card, and the first-payment date if nothing has been paid) or paused (card only). It lists every other team and leaves it alone, so payers on a 100% coupon or with a card that isn't their default aren't touched. A team Stripe can't be read for is reported and skipped, and re-running is safe. Deploy the webhook fix before running it with `--apply`.
+- **Repairing trials marked as paying (11 Oct 2026).** Until then, the £0 invoice Stripe sends when a trial starts was treated as a payment, so new trials showed as active with a card on file and their paid plan. `npm run resync:stripe-trials` lists the changes it would make (it doesn't save them), and `-- --apply` writes them. It only changes teams Stripe has as trialing (status, trial end, trial plan, card, and the first-payment date if nothing has been paid) or paused (card only; expired cards don't count). It lists every other team and leaves it alone, so payers on a 100% coupon or with a card that isn't their default aren't touched. A team Stripe can't be read for is reported and skipped, and re-running is safe. Deploy the webhook fix before running it with `--apply`.
 - **Email needs `RESEND_API_KEY`.** Without it, emails are written to the server log and everything else carries on.
 - **One subscription per team.** There are no add-on subscriptions.
 

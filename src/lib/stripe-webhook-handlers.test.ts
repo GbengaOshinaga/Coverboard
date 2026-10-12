@@ -219,7 +219,7 @@ test("subscription.updated reads top-level current_period_end when item field is
   assert.equal(updates[0]!.currentPeriodEnd!.getTime(), 1_700_000_000 * 1000);
 });
 
-test("subscription.updated past_due → sets status & sends payment_failed email", async () => {
+test("subscription.updated past_due → sets status, keeps the paid plan, no email (invoice.payment_failed sends it)", async () => {
   const { deps, updates, emails } = makeDeps(makeOrg({ plan: "GROWTH" }));
   await dispatchStripeEvent(
     subscriptionEvent("customer.subscription.updated", {
@@ -234,9 +234,8 @@ test("subscription.updated past_due → sets status & sends payment_failed email
     deps
   );
   assert.equal(updates[0]!.subscriptionStatus, "past_due");
-  assert.equal(updates[0]!.plan, "GROWTH", "non-active status must not change plan");
-  assert.equal(emails.length, 1);
-  assert.equal(emails[0]!.name, "paymentFailed");
+  assert.equal(updates[0]!.plan, "GROWTH");
+  assert.equal(emails.length, 0);
 });
 
 test("subscription.updated for unknown customer is a no-op", async () => {
@@ -624,4 +623,19 @@ test("a paused team that comes back without a charge has its scheduled deletion 
   await dispatchStripeEvent(subscriptionEvent("customer.subscription.updated", activeGrowth, { status: "paused" }), deps);
   assert.equal(calls.filter((c) => c.name === "cancelScheduledDeletion").length, 1);
   assert.deepEqual(emails.map((e) => e.name), ["deletionCanceled"]);
+});
+
+test("a paused team that comes back has its 30-day grace date cleared, even with no deletion scheduled yet", async () => {
+  const { deps, updates } = makeDeps(makeOrg({ plan: "LOCKED", subscriptionStatus: "paused" }), { paidBefore: true });
+  await dispatchStripeEvent(subscriptionEvent("customer.subscription.updated", activeGrowth, { status: "paused" }), deps);
+  assert.equal(updates[0]!.trialExpiredGraceEndsAt, null);
+  assert.equal(updates[0]!.plan, "GROWTH");
+});
+
+test("a locked team coming back straight into past due stays locked until it pays", async () => {
+  const { deps, updates } = makeDeps(makeOrg({ plan: "LOCKED", subscriptionStatus: "paused" }));
+  const pastDue = { ...activeGrowth, status: "past_due" } as typeof activeGrowth;
+  await dispatchStripeEvent(subscriptionEvent("customer.subscription.updated", pastDue, { status: "paused" }), deps);
+  assert.equal(updates[0]!.plan, "LOCKED");
+  assert.equal("trialExpiredGraceEndsAt" in updates[0]!, false);
 });

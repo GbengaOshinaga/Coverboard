@@ -99,10 +99,14 @@ export async function handleSubscriptionUpdated(
   // The plan they pay for applies once the subscription is active, and while
   // Stripe retries a failed payment (past_due): a trial whose first charge
   // fails has ended, so it moves to the plan it chose rather than keeping
-  // every feature, and admins see a past-due banner. Trialing and other
-  // states keep whatever plan they had (TRIAL → everything; LOCKED → none).
+  // every feature, and admins see a past-due banner. A locked team coming
+  // back straight into past_due has paid nothing, so it stays locked until a
+  // payment goes through. Trialing and other states keep whatever plan they
+  // had (TRIAL → everything; LOCKED → none).
   const nextPlan: PlanEnum =
-    (sub.status === "active" || sub.status === "past_due") && planKey ? PLAN_KEY_TO_ENUM[planKey] : org.plan;
+    planKey && (sub.status === "active" || (sub.status === "past_due" && org.plan !== "LOCKED"))
+      ? PLAN_KEY_TO_ENUM[planKey]
+      : org.plan;
 
   const accessEnd = subscriptionAccessEndDate(sub);
 
@@ -113,11 +117,13 @@ export async function handleSubscriptionUpdated(
     cancelAtPeriodEnd: sub.cancel_at_period_end ?? false,
     trialEndsAt: sub.trial_end ? new Date(sub.trial_end * 1000) : org.trialEndsAt,
     currentPeriodEnd: accessEnd ?? org.currentPeriodEnd,
+    // Active again: a paused trial's 30-day grace period no longer applies.
+    ...(sub.status === "active" ? { trialExpiredGraceEndsAt: null } : {}),
   });
 
-  if (sub.status === "past_due" && org.adminEmail) {
-    await deps.emailers.paymentFailed({ to: org.adminEmail });
-  }
+  // The payment-failed email goes from invoice.payment_failed, once per
+  // failed attempt; sending it here too doubled it, and repeated it on every
+  // later update while past due.
 
   // The subscription has just become active: a trial ending, or a first
   // payment going through after failing (trialing → past_due → active).
