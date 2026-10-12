@@ -96,11 +96,13 @@ export async function handleSubscriptionUpdated(
   const priceId = sub.items.data[0]?.price?.id ?? org.stripePriceId ?? null;
   const planKey = priceId ? planKeyFromPriceId(priceId) : null;
 
-  // Only promote the Prisma plan enum when the subscription is fully active.
-  // Trialing/past-due/etc. keep whatever plan they had so feature gating stays
-  // consistent (TRIAL → pro bundle; LOCKED → none).
+  // The plan they pay for applies once the subscription is active, and while
+  // Stripe retries a failed payment (past_due): a trial whose first charge
+  // fails has ended, so it moves to the plan it chose rather than keeping
+  // every feature, and admins see a past-due banner. Trialing and other
+  // states keep whatever plan they had (TRIAL → everything; LOCKED → none).
   const nextPlan: PlanEnum =
-    sub.status === "active" && planKey ? PLAN_KEY_TO_ENUM[planKey] : org.plan;
+    (sub.status === "active" || sub.status === "past_due") && planKey ? PLAN_KEY_TO_ENUM[planKey] : org.plan;
 
   const accessEnd = subscriptionAccessEndDate(sub);
 
@@ -123,6 +125,17 @@ export async function handleSubscriptionUpdated(
   // since Stripe doesn't promise an order. Whether it's the team's first
   // paid plan is up to startedPaying.
   if (sub.status === "active" && previous?.status && previous.status !== "active") {
+    // Back from being paused or past due, possibly without a charge (a
+    // resumed subscription can start on a trial or a £0 invoice): the
+    // deletion scheduled when it lapsed no longer applies. An admin's own
+    // deletion request cancels the subscription, so it can't get here.
+    const { wasScheduled } = await deps.cancelScheduledDeletion({
+      organizationId: org.id,
+      canceledBy: "customer.subscription.updated",
+    });
+    if (wasScheduled && org.adminEmail) {
+      await deps.emailers.deletionCanceled({ to: org.adminEmail });
+    }
     await startedPaying(org, priceId, deps);
   }
 }

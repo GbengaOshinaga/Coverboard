@@ -5,6 +5,7 @@ import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { PlanLimitBanner } from "@/components/layout/plan-limit-banner";
 import { planLimitWarning } from "@/lib/plan-headcount";
 import { TrialBanner } from "@/components/layout/trial-banner";
+import { PastDueBanner } from "@/components/layout/past-due-banner";
 import { DeletionScheduledBanner } from "@/components/layout/deletion-scheduled-banner";
 import { EmailVerificationBanner } from "@/components/layout/email-verification-banner";
 
@@ -49,6 +50,7 @@ export default async function DashboardLayout({
         deletionScheduledFor={org.deletionScheduledFor}
         isAdmin={isAdmin}
       />
+      <PastDueBanner subscriptionStatus={org.subscriptionStatus} isAdmin={isAdmin} />
       <TrialBanner
         trialEndsAt={org.trialEndsAt}
         subscriptionStatus={org.subscriptionStatus}

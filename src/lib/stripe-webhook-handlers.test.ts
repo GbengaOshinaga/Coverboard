@@ -607,3 +607,21 @@ test("a trial converting sends one welcome whether the invoice or the subscripti
   await dispatchStripeEvent(paidInvoice("evt_inv"), updateFirst.deps);
   assert.deepEqual(updateFirst.emails.map((e) => e.name), ["welcomeActive"]);
 });
+
+test("a trial whose first charge fails moves to the plan it chose while Stripe retries", async () => {
+  const { deps, updates } = makeDeps(makeOrg({ plan: "TRIAL", subscriptionStatus: "trialing" }));
+  const pastDue = { ...activeGrowth, status: "past_due" } as typeof activeGrowth;
+  await dispatchStripeEvent(subscriptionEvent("customer.subscription.updated", pastDue, { status: "trialing" }), deps);
+  assert.equal(updates[0]!.subscriptionStatus, "past_due");
+  assert.equal(updates[0]!.plan, "GROWTH");
+});
+
+test("a paused team that comes back without a charge has its scheduled deletion cancelled", async () => {
+  const { deps, emails, calls } = makeDeps(makeOrg({ plan: "LOCKED", subscriptionStatus: "paused" }), {
+    scheduledDeletionExists: true,
+    paidBefore: true,
+  });
+  await dispatchStripeEvent(subscriptionEvent("customer.subscription.updated", activeGrowth, { status: "paused" }), deps);
+  assert.equal(calls.filter((c) => c.name === "cancelScheduledDeletion").length, 1);
+  assert.deepEqual(emails.map((e) => e.name), ["deletionCanceled"]);
+});

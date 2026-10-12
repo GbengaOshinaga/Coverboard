@@ -1,4 +1,4 @@
-<!-- Last updated: 2026-10-11 — checked against src/lib/plans.ts, src/config/pricing.ts and the Stripe webhook -->
+<!-- Last updated: 2026-10-12 — checked against src/lib/plans.ts, src/config/pricing.ts and the Stripe webhook -->
 # Stripe billing and trial management
 
 Coverboard bills monthly in GBP through Stripe. You can start on the Free plan, or start a 14-day free trial of a paid plan without a card. When a trial ends, Stripe either charges your card (if you've added one) or pauses the account until you add one.
@@ -87,9 +87,19 @@ The form uses Stripe Elements, so your card details never touch Coverboard's ser
 
 **With a card on file** — Stripe charges on day 14. The plan becomes the one you chose, and the admin gets a welcome email.
 
+**If that first charge fails** — the trial has still ended: the team moves to the plan it chose while Stripe retries the card, and admins see a red banner asking them to update their card. When a retry succeeds, the welcome email goes then.
+
 **Without a card** — Stripe pauses the subscription and the team is **locked**: everyone sees the lock screen. Admins are emailed a link to reactivate. From the lock screen they can still reach **Settings → Billing → Add payment method**. If nobody adds a card, the account goes into the [30-day data deletion grace period](data-deletion-and-trial-expiry.md).
 
 While a team is locked, Slack's buttons and commands are paused, and reply that an admin needs to choose a plan.
+
+---
+
+## Failed payments
+
+When a payment fails, the subscription is **past due** while Stripe retries it. The team keeps its plan, the billing contact is emailed, and admins see a red banner with a link to update the card. When a retry succeeds, everything carries on as normal.
+
+If a lapsed team comes back (a paused trial gets a card, or a payment goes through after all), any deletion scheduled when it lapsed is cancelled.
 
 ---
 
@@ -129,6 +139,7 @@ The billing page shows your last 5 invoices, each with a link to its PDF on Stri
 
 - **Stripe's webhook decides subscription state.** Each Stripe event is handled once: the webhook records the event's ID, so a repeat delivery is skipped and doesn't send emails twice. If Stripe and Coverboard disagree, check the webhook delivery log in the Stripe Dashboard before touching the database.
 - **A failed handler isn't retried.** The webhook replies OK even when a handler fails, so Stripe doesn't resend. The error is logged.
+- **Repairing trials marked as paying (11 Oct 2026).** Until then, the £0 invoice Stripe sends when a trial starts was treated as a payment, so new trials showed as active with a card on file and their paid plan. `npm run resync:stripe-trials` lists the changes it would make (it doesn't save them), and `-- --apply` writes them. It only changes teams Stripe has as trialing (status, trial end, trial plan, card, and the first-payment date if nothing has been paid) or paused (card only). It lists every other team and leaves it alone, so payers on a 100% coupon or with a card that isn't their default aren't touched. A team Stripe can't be read for is reported and skipped, and re-running is safe. Deploy the webhook fix before running it with `--apply`.
 - **Email needs `RESEND_API_KEY`.** Without it, emails are written to the server log and everything else carries on.
 - **One subscription per team.** There are no add-on subscriptions.
 

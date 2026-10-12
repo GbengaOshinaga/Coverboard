@@ -855,8 +855,12 @@ _feature("billing").update(
          "The welcome email goes on a team's first payment, from a trial, from Free or reactivating a locked team, whichever Stripe event arrives first; never again after a recovered renewal.",
          "Billing emails go to the longest-serving admin who isn't leaving; plan-too-small warnings go to every admin who isn't leaving.",
          "Change plan: immediate and prorated on a paid plan; from Free through Add payment method, with no second trial; Switch to Free at the end of the paid period.",
+         "Past due (Stripe retrying a failed payment): the paid plan applies, so a trial whose first charge fails moves to the plan it chose, and admins see a banner to update their card. A lapsed team that comes back has its scheduled deletion cancelled.",
+         "A £0 invoice (a trial starting) changes nothing; npm run resync:stripe-trials repaired trials marked as paying before 11 Oct 2026.",
          "Feature access is checked by plan in the APIs as well as on screen (TRIAL = full access)."])
 _add("billing", code=[("src/app/api/billing/change-plan/route.ts", "Change plan"),
+                      ("src/components/layout/past-due-banner.tsx", "Past-due banner"),
+                      ("scripts/resync-stripe-trials.ts", "Repair for trials marked as paying"),
                       ("src/app/api/billing/downgrade-to-free/route.ts", "Switch to Free"),
                       ("src/lib/billing-emails.ts", "Billing emails")],
      related=["planlimits"])
