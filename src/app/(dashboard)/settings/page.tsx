@@ -362,6 +362,13 @@ export default function SettingsPage() {
       if (res.ok) {
         toast("Deletion canceled — your data is safe", "success");
         await refreshOrgSettings();
+      } else if (res.status === 409) {
+        // The only 409 is a locked team: its plan has ended, and only paying
+        // keeps its data.
+        toast("Your plan has ended, so only adding a payment method stops the deletion.", "error", {
+          href: "/settings/billing",
+          label: "Go to Billing",
+        });
       } else {
         toast("Could not cancel deletion", "error");
       }
