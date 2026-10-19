@@ -1,6 +1,7 @@
 import type { ExcelSheetSpec, ExportColumn } from "@/lib/export-formats";
 import type { SMPPhase } from "@/lib/smpCalculator";
 import type { RightToWorkStatus } from "@/lib/right-to-work";
+import { ssp1Summary, type Ssp1Due } from "@/lib/ssp1";
 
 /**
  * The UK compliance report, defined once. The API builds these rows, serves
@@ -49,6 +50,8 @@ export type SspLiabilityRow = {
   maxDays: number;
   remainingDays: number;
   belowLel: boolean | null;
+  /** Form SSP1 to give them (no SSP, or SSP running out), and by when; src/lib/ssp1.ts. */
+  ssp1: Ssp1Due | null;
 };
 
 /**
@@ -204,6 +207,8 @@ export const UK_COMPLIANCE_TABLES = {
       { key: "estimatedTotalCost", header: "Cost, whole absence (£)", format: "money" },
       { key: "averageWeeklyEarnings", header: "Average weekly earnings used (£)", format: "money" },
       { key: "rateBasis", header: "How the rate was worked out" },
+      { key: (r) => (r.ssp1 ? r.ssp1.dueBy : ""), header: "Form SSP1 due by" },
+      { key: (r) => (r.ssp1 ? ssp1Summary(r.ssp1, null) : ""), header: "Form SSP1" },
     ],
   }),
   parental: table<ParentalRow>({

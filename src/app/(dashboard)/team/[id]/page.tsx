@@ -20,6 +20,7 @@ import {
   Mail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SSP1_FORM_URL, ssp1Summary, type Ssp1Due } from "@/lib/ssp1";
 import { HolidayOnLeavingCard } from "@/components/team/holiday-on-leaving-card";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -678,6 +679,8 @@ export default function EmployeeProfilePage({
     leaveCutShort: LeavingRow[];
     coverWithdrawn: number;
     inPast: boolean;
+    /** Off sick past their last day: form SSP1 is due (src/lib/ssp1.ts). */
+    ssp1: Ssp1Due | null;
   } | null>(null);
   const [leavingPreviewError, setLeavingPreviewError] = useState("");
   useEffect(() => {
@@ -1040,6 +1043,15 @@ export default function EmployeeProfilePage({
               <p className="mt-1">Cancelled leave stays cancelled if they rejoin.</p>
             </div>
           )}
+        {leavingPreview?.ssp1 && (
+          <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            {member.name} is off sick past this date. {ssp1Summary(leavingPreview.ssp1)} Tick &ldquo;
+            {leavingPreview.ssp1.reason}&rdquo;{" "}
+            <a href={SSP1_FORM_URL} target="_blank" rel="noopener noreferrer" className="font-medium underline">
+              Form SSP1 on GOV.UK
+            </a>
+          </p>
+        )}
         <p className="mt-3 text-sm text-gray-700">
           {lastDay > new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date()) ? (
             <>
@@ -1083,16 +1095,24 @@ export default function EmployeeProfilePage({
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ lastDay }),
                 });
-                const data = (await res.json().catch(() => ({}))) as { error?: string; leftNow?: boolean };
+                const data = (await res.json().catch(() => ({}))) as {
+                  error?: string;
+                  leftNow?: boolean;
+                  ssp1?: Ssp1Due | null;
+                };
                 if (!res.ok) {
                   toast(data.error ?? "Could not remove member", "error");
                   return;
                 }
                 setShowRemoveMember(false);
+                // Still off sick past their last day: the form is the next step
+                // (the dialog said so too; a leaving date later reloads the page).
+                const ssp1Link = data.ssp1 ? { href: SSP1_FORM_URL, label: "Form SSP1 on GOV.UK" } : undefined;
+                const ssp1Text = data.ssp1 ? ` ${ssp1Summary(data.ssp1)}` : "";
                 if (data.leftNow) {
                   // One fewer may bring the team within its plan (overPlan).
                   await updateSession();
-                  toast(`${member.name} has been marked as left. Their records are kept.`, "success");
+                  toast(`${member.name} has been marked as left. Their records are kept.${ssp1Text}`, "success", ssp1Link);
                   router.push("/team");
                 } else {
                   toast(`${member.name} is leaving on ${new Date(`${lastDay}T00:00:00Z`).toLocaleDateString("en-GB", { timeZone: "UTC" })}.`, "success");

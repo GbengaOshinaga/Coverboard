@@ -40,6 +40,7 @@ const report: UkComplianceReport = {
       maxDays: 84,
       remainingDays: 78,
       belowLel: false,
+      ssp1: null,
     },
   ],
   parentalTracker: [
@@ -100,7 +101,7 @@ test("compliance export headers are fixed per table (change them here on purpose
       "Employee ID", "Employee", "Absence start", "Absence end", "Qualifying days per week",
       "Daily SSP rate (£, 4 d.p. per HMRC tables)", "SSP days", "SSP days remaining", "28-week limit reached",
       "Cost to date (£)", "Cost, whole absence (£)", "Average weekly earnings used (£)",
-      "How the rate was worked out",
+      "How the rate was worked out", "Form SSP1 due by", "Form SSP1",
     ],
     parental: [
       "Employee ID", "Employee", "Leave type", "Start date", "Expected return", "Leave (weeks)", "Leave (working days)",
@@ -115,7 +116,21 @@ test("compliance export headers are fixed per table (change them here on purpose
 });
 
 test("SSP row: plain dates, Yes/No, HMRC 4-decimal rate, money to 2 places", () => {
-  assert.equal(csvLines("ssp")[1], "u1,Brian,2026-10-19,2026-10-30,3,41.0833,6,78,No,246.50,246.50,480.00,Flat rate");
+  assert.equal(csvLines("ssp")[1], "u1,Brian,2026-10-19,2026-10-30,3,41.0833,6,78,No,246.50,246.50,480.00,Flat rate,,");
+});
+
+test("SSP row with no SSP: when form SSP1 is due and why", () => {
+  const noSsp = {
+    ...report.sspLiability[0],
+    dailyRate: 0,
+    averageWeeklyEarnings: 0,
+    ssp1: { kind: "noEarnings" as const, reason: "£0", dueBy: "2026-10-26" },
+  };
+  const csv = toCsv(UK_COMPLIANCE_TABLES.ssp.rows({ ...report, sspLiability: [noSsp] }), UK_COMPLIANCE_TABLES.ssp.columns);
+  assert.match(
+    csv.split("\n")[1],
+    /,2026-10-26,No SSP: earnings were £0 in the 8 weeks before\. Give them form SSP1 by 26\/10\/2026\.\r?$/
+  );
 });
 
 test("holiday usage says whether it's days or hours", () => {

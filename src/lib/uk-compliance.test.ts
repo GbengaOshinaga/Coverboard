@@ -477,7 +477,7 @@ test("sspRateBasis explains every SSP rate", () => {
   const after = new Date("2026-11-02T00:00:00Z");
   // Frank with no pay recorded: flat rate, and says so.
   assert.match(sspRateBasis({ startDate: after, averageWeeklyEarnings: null, flatRate: 123.25 }), /No pay recorded .* flat £123\.25/);
-  assert.match(sspRateBasis({ startDate: after, averageWeeklyEarnings: 0, flatRate: 123.25 }), /^£0: every week recorded .* no-pay week/);
+  assert.match(sspRateBasis({ startDate: after, averageWeeklyEarnings: 0, flatRate: 123.25 }), /^No SSP: earnings were £0 in the 8 weeks before/);
   assert.equal(
     sspRateBasis({ startDate: after, averageWeeklyEarnings: 120, flatRate: 123.25 }),
     "80% of £120.00 average weekly earnings = £96.00 a week"

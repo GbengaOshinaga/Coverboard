@@ -237,7 +237,7 @@ export function sspRateBasis(input: {
     return `No pay recorded in the 8 weeks before this absence, so the flat ${money(flat)} a week is used. Add their earnings to apply the 80% rule.`;
   }
   if (awe === 0) {
-    return "£0: every week recorded in the 8 weeks before was a no-pay week (SSP is 80% of average earnings).";
+    return "No SSP: earnings were £0 in the 8 weeks before this absence (SSP is 80% of average earnings).";
   }
   const eighty = roundUpToPenny(awe * SSP_LOW_EARNER_FRACTION);
   return eighty < flat
@@ -309,6 +309,9 @@ export type SspEligibilityInput = {
   onDate?: Date;
 };
 
+/** Why someone with no earnings in the 8 weeks before gets no SSP (from 6 April 2026). */
+export const SSP_NO_EARNINGS_REASON = "£0 earnings in the 8 weeks before sickness";
+
 export type SspEligibilityResult =
   | {
       eligible: true;
@@ -322,21 +325,24 @@ export type SspEligibilityResult =
       reason:
         | "Below Lower Earnings Limit"
         | "SSP 28-week limit reached"
-        | "Missing average weekly earnings";
+        | "Missing average weekly earnings"
+        | typeof SSP_NO_EARNINGS_REASON;
       dailyRate?: number;
     };
 
 /**
  * Compute SSP eligibility and the daily rate.
  *
- * From 6 April 2026 ({@link SSP_REFORM_DATE}): every employee is eligible
- * regardless of earnings (no LEL gate), and the daily rate is the lower of the
- * flat rate or 80% of AWE ÷ qualifying days. Before the reform: the old rules —
+ * From 6 April 2026 ({@link SSP_REFORM_DATE}): no LEL gate, and the daily rate
+ * is the lower of the flat rate or 80% of AWE ÷ qualifying days, so £0
+ * earnings in the 8 weeks before means no SSP. Before the reform: the old rules —
  * AWE must be at least the LEL, and the rate is the flat rate.
  *
- * The only post-reform ineligibility is the 28-week cap (28 ×
- * qualifyingDaysPerWeek). `User.averageWeeklyEarnings` is synced from the last 8
- * paid `WeeklyEarning` weeks (see `resolveAverageWeeklyEarnings`).
+ * Post-reform, someone isn't entitled when their earnings in the 8 weeks
+ * before were £0 (80% of nothing; a reason on form SSP1 from 10/26), or at the
+ * 28-week cap (28 × qualifyingDaysPerWeek). An average of 0 must mean every
+ * week was recorded as no pay; weeks not entered are passed as null, which
+ * gives the flat rate (see sspEarningsFromRows).
  */
 export function calculateSspEntitlement(
   input: SspEligibilityInput
@@ -362,6 +368,10 @@ export function calculateSspEntitlement(
     if (Number(input.averageWeeklyEarnings) < lel) {
       return { eligible: false, reason: "Below Lower Earnings Limit" };
     }
+  }
+
+  if (postReform && input.averageWeeklyEarnings != null && Number(input.averageWeeklyEarnings) === 0) {
+    return { eligible: false, reason: SSP_NO_EARNINGS_REASON };
   }
 
   if (input.sspDaysPaidInPeriod >= maxDays) {

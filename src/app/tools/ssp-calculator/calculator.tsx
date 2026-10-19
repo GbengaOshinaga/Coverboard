@@ -9,6 +9,7 @@ import {
   calculateSspDailyRate,
   sspPay,
 } from "@/lib/uk-compliance";
+import { SSP1_FORM_URL } from "@/lib/ssp1";
 
 function num(v: string): number {
   const n = parseFloat(v);
@@ -26,7 +27,10 @@ export function SspCalculator() {
   // The exact functions Coverboard uses in-product, so the tool and the app
   // always agree. Post-6-April-2026 rules: no waiting days, no Lower Earnings
   // Limit, rate capped at 80% of average weekly earnings.
-  const weeklyRate = calculateSspWeeklyRate(aweNum > 0 ? aweNum : null);
+  // £0 earnings typed in: no SSP at all (80% of nothing), so form SSP1.
+  // A blank box is unknown earnings, so the flat rate.
+  const noEarnings = awe.trim() !== "" && aweNum === 0;
+  const weeklyRate = noEarnings ? 0 : calculateSspWeeklyRate(aweNum > 0 ? aweNum : null);
   const dailyRate = calculateSspDailyRate(qDays, weeklyRate);
   const maxDays = SSP_MAX_WEEKS * qDays;
   const payableDays = Math.min(Math.round(num(sickDays)), maxDays);
@@ -122,7 +126,16 @@ export function SspCalculator() {
           </div>
         </div>
         <p className="mt-3 border-t border-brand-100 pt-3 text-xs leading-relaxed text-gray-600">
-          {usesPercentage ? (
+          {noEarnings ? (
+            <>
+              No SSP: with £0 earnings in the 8 weeks before the sickness there&apos;s
+              nothing to pay (80% of £0). Give them{" "}
+              <a href={SSP1_FORM_URL} target="_blank" rel="noopener noreferrer" className="font-medium underline">
+                form SSP1
+              </a>{" "}
+              within 7 days of their first day off sick so they can claim benefits instead.{" "}
+            </>
+          ) : usesPercentage ? (
             <>
               Weekly rate = 80% of {formatGBP(aweNum)} ={" "}
               {formatGBP(weeklyRate)} (lower than the{" "}

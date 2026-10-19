@@ -6,7 +6,7 @@ import { UK_SSP_WEEKLY_RATE } from "@/lib/uk-compliance";
 import { countWeekdays } from "@/lib/utils";
 import { checkEndDateChange, isSicknessLeaveTypeName, rescaleHours } from "./rules";
 import { sicknessOverlapError } from "./sickness-overlap";
-import { computeSspForSpell, recomputeLaterSspSpells, sspFields } from "./ssp-spell";
+import { computeSspForSpell, recomputeLaterSspSpells, sspFields, sspLastDayWithin } from "./ssp-spell";
 import { syncFitNoteEvidence } from "./fit-notes";
 
 export type ChangeEndDateResult =
@@ -121,9 +121,15 @@ export async function changeSicknessEndDate(input: {
 
   // Only when this change is what reaches the cap, not on every later edit.
   if (ssp?.capReachedNow && !request.sspLimitReached) {
+    // The last day SSP is paid, which can be before the absence ends.
+    const sspEndDate = await sspLastDayWithin({
+      userId: request.userId,
+      startDate: request.startDate,
+      endDate: newEndDate,
+    }).catch(() => newEndDate);
     emailSspCapReached({
       employeeName: ssp.employee.name,
-      sspEndDate: newEndDate,
+      sspEndDate,
       organizationId,
     }).catch((err) => console.error("SSP cap reached email error:", err));
     recordAudit({
@@ -134,7 +140,7 @@ export async function changeSicknessEndDate(input: {
       actor: actorMeta,
       metadata: {
         employee: ssp.employee.name,
-        sspEndDate: newEndDate,
+        sspEndDate,
         weeklyRate: UK_SSP_WEEKLY_RATE,
         cumulativeDays: ssp.info.cumulativeSspDaysPaid,
       },

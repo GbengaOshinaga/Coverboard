@@ -4,7 +4,7 @@ import { recomputeBradfordScore } from "./bradford";
 import { getUserLeaveBalance } from "@/lib/leave-balances";
 import { countWeekdays } from "@/lib/utils";
 import { notifyNewRequest } from "@/lib/slack-notifications";
-import { emailNewRequest, emailRequestStatusChange, emailSspCapReached } from "@/lib/email-notifications";
+import { emailNewRequest, emailRequestStatusChange, emailSspCapReached, emailSspNotEntitled } from "@/lib/email-notifications";
 import { UK_SSP_WEEKLY_RATE } from "@/lib/uk-compliance";
 import { recordAudit, type AuditContext } from "@/lib/audit";
 import { AnalyticsEvents } from "@/lib/analytics/events";
@@ -25,7 +25,7 @@ import {
 } from "@/lib/smp-request";
 import { isNeonatalCareLeaveType, neonatalBookingError, neonatalWeeksEntitled } from "@/lib/neonatalPay";
 import { sicknessOverlapError } from "./sickness-overlap";
-import { computeSspForSpell, type SspInfo } from "./ssp-spell";
+import { computeSspForSpell, sspLastDayWithin, type SspInfo } from "./ssp-spell";
 
 /**
  * Shared core for creating a leave request. Used by both the web API
@@ -640,7 +640,8 @@ export async function createLeaveRequest(
   );
 
   if (notifyCapReached && sspEmployeeSnapshot) {
-    const sspEndDate = new Date(endDate);
+    // The last day SSP is paid, which can be before the absence ends.
+    const sspEndDate = await sspLastDayWithin({ userId, startDate, endDate }).catch(() => new Date(endDate));
     emailSspCapReached({
       employeeName: sspEmployeeSnapshot.name,
       sspEndDate,
@@ -658,6 +659,28 @@ export async function createLeaveRequest(
         weeklyRate: UK_SSP_WEEKLY_RATE,
         cumulativeDays: sspInfo?.cumulativeSspDaysPaid ?? null,
       },
+      context,
+    });
+  }
+
+  // No SSP (earnings were £0 in the 8 weeks before): the employer must give
+  // them form SSP1 within 7 days (src/lib/ssp1.ts).
+  if (sspInfo?.ssp1 && sspEmployeeSnapshot) {
+    const ssp1 = sspInfo.ssp1;
+    emailSspNotEntitled({
+      employeeName: sspEmployeeSnapshot.name,
+      organizationId: sspEmployeeSnapshot.organizationId,
+      firstDayOff: startDate,
+      reason: ssp1.reason,
+      dueBy: new Date(`${ssp1.dueBy}T00:00:00Z`),
+    }).catch((err) => console.error("SSP not entitled email error:", err));
+    recordAudit({
+      organizationId: sspEmployeeSnapshot.organizationId,
+      action: "leave_request.ssp_not_entitled",
+      resource: "leave_request",
+      resourceId: leaveRequest.id,
+      actor: actorMeta,
+      metadata: { employee: sspEmployeeSnapshot.name, reason: ssp1.reason, ssp1DueBy: ssp1.dueBy },
       context,
     });
   }

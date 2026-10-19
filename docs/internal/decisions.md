@@ -1,7 +1,7 @@
 <!-- Internal engineering note — NOT published to the GitBook help centre. -->
 # Decision log
 
-_Last updated: 2026-10-12_
+_Last updated: 2026-10-19_
 
 Why Coverboard works the way it does. The [feature guide](../guide/) says **what** the app does; this page says **why**, so nobody undoes a decision without knowing what it protects against. Many of these came from tester findings, and several were got wrong at least once before.
 
@@ -259,11 +259,24 @@ If you change one, update its entry and add the date. If you make a new decision
 - **Why:** it keeps health data to the minimum (see 8). The employer's existing HR system holds the document.
 - **Where:** `FitNote` in `prisma/schema.prisma`.
 
+### 26. £0 earnings means no SSP, and only when every week is recorded (2026-10-19)
+- **Decision:** from 6 April 2026, someone whose earnings in the 8 weeks before a sickness absence were £0 isn't entitled to SSP, and the employer is told to give them form SSP1. That's only decided when every one of the 8 weeks (every week since they started, for someone newer) is recorded as a no-pay week. If any week is missing, they get the flat rate.
+- **Why:**
+  - SSP is now the lower of the flat rate and 80% of earnings, so £0 earnings gives £0. The form SSP1 dated 10/26 (12 Oct 2026) added a box for exactly this.
+  - We used to book these absences as eligible at £0.00 a day, so nobody was told to give the form, which the employee needs to claim benefits.
+  - Weeks not entered are missing data, not £0 (as for every average). Telling an employer someone gets nothing because pay wasn't entered would underpay them.
+- **Also from form SSP1:** the app says when the form is due and which box to tick:
+  - no SSP: within 7 days of the first day off sick;
+  - SSP running out while they're off: by the start of week 23 (the report warns from week 22, or as soon as the absence booked runs past the day SSP ends);
+  - a leaver off sick past their last day: within 7 days of it.
+- **Protects against:** an employee left without SSP or the form to claim benefits; telling an employer to pay nothing because earnings weren't entered.
+- **Where:** `src/lib/ssp1.ts` (the form, reasons, deadlines, run-out dates); `sspEarningsFromRows()` in `src/lib/smpCalculator.ts`; `calculateSspEntitlement()` in `src/lib/uk-compliance.ts`.
+
 ---
 
 ## Engineering conventions
 
-### 26. Each rule lives in one place
+### 27. Each rule lives in one place
 - **Decision:** a rule lives in one helper, and every route, page and Slack handler calls it. Examples:
   - the working week (21);
   - leave privacy (8);
@@ -272,17 +285,17 @@ If you change one, update its entry and add the date. If you make a new decision
   - leave booking (`createLeaveRequest()`) and approving (`reviewLeaveRequest()`), shared by the web app and Slack.
 - **Why:** copies drift apart. Several tester findings were one surface missing a rule that another applied.
 
-### 27. The Stripe webhook takes its dependencies as a parameter
+### 28. The Stripe webhook takes its dependencies as a parameter
 - **Decision:** handlers get their database and email functions through `WebhookDeps`, so tests can run every event in any order without Stripe or a database.
 - **Where:** `src/lib/stripe-webhook-handlers.ts` and its `.test.ts`.
 
-### 28. Hand-written migrations are checked without a shadow database
+### 29. Hand-written migrations are checked without a shadow database
 - **Never** pass a real database as `--shadow-database-url`. Prisma resets the shadow database, and that wiped the local one on 2026-10-10.
 - **Instead,** check drift with:
   - `prisma migrate status`; or
   - `prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma`.
 
-### 29. The two sets of docs
+### 30. The two sets of docs
 - **Help pages in `docs/*.md`:** for customers. Rewrite them when something they describe changes.
 - **The feature guide in `docs/guide/`:** for us. Add changes as a dated updates block in `content.py`, not by rewriting entries. Then run:
   - `check.py --links` first, which fails on a missing code path or broken legal link;

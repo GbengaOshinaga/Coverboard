@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { formatGBP } from "@/lib/money";
 import { leaveYearBounds, leaveYearLabel } from "@/lib/leave-year";
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { SSP1_FORM_URL, ssp1Summary } from "@/lib/ssp1";
 import { CoverShiftsSection } from "@/components/reports/cover-shifts-section";
 import { useSession } from "next-auth/react";
 import {
@@ -1151,10 +1152,8 @@ export default function ReportsPage() {
                       </thead>
                       <tbody>
                         {report!.sspLiability.map((row) => (
-                          <tr
-                            key={row.userId + row.startDate}
-                            className="border-b border-gray-50"
-                          >
+                          <Fragment key={row.userId + row.startDate}>
+                          <tr className={row.ssp1 ? "" : "border-b border-gray-50"}>
                             <td className="py-2.5 pr-4 font-medium text-gray-900">
                               {row.name}
                             </td>
@@ -1176,7 +1175,7 @@ export default function ReportsPage() {
                             </td>
                             <td className="py-2.5 pr-4 text-right font-mono text-gray-600">
                               <span title={row.rateBasis}>{formatGBP(row.dailyRate)}</span>
-                              {(row.averageWeeklyEarnings === null || row.dailyRate === 0) && (
+                              {(row.averageWeeklyEarnings === null || row.dailyRate === 0) && row.ssp1?.kind !== "noEarnings" && (
                                 <span className="block max-w-56 text-[11px] font-sans text-amber-700">
                                   {row.rateBasis}
                                 </span>
@@ -1195,6 +1194,19 @@ export default function ReportsPage() {
                               {row.remainingDays}
                             </td>
                           </tr>
+                          {row.ssp1 && (
+                            <tr className="border-b border-gray-50">
+                              <td colSpan={7} className="pb-2.5">
+                                <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900">
+                                  {ssp1Summary(row.ssp1)} Tick &ldquo;{row.ssp1.reason}&rdquo;{" "}
+                                  <a href={SSP1_FORM_URL} target="_blank" rel="noopener noreferrer" className="font-medium underline">
+                                    Form SSP1 on GOV.UK
+                                  </a>
+                                </p>
+                              </td>
+                            </tr>
+                          )}
+                          </Fragment>
                         ))}
                       </tbody>
                     </table>

@@ -1,15 +1,18 @@
 import { prisma } from "@/lib/prisma";
 import { SICKNESS_LEAVE_TYPE, sspAppliesTo } from "@/lib/ssp-scope";
 import { getWorkingWeek } from "@/lib/working-week-server";
+import { countWorkingDays } from "@/lib/working-week";
 import {
   SSP_MAX_WEEKS,
+  SSP_REFORM_DATE,
   calculateSspPayableDaysForSpell,
   calculateSspEntitlement,
   sspPay,
   sspRateBasis,
 } from "@/lib/uk-compliance";
-import { getAweForUser } from "@/lib/smpCalculator";
+import { getSspEarningsForUser } from "@/lib/smpCalculator";
 import { linkedPriorChain } from "@/lib/sickness-spells";
+import { ssp1ForNoEarnings, sspRunsOut, type Ssp1Due } from "@/lib/ssp1";
 
 export type SspInfo = {
   eligible: boolean;
@@ -23,6 +26,8 @@ export type SspInfo = {
   limitReached: boolean;
   /** Average weekly earnings in the 8 weeks before; null = no pay recorded. */
   averageWeeklyEarnings: number | null;
+  /** No SSP for a reason the employer must give them form SSP1 for, and by when. */
+  ssp1?: Ssp1Due | null;
 };
 
 export type SspSpellResult = {
@@ -84,6 +89,37 @@ export async function sspDaysRemainingAfter(input: {
 type Stored = { toString(): string } | number | null;
 
 /**
+ * When SSP runs out for an absence if they stay off sick, on the days they
+ * normally work and counting SSP already paid in the linked period: the last
+ * day it's paid, and when weeks 22 and 23 of SSP start (form SSP1 is due by
+ * the start of week 23 when SSP will end before their sickness does).
+ */
+export async function sspRunsOutFor(input: {
+  userId: string;
+  startDate: Date;
+  weekdays: number[] | null;
+  daysPerWeek: number;
+}) {
+  const chain = await priorLinkedSsp(input.userId, input.startDate);
+  // As calculateSspPayableDaysForSpell: SSP days are the days they work,
+  // less 3 waiting days for a new spell before 6 April 2026.
+  let waitingDays = !chain.linked && input.startDate < SSP_REFORM_DATE ? 3 : 0;
+  return sspRunsOut({
+    startDate: input.startDate,
+    daysPerWeek: input.daysPerWeek,
+    priorDaysPaid: chain.daysPaid,
+    payable: (day) => {
+      if (countWorkingDays(day, day, input.weekdays) === 0) return false;
+      if (waitingDays > 0) {
+        waitingDays -= 1;
+        return false;
+      }
+      return true;
+    },
+  });
+}
+
+/**
  * The SSP daily rate for an absence and the earnings behind it: as stored
  * when it was booked, or — for absences booked before rates were stored —
  * worked out the same way now, so payroll is never left without one.
@@ -114,6 +150,18 @@ export async function sspRateFor(absence: {
   };
 }
 
+/** The last day SSP is paid for an absence that reaches the 28-week limit: on or before its end date. */
+export async function sspLastDayWithin(input: { userId: string; startDate: Date; endDate: Date }): Promise<Date> {
+  const workingWeek = await getWorkingWeek(input.userId, input.startDate);
+  const runsOut = await sspRunsOutFor({
+    userId: input.userId,
+    startDate: input.startDate,
+    weekdays: workingWeek.weekdays,
+    daysPerWeek: workingWeek.daysPerWeek,
+  });
+  return runsOut && runsOut.lastDay <= input.endDate ? runsOut.lastDay : input.endDate;
+}
+
 export async function computeSspForSpell(input: {
   userId: string;
   startDate: Date;
@@ -137,8 +185,9 @@ export async function computeSspForSpell(input: {
   // Earnings in the 8 weeks before this absence, read-only: reports call this
   // for absences booked before rates were stored, and a different date's
   // figure (or one cached on the person) would give the wrong rate. With no
-  // earnings recorded, SSP is the flat rate (never under-paid).
-  const averageWeeklyEarnings = await getAweForUser(userId, startDate);
+  // earnings recorded, SSP is the flat rate (never under-paid); £0 only when
+  // every week is recorded as no pay, and then there's no SSP.
+  const averageWeeklyEarnings = await getSspEarningsForUser(userId, startDate);
 
   // SSP is payable on qualifying days — the days they normally work. Their
   // working pattern says which; without one, the stored count (Mon–Fri days).
@@ -169,6 +218,7 @@ export async function computeSspForSpell(input: {
         ),
         limitReached: entitlement.reason === "SSP 28-week limit reached",
         averageWeeklyEarnings,
+        ssp1: ssp1ForNoEarnings({ startDate, averageWeeklyEarnings }),
       },
       sspDaysPaid: 0,
       sspLimitReached: false,

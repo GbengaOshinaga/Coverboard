@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { RegionalCoverWarning } from "./regional-cover-warning";
+import { SSP1_FORM_URL, ssp1Summary, type Ssp1Due } from "@/lib/ssp1";
 
 type Member = { id: string; name: string; regionName: string | null };
 type SicknessType = { id: string; name: string };
@@ -17,6 +18,8 @@ type Logged = {
   name: string;
   startDate: string;
   endDate: string;
+  /** No SSP: form SSP1 to give them (only on plans that track SSP). */
+  ssp1: Ssp1Due | null;
 };
 
 function todayLocal(): string {
@@ -86,6 +89,7 @@ export function LogSicknessForm({
         name: members.find((m) => m.id === userId)?.name ?? "They",
         startDate,
         endDate,
+        ssp1: (data.sspInfo?.ssp1 as Ssp1Due | null | undefined) ?? null,
       });
     } catch {
       setError("Something went wrong");
@@ -117,6 +121,15 @@ export function LogSicknessForm({
             record it on the request under Requests.
           </span>
         </div>
+
+        {logged.ssp1 && (
+          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+            {ssp1Summary(logged.ssp1)} Tick &ldquo;{logged.ssp1.reason}&rdquo;{" "}
+            <a href={SSP1_FORM_URL} target="_blank" rel="noopener noreferrer" className="font-medium underline">
+              Form SSP1 on GOV.UK
+            </a>
+          </p>
+        )}
 
         <RegionalCoverWarning
           startDate={logged.startDate}

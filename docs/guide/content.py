@@ -926,3 +926,20 @@ _add("ssp", how=["Average weekly earnings aren't rounded; 80% of them is rounded
      refs=["govuk_ssp_calc"])
 _add("maternity", how=["Average weekly earnings aren't rounded (kept to 7 decimal places, as GOV.UK shows them); 90% is rounded up to the penny, for SMP, SAP, SPP, ShPP and neonatal pay alike. Checked against GOV.UK's calculator in src/lib/govuk-calculators.test.ts."],
      refs=["govuk_parent_calc"])
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Updates, 19 Oct 2026: form SSP1 (dated 10/26) and £0 earnings.
+# ════════════════════════════════════════════════════════════════════════
+R.update({
+    "ssp1_form": ("GOV.UK – Employer form: employee not entitled to SSP (SSP1, dated 10/26)", "https://www.gov.uk/government/publications/statutory-sick-pay-employee-not-entitled-form-for-employers"),
+    "ssp1_when": ("GOV.UK – SSP: eligibility and form SSP1", "https://www.gov.uk/employers-sick-pay/eligibility-and-form-ssp1"),
+})
+_add("ssp", how=["£0 earnings in the 8 weeks before (every week recorded as no pay; every week since they started for someone newer) means no SSP from 6 April 2026. Weeks not entered give the flat rate instead.",
+                 "Form SSP1: the SSP report and its CSV say when it's due, which box to tick and link the form. No SSP: within 7 days of the first day off (the manager recording it sees this, and admins and managers are emailed). SSP running out: by the start of week 23, warned from week 22 or once the absence booked runs past SSP's end.",
+                 "The 28-week email gives the day SSP actually ends, which can be before the absence does, and links the form."],
+     code=[("src/lib/ssp1.ts", "Form SSP1: reasons, deadlines, sspRunsOut()"),
+           ("src/lib/smpCalculator.ts", "sspEarningsFromRows()")],
+     refs=["ssp1_form", "ssp1_when"])
+_add("leavers", how=["Off sick past their last day: the leaving dialog says SSP stops then and form SSP1 is due within 7 days (\u201ccontract has ended\u201d box)."],
+     refs=["ssp1_form"])

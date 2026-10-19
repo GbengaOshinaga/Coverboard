@@ -27,7 +27,8 @@ import { recordReadAudit, requestAuditContext } from "@/lib/audit";
 import { keepingInTouchRule } from "@/lib/keeping-in-touch";
 import { rightToWorkLabel, rightToWorkStatus } from "@/lib/right-to-work";
 import { isSicknessLeaveTypeName } from "@/lib/leave-requests/rules";
-import { sspRateFor, sspDaysRemainingAfter } from "@/lib/leave-requests/ssp-spell";
+import { sspRateFor, sspDaysRemainingAfter, sspRunsOutFor } from "@/lib/leave-requests/ssp-spell";
+import { ssp1ForNoEarnings, ssp1ForSspEnding } from "@/lib/ssp1";
 import {
   UK_COMPLIANCE_TABLES,
   isUkComplianceTableId,
@@ -193,6 +194,20 @@ export async function GET(request: Request) {
         // The stored SSP days already reflect linked spells and the 28-week
         // cap, so the whole-absence figure uses them.
         const sspDays = r.sspDaysPaid ?? 0;
+        // Form SSP1: no SSP (earnings were £0), or SSP running out while
+        // they're off (week 22 of SSP, or booked past the day it ends).
+        const ssp1 =
+          ssp1ForNoEarnings({ startDate: r.startDate, averageWeeklyEarnings: rate?.averageWeeklyEarnings ?? null }) ??
+          ssp1ForSspEnding({
+            runsOut: await sspRunsOutFor({
+              userId: user.id,
+              startDate: r.startDate,
+              weekdays: workingWeek.weekdays,
+              daysPerWeek: qDays,
+            }),
+            absenceEnd: r.endDate,
+            today: now,
+          });
         return {
           userId: user.id,
           name: user.name,
@@ -215,6 +230,7 @@ export async function GET(request: Request) {
             user.averageWeeklyEarnings === undefined
               ? null
               : Number(user.averageWeeklyEarnings) < UK_LEL_WEEKLY,
+          ssp1,
         };
       });
   }));

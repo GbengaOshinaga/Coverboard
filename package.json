@@ -16,7 +16,8 @@
     "backfill:work-country": "tsx scripts/backfill-work-country.ts",
     "backfill:uk-leave-types": "tsx scripts/backfill-uk-statutory-leave-types.ts",
     "recalculate:ssp": "tsx scripts/recalculate-ssp.ts",
-    "resync:stripe-trials": "tsx scripts/resync-stripe-trials.ts"
+    "resync:stripe-trials": "tsx scripts/resync-stripe-trials.ts",
+    "seed:qa": "tsx scripts/seed-qa-team.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.3.0",

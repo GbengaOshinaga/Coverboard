@@ -11,6 +11,7 @@ import {
   leaveRequestStatusEmail,
   leaveCancelledForYouEmail,
   sspCapReachedEmail,
+  sspNotEntitledEmail,
   esc,
 } from "@/lib/email-templates";
 import { countWeekdays } from "@/lib/utils";
@@ -299,33 +300,61 @@ export async function sendUpcomingParentalReturnAlerts(): Promise<number> {
 
 // ─── SSP 28-week cap reached (notify admins) ─────────────────────────
 
-export async function emailSspCapReached(data: {
-  employeeName: string;
-  sspEndDate: Date;
-  organizationId: string;
-}) {
+/** Admins and managers who get SSP alerts, when the team's plan tracks SSP. */
+async function sspAlertRecipients(organizationId: string): Promise<EmailRecipient[]> {
   // SSP tracking is a Growth feature: no alert on lower plans.
   const org = await prisma.organization.findUnique({
-    where: { id: data.organizationId },
+    where: { id: organizationId },
     select: { plan: true },
   });
-  if (!org || !hasFeatureForEnum(org.plan, "ssp_tracking")) return;
-
-  const admins: EmailRecipient[] = await prisma.user.findMany({
+  if (!org || !hasFeatureForEnum(org.plan, "ssp_tracking")) return [];
+  return prisma.user.findMany({
     where: {
-      organizationId: data.organizationId,
+      organizationId,
       role: { in: ["ADMIN", "MANAGER"] },
       // People who've left don't approve or get alerts.
       isActive: true,
     },
     select: { email: true },
   });
+}
 
+export async function emailSspCapReached(data: {
+  employeeName: string;
+  sspEndDate: Date;
+  organizationId: string;
+}) {
+  const admins = await sspAlertRecipients(data.organizationId);
   if (admins.length === 0) return;
 
   const { subject, html } = sspCapReachedEmail({
     employeeName: data.employeeName,
     sspEndDate: data.sspEndDate,
+    dashboardUrl: `${getAppBaseUrl()}/reports?tab=uk`,
+  });
+
+  await Promise.all(
+    admins.map((m) => sendEmail({ to: m.email, subject, html }))
+  );
+}
+
+// ─── No SSP: give form SSP1 (notify admins) ─────────────────────────
+
+export async function emailSspNotEntitled(data: {
+  employeeName: string;
+  organizationId: string;
+  firstDayOff: Date;
+  reason: string;
+  dueBy: Date;
+}) {
+  const admins = await sspAlertRecipients(data.organizationId);
+  if (admins.length === 0) return;
+
+  const { subject, html } = sspNotEntitledEmail({
+    employeeName: data.employeeName,
+    firstDayOff: data.firstDayOff,
+    reason: data.reason,
+    dueBy: data.dueBy,
     dashboardUrl: `${getAppBaseUrl()}/reports?tab=uk`,
   });
 

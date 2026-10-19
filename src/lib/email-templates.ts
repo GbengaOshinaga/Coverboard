@@ -1,4 +1,5 @@
 import { formatDateRange, countWeekdays, getInitials } from "@/lib/utils";
+import { SSP1_FORM_URL, ssp1DueAfterSspEnds } from "@/lib/ssp1";
 
 const BRAND_COLOR = "#2563eb";
 
@@ -579,32 +580,64 @@ export function leaveCancelledForYouEmail(data: {
 
 // ─── SSP 28-week cap reached (to admins) ────────────────────────────
 
+const ukDate = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+
+function ssp1Note(html: string): string {
+  return `
+      <div style="background-color:#fef3c7;border-radius:6px;padding:12px 16px;margin-bottom:16px;">
+        <p style="margin:0;font-size:13px;color:#92400e;line-height:1.6;">${html}</p>
+      </div>`;
+}
+
+const ssp1Link = () =>
+  `<a href="${SSP1_FORM_URL}" style="color:#92400e;text-decoration:underline;">form SSP1</a>`;
+
 export function sspCapReachedEmail(data: {
   employeeName: string;
+  /** The last day SSP is paid. */
   sspEndDate: Date;
   dashboardUrl: string;
 }): { subject: string; html: string } {
-  const endDateLabel = data.sspEndDate.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-
   return {
     subject: `${data.employeeName} has reached the 28-week SSP limit`,
     html: layout(`
       <h1 style="margin:0 0 8px;font-size:20px;color:#111827;">SSP 28-week limit reached</h1>
       <p style="margin:0 0 16px;font-size:14px;color:#6b7280;line-height:1.6;">
         ${esc(data.employeeName)} has reached the 28-week Statutory Sick Pay limit.
-        SSP ends <strong style="color:#111827;">${endDateLabel}</strong>.
+        SSP ends <strong style="color:#111827;">${ukDate(data.sspEndDate)}</strong>.
       </p>
-      <div style="background-color:#fef3c7;border-radius:6px;padding:12px 16px;margin-bottom:16px;">
-        <p style="margin:0;font-size:13px;color:#92400e;line-height:1.6;">
-          The employee may be eligible for Employment Support Allowance (ESA).
-          Issue form SSP1 within 7 days of SSP ending so the employee can
-          claim ESA from the DWP.
-        </p>
-      </div>
+      ${ssp1Note(
+        `If they're still off sick then, give them ${ssp1Link()} by ${ukDate(ssp1DueAfterSspEnds(data.sspEndDate))}
+        (within 7 days of SSP ending) if you haven't already; it's due by the start of week 23 when you expect SSP to
+        end before they're back. They can then claim Universal Credit or New Style Employment and Support Allowance.`
+      )}
+      ${button("Review in Coverboard", data.dashboardUrl)}
+    `),
+  };
+}
+
+// ─── No SSP: give form SSP1 (to admins) ─────────────────────────────
+
+export function sspNotEntitledEmail(data: {
+  employeeName: string;
+  firstDayOff: Date;
+  /** The box to tick on the form, in its own words. */
+  reason: string;
+  dueBy: Date;
+  dashboardUrl: string;
+}): { subject: string; html: string } {
+  return {
+    subject: `${data.employeeName} isn't due Statutory Sick Pay: give them form SSP1`,
+    html: layout(`
+      <h1 style="margin:0 0 8px;font-size:20px;color:#111827;">No Statutory Sick Pay</h1>
+      <p style="margin:0 0 16px;font-size:14px;color:#6b7280;line-height:1.6;">
+        ${esc(data.employeeName)} is off sick from <strong style="color:#111827;">${ukDate(data.firstDayOff)}</strong>
+        and isn't due SSP: their earnings in the 8 weeks before were £0.
+      </p>
+      ${ssp1Note(
+        `Give them ${ssp1Link()} by <strong>${ukDate(data.dueBy)}</strong> (within 7 days of their first day off),
+        ticking &ldquo;${esc(data.reason)}&rdquo; It lets them claim benefits instead.`
+      )}
       ${button("Review in Coverboard", data.dashboardUrl)}
     `),
   };

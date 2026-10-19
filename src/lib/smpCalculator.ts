@@ -328,6 +328,41 @@ export async function getAweForUser(
   return aweFromEarningRows(rows);
 }
 
+/**
+ * Average weekly earnings for SSP. As aweFromEarningRows, except that £0 is
+ * only an answer when every week of the 8 before the absence (every week since
+ * they started, for someone newer) is recorded as a no-pay week: £0 means no
+ * SSP at all (form SSP1), so weeks that simply haven't been entered give null,
+ * and the flat rate, rather than an assumed £0.
+ */
+export function sspEarningsFromRows(
+  rows: ReadonlyArray<{ grossEarnings: unknown; hoursWorked: unknown; isZeroPayWeek: boolean }>,
+  input: { beforeDate: Date; serviceStartDate: Date | null }
+): number | null {
+  const awe = aweFromEarningRows(rows);
+  if (awe !== 0) return awe;
+  const weekMs = 7 * 24 * 60 * 60 * 1000;
+  const windowStart = input.beforeDate.getTime() - 8 * weekMs;
+  const started = input.serviceStartDate?.getTime() ?? -Infinity;
+  const weeksExpected =
+    started > windowStart ? Math.max(1, Math.floor((input.beforeDate.getTime() - started) / weekMs)) : 8;
+  return countedEarningRows(rows).length >= weeksExpected ? 0 : null;
+}
+
+/** Earnings for SSP in the 8 weeks before `beforeDate` (see sspEarningsFromRows). */
+export async function getSspEarningsForUser(userId: string, beforeDate: Date): Promise<number | null> {
+  const { prisma } = await import("@/lib/prisma");
+  const windowStart = new Date(beforeDate.getTime() - 8 * 7 * 24 * 60 * 60 * 1000);
+  const [rows, user] = await Promise.all([
+    prisma.weeklyEarning.findMany({
+      where: { userId, weekStartDate: { gte: windowStart, lt: beforeDate } },
+      orderBy: { weekStartDate: "asc" },
+    }),
+    prisma.user.findUnique({ where: { id: userId }, select: { serviceStartDate: true } }),
+  ]);
+  return sspEarningsFromRows(rows, { beforeDate, serviceStartDate: user?.serviceStartDate ?? null });
+}
+
 /** Like getAweForUser, with how many of the 8 weeks had pay counted. */
 export async function getAweDetailForUser(
   userId: string,
