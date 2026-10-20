@@ -130,6 +130,7 @@ export function RequestForm({
     fetchBalances();
   }, [forSomeoneElse, subjectId]);
 
+  const [showFamilyLeave, setShowFamilyLeave] = useState(false);
   const selectedLeaveType = useMemo(
     () => leaveTypes.find((lt) => lt.id === leaveTypeId) ?? null,
     [leaveTypes, leaveTypeId]
@@ -401,11 +402,19 @@ export function RequestForm({
   }
 
   // Everyday leave first, family leave as its own group (leave-type-labels.ts).
-  const leaveTypeOptions = [...leaveTypes].sort(compareLeaveTypesForList).map((lt) => {
-    const hint = leaveTypeListHint(lt, balances.find((b) => b.leaveTypeId === lt.id) ?? null);
-    const name = leaveTypeListName(lt.name);
-    return { value: lt.id, label: hint ? `${name} (${hint})` : name, group: leaveTypeGroup(lt.name) };
-  });
+  // Family leave is folded away until asked for (or already chosen): most
+  // bookings are everyday leave, and the list is long otherwise.
+  const hasFamilyLeave = leaveTypes.some((lt) => leaveTypeGroup(lt.name) === "Family leave");
+  const familyShown =
+    showFamilyLeave || (!!selectedLeaveType && leaveTypeGroup(selectedLeaveType.name) === "Family leave");
+  const leaveTypeOptions = [...leaveTypes]
+    .sort(compareLeaveTypesForList)
+    .filter((lt) => familyShown || leaveTypeGroup(lt.name) !== "Family leave")
+    .map((lt) => {
+      const hint = leaveTypeListHint(lt, balances.find((b) => b.leaveTypeId === lt.id) ?? null);
+      const name = leaveTypeListName(lt.name);
+      return { value: lt.id, label: hint ? `${name} (${hint})` : name, group: leaveTypeGroup(lt.name) };
+    });
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -481,6 +490,18 @@ export function RequestForm({
         onChange={(e) => setLeaveTypeId(e.target.value)}
         required
       />
+      {hasFamilyLeave && !(familyShown && !showFamilyLeave) && (
+        <button
+          type="button"
+          onClick={() => setShowFamilyLeave((v) => !v)}
+          aria-expanded={showFamilyLeave}
+          className="-mt-4 text-xs font-medium text-brand-600 hover:underline"
+        >
+          {showFamilyLeave
+            ? "Hide family leave types"
+            : "Show family leave types (maternity, paternity, adoption, shared parental, neonatal, bereavement, unpaid parental)"}
+        </button>
+      )}
       {selectedTypeMeaning && (
         <p className="-mt-4 text-xs text-gray-500">
           <span className="font-medium text-gray-700">{selectedTypeMeaning.term}:</span> {selectedTypeMeaning.meaning}
