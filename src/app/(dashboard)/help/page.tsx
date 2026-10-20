@@ -24,6 +24,7 @@ import {
   PLAN_LABELS,
   type AnyPlan,
 } from "@/lib/plans";
+import { GLOSSARY } from "@/lib/glossary";
 
 const CONTACT_EMAIL =
   process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "support@coverboard.io";
@@ -218,6 +219,37 @@ export default function HelpPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Glossary: the same words as the "?" hints (src/lib/glossary.ts) */}
+      <Card id="glossary">
+        <CardHeader>
+          <CardTitle>What the terms mean</CardTitle>
+          <CardDescription>Plain-English meanings of the terms you&apos;ll see in Coverboard</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <dl className="space-y-3 text-sm">
+            {Object.values(GLOSSARY).map((entry) => (
+              <div key={entry.term}>
+                <dt className="font-medium text-gray-900">{entry.term}</dt>
+                <dd className="mt-0.5 text-gray-600">
+                  {entry.meaning}{" "}
+                  {"link" in entry && entry.link && (
+                    <a
+                      href={entry.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 whitespace-nowrap text-brand-600 hover:text-brand-700"
+                    >
+                      {entry.link.includes("ico.org.uk") ? "More from the ICO" : "More on GOV.UK"}
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </CardContent>
+      </Card>
 
       {/* Resources */}
       <Card>

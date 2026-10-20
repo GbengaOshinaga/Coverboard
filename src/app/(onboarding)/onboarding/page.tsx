@@ -18,6 +18,7 @@ import { Check, Plus, Trash2, ArrowRight, ArrowLeft, Globe, BookOpen, Users, Upl
 
 const INDUSTRY_OPTIONS = [
   { value: "", label: "Select an industry (optional)" },
+  { value: "CARE", label: "Care home or home care" },
   { value: "HEALTHCARE", label: "Healthcare" },
   { value: "EDUCATION", label: "Education" },
   { value: "TECHNOLOGY", label: "Technology" },
@@ -28,6 +29,9 @@ const INDUSTRY_OPTIONS = [
   { value: "PROFESSIONAL_SERVICES", label: "Professional services" },
   { value: "OTHER", label: "Other" },
 ];
+
+/** Shift-based teams are offered cover by location. */
+const SHIFT_INDUSTRIES = new Set(["CARE", "HEALTHCARE"]);
 
 type Invite = { name: string; email: string; countryCode: string };
 
@@ -40,7 +44,8 @@ const STEPS = [
 export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
-  const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
+  // Most teams are UK-based; it's one tap to change.
+  const [selectedCountries, setSelectedCountries] = useState<string[]>(["GB"]);
   const [industry, setIndustry] = useState("");
   const [regionsPromptOpen, setRegionsPromptOpen] = useState(false);
   const [regionsPromptAnswered, setRegionsPromptAnswered] = useState(false);
@@ -91,7 +96,7 @@ export default function OnboardingPage() {
   const [error, setError] = useState("");
 
   function continueFromCountries() {
-    if (industry === "HEALTHCARE" && !regionsPromptAnswered) {
+    if (SHIFT_INDUSTRIES.has(industry) && !regionsPromptAnswered) {
       setRegionsPromptOpen(true);
       return;
     }
@@ -286,7 +291,10 @@ export default function OnboardingPage() {
               </p>
             </div>
 
-            <div className="mt-6 flex justify-end">
+            <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
+              {selectedCountries.length === 0 && (
+                <p className="text-sm text-gray-500">Choose at least one country to continue.</p>
+              )}
               <Button
                 onClick={continueFromCountries}
                 disabled={selectedCountries.length === 0}
@@ -310,7 +318,7 @@ export default function OnboardingPage() {
       >
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            It looks like you&apos;re in healthcare. Would you like to set up
+            It looks like you work in {industry === "CARE" ? "care" : "healthcare"}. Would you like to set up
             cover by location? This helps you track cover levels when staff
             take leave.
           </p>

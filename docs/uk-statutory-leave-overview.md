@@ -35,12 +35,19 @@ When an employee is too ill to work, you must pay SSP. **The rules changed on 6 
 
 **From 6 April 2026:**
 - **No waiting days** — SSP is payable from the **first** day of sickness (previously days 1–3 were unpaid).
-- **No Lower Earnings Limit** — every employee qualifies regardless of earnings (the old £123-a-week floor was removed).
+- **No Lower Earnings Limit** — low earners qualify too (the old £123-a-week floor was removed). But someone whose earnings in the 8 weeks before were **£0** gets no SSP (80% of nothing). Coverboard only decides that when every one of those 8 weeks (every week since they started, for someone newer) is recorded as a zero-pay week; weeks that haven't been entered get the flat rate instead.
 - The rate is the **lower of £123.25 per week or 80% of the employee's average weekly earnings** (2026/27 — set as **Average weekly earnings** on the profile). Low earners get 80% of their pay rather than nothing.
 - The daily rate is the (capped) weekly rate divided by the employee's **Qualifying days per week** (the contracted working days, not 7) — a 3-day-a-week employee earns a higher daily rate than a 5-day-a-week employee
 - SSP can be paid for a maximum of 28 weeks in any one period of incapacity
 - Linked sickness spells joined by a 56-day window count towards the same 28-week limit
-- After 28 weeks, SSP stops — the employee may be eligible for Employment Support Allowance, and Coverboard emails admins/managers when the cap is reached
+- After 28 weeks, SSP stops — the employee may be able to claim Universal Credit or New Style Employment and Support Allowance, and Coverboard emails admins/managers when the cap is reached, with the date SSP ends
+
+**Form SSP1.** Employers must give the employee [form SSP1](https://www.gov.uk/government/publications/statutory-sick-pay-employee-not-entitled-form-for-employers) (dated 10/26 since 12 October 2026) when they can't get SSP or their SSP is ending, so they can claim benefits instead ([GOV.UK](https://www.gov.uk/employers-sick-pay/eligibility-and-form-ssp1)). Coverboard says when, which box to tick and by when, on the SSP report and its CSV:
+- **No SSP (£0 earnings):** within 7 days of the first day off sick. The manager who records the absence sees it straight away, and admins and managers are emailed.
+- **SSP running out:** by the start of week 23 of SSP. The report warns from week 22, or as soon as the absence booked runs past the day SSP ends.
+- **A leaver still off sick:** SSP stops on their last day, so the form is due within 7 days. The leaving dialog says so before you save.
+
+**Reporting sickness.** Staff press **I'm off sick** on their dashboard or My time off, and give their first day and when they expect to be back. It's recorded straight away (there's nothing to approve) and admins and managers are emailed so they can arrange cover; the email doesn't include their note. Managers can still record it for someone who rings in, with **Log someone's sickness**. Only admins and managers can extend it later.
 
 **Fit notes.** Employees can self-certify sickness for up to 7 calendar days. After that, a fit note from a GP is required. Mark this on the leave request using the **Evidence provided** flag.
 

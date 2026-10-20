@@ -10,6 +10,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { GoogleButton } from "@/components/ui/google-button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { PRICING } from "@/config/pricing";
+import { TRIAL_DAYS } from "@/lib/plans";
 import { trackClient, AnalyticsEvents } from "@/lib/analytics";
 
 type PlanKey = "free" | "starter" | "growth" | "scale" | "pro";
@@ -123,8 +124,8 @@ function SignupInner() {
           </h1>
           <p className="mt-1 text-sm text-gray-500">
             {plan === "free"
-              ? "Free for up to 5 employees. No card required."
-              : "14-day free trial. No card required."}
+              ? `Free for up to 5 employees. No card required. Or choose a paid plan below to try everything free for ${TRIAL_DAYS} days.`
+              : `${TRIAL_DAYS}-day free trial with everything included. No card required.`}
           </p>
           {plan !== "free" && (
             <p className="mt-1 text-xs text-gray-400">
@@ -197,8 +198,9 @@ function SignupInner() {
                 </div>
                 <p className="mt-2 text-xs text-gray-400">
                   {plan === "free"
-                    ? "Upgrade any time from Settings → Billing."
-                    : "You can change this later. Nothing charged during the 14-day trial. Prices shown are exclusive of VAT or local taxes, which we calculate at checkout based on your billing country."}
+                    ? `Upgrade any time from Settings → Billing. Paid plans start with a ${TRIAL_DAYS}-day free trial.`
+                    : `You can change this later. Nothing charged during the ${TRIAL_DAYS}-day trial.`
+                    + " Prices shown are exclusive of VAT or local taxes, which we calculate at checkout based on your billing country."}
                 </p>
               </div>
               <Input
@@ -253,7 +255,7 @@ function SignupInner() {
                   ? "Creating your team..."
                   : plan === "free"
                   ? "Get started"
-                  : "Start 14-day free trial"}
+                  : `Start ${TRIAL_DAYS}-day free trial`}
               </Button>
               <p className="text-center text-xs text-gray-500">
                 By creating an account you agree to our{" "}

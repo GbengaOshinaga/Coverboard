@@ -70,7 +70,7 @@ export function OverlapWarning({
           }`}
         >
           {data.uniqueUsersOut} team member{data.uniqueUsersOut !== 1 ? "s" : ""}{" "}
-          already {data.uniqueUsersOut !== 1 ? "are" : "is"} off
+          {data.uniqueUsersOut !== 1 ? "are" : "is"} already off
         </p>
         <Badge variant={data.isHighOverlap ? "error" : "warning"}>
           {coveragePercent}% coverage

@@ -12,6 +12,8 @@ import {
 } from "@/lib/leave-year";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { allowanceLabel } from "@/lib/leave-type-labels";
+import { glossaryKeyForLeaveType } from "@/lib/glossary";
+import { TermHint } from "@/components/ui/term-hint";
 import { peopleOnSspToday, type UkComplianceReport } from "@/lib/uk-compliance-columns";
 import { useSession } from "next-auth/react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -1124,11 +1126,15 @@ export default function SettingsPage() {
             ) : ukReport ? (
               <>
                 <p>Holiday usage rows: <strong>{ukReport.holidayUsage.length}</strong></p>
-                <p>
+                <p className="flex flex-wrap items-center gap-1">
                   Bradford triggers above {ukReport.absenceTrigger.threshold}:{" "}
                   <strong>{ukReport.absenceTrigger.rows.filter((r) => r.flagged).length}</strong>
+                  <TermHint term="bradford" />
                 </p>
-                <p>Employees on SSP today: <strong>{peopleOnSspToday(ukReport.sspLiability)}</strong></p>
+                <p className="flex flex-wrap items-center gap-1">
+                  Employees on SSP today: <strong>{peopleOnSspToday(ukReport.sspLiability)}</strong>
+                  <TermHint term="ssp" />
+                </p>
                 <p>Active parental leave cases: <strong>{ukReport.parentalTracker.length}</strong></p>
               </>
             ) : null}
@@ -1253,6 +1259,7 @@ export default function SettingsPage() {
                       style={{ backgroundColor: lt.color }}
                     />
                     <span className="text-sm font-medium">{lt.name}</span>
+                    {glossaryKeyForLeaveType(lt.name) && <TermHint term={glossaryKeyForLeaveType(lt.name)!} />}
                   </div>
                   <div className="flex items-center gap-2 sm:gap-3">
                     <span className="text-xs text-gray-500">
@@ -1410,304 +1417,309 @@ export default function SettingsPage() {
         </Card>
       )}
 
-      {/* Slack integration */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2 mb-2">
-                <MessageSquare className="h-5 w-5" />
-                Slack Integration
-              </CardTitle>
-              <CardDescription>
-                Connect your team&apos;s Slack workspace for leave commands and notifications
-              </CardDescription>
-            </div>
-            {slackStatus?.connected ? (
-              <Badge variant="success" className="flex items-center gap-1">
-                <CheckCircle className="h-3 w-3" />
-                Connected
-              </Badge>
-            ) : slackStatus?.configured ? (
-              <Badge variant="outline">Not connected</Badge>
-            ) : (
-              <Badge variant="outline">Not available</Badge>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {slackStatus?.connected ? (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">Bot name</span>
-                <span className="font-medium">@{slackStatus.botName}</span>
+      {/* Integrations are set up by admins and managers, not staff. */}
+      {canManage && (
+        <>
+        {/* Slack integration */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 mb-2">
+                  <MessageSquare className="h-5 w-5" />
+                  Slack Integration
+                </CardTitle>
+                <CardDescription>
+                  Connect your team&apos;s Slack workspace for leave commands and notifications
+                </CardDescription>
               </div>
-              {slackStatus.teamName && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500">Workspace</span>
-                  <span className="font-medium">{slackStatus.teamName}</span>
-                </div>
-              )}
-              {slackStatus.connectedBy && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500">Connected by</span>
-                  <span className="font-medium">{slackStatus.connectedBy}</span>
-                </div>
-              )}
-              {isAdmin ? (
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    Notification channel
-                  </label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="slackChannel"
-                      type="text"
-                      placeholder="#time-off"
-                      value={slackChannelInput}
-                      onChange={(e) => setSlackChannelInput(e.target.value)}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={savingSlackChannel || !slackChannelInput.trim()}
-                      onClick={async () => {
-                        setSavingSlackChannel(true);
-                        try {
-                          const res = await fetch("/api/slack/channel", {
-                            method: "PATCH",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ channel: slackChannelInput.trim() }),
-                          });
-                          if (res.ok) {
-                            toast("Notification channel updated", "success");
-                            await refreshSlackStatus();
-                          } else {
-                            const data = await res.json();
-                            toast(data.error ?? "Failed to update channel", "error");
-                          }
-                        } catch {
-                          toast("Failed to update channel", "error");
-                        } finally {
-                          setSavingSlackChannel(false);
-                        }
-                      }}
-                    >
-                      {savingSlackChannel ? "Saving…" : "Save"}
-                    </Button>
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    Invite the bot to this channel first ({`/invite @${slackStatus.botName}`}).
-                  </p>
-                </div>
+              {slackStatus?.connected ? (
+                <Badge variant="success" className="flex items-center gap-1">
+                  <CheckCircle className="h-3 w-3" />
+                  Connected
+                </Badge>
+              ) : slackStatus?.configured ? (
+                <Badge variant="outline">Not connected</Badge>
               ) : (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500">Notification channel</span>
-                  <span className="font-medium">{slackStatus.channel}</span>
-                </div>
-              )}
-              <div className="mt-3 rounded-lg bg-gray-50 p-3">
-                <p className="text-xs font-medium text-gray-600 mb-2">Available commands:</p>
-                <div className="space-y-1 text-xs text-gray-500">
-                  <p><code className="rounded bg-gray-200 px-1">/whosout</code> — See who&apos;s off today and this week</p>
-                  <p><code className="rounded bg-gray-200 px-1">/mybalance</code> — Check your leave balance</p>
-                  <p><code className="rounded bg-gray-200 px-1">/requestleave</code> — Submit a leave request from Slack</p>
-                </div>
-              </div>
-              {isAdmin && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                  disabled={disconnectingSlack}
-                  onClick={async () => {
-                    setDisconnectingSlack(true);
-                    try {
-                      const res = await fetch("/api/slack/disconnect", { method: "POST" });
-                      if (res.ok) {
-                        toast("Slack disconnected", "success");
-                        setSlackStatus({
-                          configured: true,
-                          connected: false,
-                          botName: null,
-                          teamName: null,
-                          channel: null,
-                          connectedBy: null,
-                        });
-                      } else {
-                        toast("Failed to disconnect Slack", "error");
-                      }
-                    } catch {
-                      toast("Failed to disconnect Slack", "error");
-                    } finally {
-                      setDisconnectingSlack(false);
-                    }
-                  }}
-                >
-                  <Unlink className="mr-1 h-3.5 w-3.5" />
-                  {disconnectingSlack ? "Disconnecting…" : "Disconnect Slack"}
-                </Button>
+                <Badge variant="outline">Not available</Badge>
               )}
             </div>
-          ) : slackStatus?.configured ? (
-            <div className="space-y-3">
-              {slackStatus.error && (
-                <p className="text-sm text-red-700">{slackStatus.error}</p>
-              )}
-              <p className="text-sm text-gray-500">
-                Connect your company Slack workspace so your team can use leave commands
-                and receive approval notifications in Slack.
-              </p>
-              {isAdmin ? (
-                <>
+          </CardHeader>
+          <CardContent>
+            {slackStatus?.connected ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500">Bot name</span>
+                  <span className="font-medium">@{slackStatus.botName}</span>
+                </div>
+                {slackStatus.teamName && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-500">Workspace</span>
+                    <span className="font-medium">{slackStatus.teamName}</span>
+                  </div>
+                )}
+                {slackStatus.connectedBy && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-500">Connected by</span>
+                    <span className="font-medium">{slackStatus.connectedBy}</span>
+                  </div>
+                )}
+                {isAdmin ? (
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Notification channel
+                    </label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="slackChannel"
+                        type="text"
+                        placeholder="#time-off"
+                        value={slackChannelInput}
+                        onChange={(e) => setSlackChannelInput(e.target.value)}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={savingSlackChannel || !slackChannelInput.trim()}
+                        onClick={async () => {
+                          setSavingSlackChannel(true);
+                          try {
+                            const res = await fetch("/api/slack/channel", {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ channel: slackChannelInput.trim() }),
+                            });
+                            if (res.ok) {
+                              toast("Notification channel updated", "success");
+                              await refreshSlackStatus();
+                            } else {
+                              const data = await res.json();
+                              toast(data.error ?? "Failed to update channel", "error");
+                            }
+                          } catch {
+                            toast("Failed to update channel", "error");
+                          } finally {
+                            setSavingSlackChannel(false);
+                          }
+                        }}
+                      >
+                        {savingSlackChannel ? "Saving…" : "Save"}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Invite the bot to this channel first ({`/invite @${slackStatus.botName}`}).
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-500">Notification channel</span>
+                    <span className="font-medium">{slackStatus.channel}</span>
+                  </div>
+                )}
+                <div className="mt-3 rounded-lg bg-gray-50 p-3">
+                  <p className="text-xs font-medium text-gray-600 mb-2">Available commands:</p>
+                  <div className="space-y-1 text-xs text-gray-500">
+                    <p><code className="rounded bg-gray-200 px-1">/whosout</code> — See who&apos;s off today and this week</p>
+                    <p><code className="rounded bg-gray-200 px-1">/mybalance</code> — Check your leave balance</p>
+                    <p><code className="rounded bg-gray-200 px-1">/requestleave</code> — Submit a leave request from Slack</p>
+                  </div>
+                </div>
+                {isAdmin && (
                   <Button
+                    variant="outline"
                     size="sm"
-                    onClick={() => {
-                      window.location.href = "/api/slack/connect";
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    disabled={disconnectingSlack}
+                    onClick={async () => {
+                      setDisconnectingSlack(true);
+                      try {
+                        const res = await fetch("/api/slack/disconnect", { method: "POST" });
+                        if (res.ok) {
+                          toast("Slack disconnected", "success");
+                          setSlackStatus({
+                            configured: true,
+                            connected: false,
+                            botName: null,
+                            teamName: null,
+                            channel: null,
+                            connectedBy: null,
+                          });
+                        } else {
+                          toast("Failed to disconnect Slack", "error");
+                        }
+                      } catch {
+                        toast("Failed to disconnect Slack", "error");
+                      } finally {
+                        setDisconnectingSlack(false);
+                      }
                     }}
                   >
-                    Connect Slack
+                    <Unlink className="mr-1 h-3.5 w-3.5" />
+                    {disconnectingSlack ? "Disconnecting…" : "Disconnect Slack"}
                   </Button>
-                  <p className="text-xs text-gray-400">
-                    Slack may show a &ldquo;not yet reviewed&rdquo; notice during install — that&apos;s expected and safe to continue.
-                  </p>
-                </>
-              ) : (
-                <p className="text-xs text-gray-400">Ask an admin to connect Slack.</p>
-              )}
-            </div>
-          ) : (
-            <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-4">
-              <p className="text-sm text-gray-600">
-                Slack isn&apos;t available for your organisation yet.
-              </p>
-              <p className="mt-2 text-xs text-gray-500">
-                If Slack is included in your plan,{" "}
-                <Link href="/help" className="font-medium text-brand-600 hover:text-brand-700">
-                  contact support
-                </Link>{" "}
-                to request access. Once it&apos;s enabled, an organisation admin can connect your
-                workspace from this page.
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Jira integration */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2 mb-2">
-                <SquareKanban className="h-5 w-5" />
-                Jira Integration
-              </CardTitle>
-              <CardDescription>
-                See unfinished tasks when someone goes on leave and reassign with one click
-              </CardDescription>
-            </div>
-            {jiraStatus?.connected ? (
-              <Badge variant="success" className="flex items-center gap-1">
-                <CheckCircle className="h-3 w-3" />
-                Connected
-              </Badge>
-            ) : jiraStatus?.configured ? (
-              <Badge variant="outline">Not connected</Badge>
+                )}
+              </div>
+            ) : slackStatus?.configured ? (
+              <div className="space-y-3">
+                {slackStatus.error && (
+                  <p className="text-sm text-red-700">{slackStatus.error}</p>
+                )}
+                <p className="text-sm text-gray-500">
+                  Connect your company Slack workspace so your team can use leave commands
+                  and receive approval notifications in Slack.
+                </p>
+                {isAdmin ? (
+                  <>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        window.location.href = "/api/slack/connect";
+                      }}
+                    >
+                      Connect Slack
+                    </Button>
+                    <p className="text-xs text-gray-400">
+                      Slack may show a &ldquo;not yet reviewed&rdquo; notice during install — that&apos;s expected and safe to continue.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-xs text-gray-400">Ask an admin to connect Slack.</p>
+                )}
+              </div>
             ) : (
-              <Badge variant="outline">Not configured</Badge>
+              <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-4">
+                <p className="text-sm text-gray-600">
+                  Slack isn&apos;t available for your organisation yet.
+                </p>
+                <p className="mt-2 text-xs text-gray-500">
+                  If Slack is included in your plan,{" "}
+                  <Link href="/help" className="font-medium text-brand-600 hover:text-brand-700">
+                    contact support
+                  </Link>{" "}
+                  to request access. Once it&apos;s enabled, an organisation admin can connect your
+                  workspace from this page.
+                </p>
+              </div>
             )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {jiraStatus?.connected ? (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">Jira site</span>
-                <a
-                  href={jiraStatus.siteUrl ?? "#"}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-medium text-brand-600 hover:text-brand-500 flex items-center gap-1"
-                >
-                  {jiraStatus.siteUrl?.replace("https://", "")}
-                  <ExternalLink className="h-3 w-3" />
-                </a>
+          </CardContent>
+        </Card>
+
+        {/* Jira integration */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 mb-2">
+                  <SquareKanban className="h-5 w-5" />
+                  Jira Integration
+                </CardTitle>
+                <CardDescription>
+                  See unfinished tasks when someone goes on leave and reassign with one click
+                </CardDescription>
               </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">Connected by</span>
-                <span className="font-medium">{jiraStatus.connectedBy}</span>
-              </div>
-              <div className="mt-3 rounded-lg bg-gray-50 p-3">
-                <p className="text-xs font-medium text-gray-600 mb-2">What this enables:</p>
-                <div className="space-y-1 text-xs text-gray-500">
-                  <p>Coverage warnings when someone goes on leave with open tasks</p>
-                  <p>Available teammate suggestions for task reassignment</p>
-                  <p>One-click issue reassignment from the leave review screen</p>
-                </div>
-              </div>
-              {isAdmin && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-2 text-red-600 hover:text-red-700 hover:bg-red-50"
-                  disabled={disconnectingJira}
-                  onClick={async () => {
-                    setDisconnectingJira(true);
-                    try {
-                      const res = await fetch("/api/jira/disconnect", { method: "POST" });
-                      if (res.ok) {
-                        toast("Jira disconnected", "success");
-                        setJiraStatus({ configured: true, connected: false, siteUrl: null, connectedBy: null });
-                      } else {
-                        toast("Failed to disconnect Jira", "error");
-                      }
-                    } catch {
-                      toast("Failed to disconnect Jira", "error");
-                    } finally {
-                      setDisconnectingJira(false);
-                    }
-                  }}
-                >
-                  <Unlink className="mr-1 h-3.5 w-3.5" />
-                  {disconnectingJira ? "Disconnecting..." : "Disconnect Jira"}
-                </Button>
-              )}
-            </div>
-          ) : jiraStatus?.configured ? (
-            <div className="space-y-3">
-              <p className="text-sm text-gray-500">
-                Connect your Jira Cloud site to see coverage warnings when team members go on leave.
-              </p>
-              {isAdmin ? (
-                <Button
-                  size="sm"
-                  onClick={() => { window.location.href = "/api/jira/connect"; }}
-                >
-                  Connect Jira
-                </Button>
+              {jiraStatus?.connected ? (
+                <Badge variant="success" className="flex items-center gap-1">
+                  <CheckCircle className="h-3 w-3" />
+                  Connected
+                </Badge>
+              ) : jiraStatus?.configured ? (
+                <Badge variant="outline">Not connected</Badge>
               ) : (
-                <p className="text-xs text-gray-400">Ask an admin to connect Jira.</p>
+                <Badge variant="outline">Not configured</Badge>
               )}
             </div>
-          ) : (
-            <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-4">
-              <p className="text-sm text-gray-600">
-                Jira isn&apos;t available for your organisation yet.
-              </p>
-              <p className="mt-2 text-xs text-gray-500">
-                If Jira is included in your plan,{" "}
-                <Link href="/help" className="font-medium text-brand-600 hover:text-brand-700">
-                  contact support
-                </Link>{" "}
-                to request access. Once it&apos;s enabled, an organisation admin can connect your
-                site from this page.
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent>
+            {jiraStatus?.connected ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500">Jira site</span>
+                  <a
+                    href={jiraStatus.siteUrl ?? "#"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-brand-600 hover:text-brand-500 flex items-center gap-1"
+                  >
+                    {jiraStatus.siteUrl?.replace("https://", "")}
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500">Connected by</span>
+                  <span className="font-medium">{jiraStatus.connectedBy}</span>
+                </div>
+                <div className="mt-3 rounded-lg bg-gray-50 p-3">
+                  <p className="text-xs font-medium text-gray-600 mb-2">What this enables:</p>
+                  <div className="space-y-1 text-xs text-gray-500">
+                    <p>Coverage warnings when someone goes on leave with open tasks</p>
+                    <p>Available teammate suggestions for task reassignment</p>
+                    <p>One-click issue reassignment from the leave review screen</p>
+                  </div>
+                </div>
+                {isAdmin && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                    disabled={disconnectingJira}
+                    onClick={async () => {
+                      setDisconnectingJira(true);
+                      try {
+                        const res = await fetch("/api/jira/disconnect", { method: "POST" });
+                        if (res.ok) {
+                          toast("Jira disconnected", "success");
+                          setJiraStatus({ configured: true, connected: false, siteUrl: null, connectedBy: null });
+                        } else {
+                          toast("Failed to disconnect Jira", "error");
+                        }
+                      } catch {
+                        toast("Failed to disconnect Jira", "error");
+                      } finally {
+                        setDisconnectingJira(false);
+                      }
+                    }}
+                  >
+                    <Unlink className="mr-1 h-3.5 w-3.5" />
+                    {disconnectingJira ? "Disconnecting..." : "Disconnect Jira"}
+                  </Button>
+                )}
+              </div>
+            ) : jiraStatus?.configured ? (
+              <div className="space-y-3">
+                <p className="text-sm text-gray-500">
+                  Connect your Jira Cloud site to see coverage warnings when team members go on leave.
+                </p>
+                {isAdmin ? (
+                  <Button
+                    size="sm"
+                    onClick={() => { window.location.href = "/api/jira/connect"; }}
+                  >
+                    Connect Jira
+                  </Button>
+                ) : (
+                  <p className="text-xs text-gray-400">Ask an admin to connect Jira.</p>
+                )}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-4">
+                <p className="text-sm text-gray-600">
+                  Jira isn&apos;t available for your organisation yet.
+                </p>
+                <p className="mt-2 text-xs text-gray-500">
+                  If Jira is included in your plan,{" "}
+                  <Link href="/help" className="font-medium text-brand-600 hover:text-brand-700">
+                    contact support
+                  </Link>{" "}
+                  to request access. Once it&apos;s enabled, an organisation admin can connect your
+                  site from this page.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        </>
+      )}
 
       {/* Add leave type dialog */}
       <Dialog

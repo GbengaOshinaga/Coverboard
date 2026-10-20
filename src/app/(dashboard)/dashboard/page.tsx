@@ -179,13 +179,20 @@ export default async function DashboardPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Link
+            href="/my-time-off/off-sick"
+            className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50"
+          >
+            <Thermometer className="h-4 w-4" />
+            I&apos;m off sick
+          </Link>
           {canSeeCoverCandidates(userRole) && (
             <Link
               href="/requests/log-sickness"
               className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50"
             >
               <Thermometer className="h-4 w-4" />
-              Log sickness
+              Log someone&apos;s sickness
             </Link>
           )}
           <Link

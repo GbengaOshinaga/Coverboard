@@ -1,7 +1,6 @@
-import { BankHolidayRegion } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCountryPolicies } from "@/lib/country-policies";
-import { getUkBankHolidaysForRegion } from "@/lib/uk-compliance";
+import { addUkBankHolidays, holidayYears } from "@/lib/holiday-years";
 
 export async function hasUkStatutoryLeaveTypes(
   organizationId: string
@@ -93,29 +92,6 @@ export async function enableUkStatutoryLeaveTypes(
     })
   );
 
-  // Seed two years × three regions of bank holidays in ONE insert. The upsert
-  // bodies were no-op updates, so createMany with skipDuplicates is equivalent
-  // for fresh orgs and safe on re-sync (existing rows are skipped) — and turns
-  // ~60 round-trips into a single query.
-  const currentYear = new Date().getFullYear();
-  const ukRegions: BankHolidayRegion[] = [
-    "ENGLAND_WALES",
-    "SCOTLAND",
-    "NORTHERN_IRELAND",
-  ];
-  const bankHolidayRows = [currentYear, currentYear + 1].flatMap((year) =>
-    ukRegions.flatMap((region) =>
-      getUkBankHolidaysForRegion(year, region).map((holiday) => ({
-        name: holiday.name,
-        date: holiday.date,
-        region,
-        countryCode: "GB",
-        organizationId,
-      }))
-    )
-  );
-  await prisma.bankHoliday.createMany({
-    data: bankHolidayRows,
-    skipDuplicates: true,
-  });
+  // This year and next; the monthly job adds later years (holiday-years.ts).
+  await addUkBankHolidays(organizationId, holidayYears());
 }

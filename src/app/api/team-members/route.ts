@@ -72,6 +72,11 @@ export async function GET(request: Request) {
   const showRightToWork =
     (sessionUser.role === "ADMIN" || sessionUser.role === "MANAGER") &&
     sessionHasFeature(sessionUser, "right_to_work");
+  // Staff see who's on the team, their role, location and whether they're
+  // off today, not colleagues' contact details or employment terms (data
+  // minimisation, as for leave in leave-privacy.ts). Their own row is whole.
+  const isStaff = sessionUser.role !== "ADMIN" && sessionUser.role !== "MANAGER";
+  const myId = sessionUser.id as string;
   return NextResponse.json(
     members.map((m) => ({
       ...m,
@@ -79,6 +84,17 @@ export async function GET(request: Request) {
         ? {}
         : { rightToWorkVerified: null, rightToWorkCheckedOn: null, rightToWorkExpiresOn: null }),
       fte: ftes.get(m.id),
+      ...(isStaff && m.id !== myId
+        ? {
+            email: null,
+            employmentType: null,
+            daysWorkedPerWeek: null,
+            fteRatio: null,
+            fte: undefined,
+            serviceStartDate: null,
+            leftOn: null,
+          }
+        : {}),
     }))
   );
 }

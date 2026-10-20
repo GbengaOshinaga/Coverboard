@@ -12,12 +12,13 @@ import { formatEmploymentType } from "@/lib/employment-types";
 type Member = {
   id: string;
   name: string;
-  email: string;
+  /** Null for staff looking at a colleague (see /api/team-members). */
+  email: string | null;
   role: string;
   memberType: string;
-  employmentType: string;
-  daysWorkedPerWeek: number;
-  fteRatio: number;
+  employmentType: string | null;
+  daysWorkedPerWeek: number | null;
+  fteRatio: number | null;
   /** Calculated by the API: logged hours for irregular-hours staff. */
   fte?: Fte;
   rightToWorkVerified: boolean | null;
@@ -84,7 +85,7 @@ export function MemberCard({
             </Badge>
           )}
         </div>
-        <p className="text-xs text-gray-500 mt-0.5">{member.email}</p>
+        {member.email && <p className="text-xs text-gray-500 mt-0.5">{member.email}</p>}
         {regionsEnabled &&
           (member.region ? (
             <p className="mt-1 inline-flex items-center gap-1 text-xs text-gray-600">
@@ -117,10 +118,12 @@ export function MemberCard({
             Leaving {new Date(member.leftOn).toLocaleDateString("en-GB", { timeZone: "UTC" })}
           </p>
         )}
-        <p className="text-xs text-gray-400 mt-0.5">
-          {formatEmploymentType(member.employmentType)} •{" "}
-          {member.fte ? fteLabel(member.fte) : `FTE ${member.fteRatio}`}
-        </p>
+        {member.employmentType && (
+          <p className="text-xs text-gray-400 mt-0.5">
+            {formatEmploymentType(member.employmentType)} •{" "}
+            {member.fte ? fteLabel(member.fte) : `FTE ${member.fteRatio}`}
+          </p>
+        )}
         {showRightToWorkAlerts && needsRightToWork && (
           <div
             className={`mt-1 rounded border px-2 py-1 text-[10px] font-medium ${

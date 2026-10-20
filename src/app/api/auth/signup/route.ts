@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { provisionTeam } from "@/lib/provision-team";
+import { TRIAL_DAYS } from "@/lib/plans";
 import { sendSignupWelcomeEmail } from "@/lib/email-notifications";
 import { sendVerificationEmail } from "@/lib/email-verification";
 import { evaluatePasswordStrength } from "@/lib/password-strength";
@@ -75,7 +76,7 @@ export async function POST(request: Request) {
         provisioningPath: "signup",
       });
 
-    const trialDays = 14;
+    const trialDays = TRIAL_DAYS;
     const isFreePlan = plan === "free";
 
     sendSignupWelcomeEmail({

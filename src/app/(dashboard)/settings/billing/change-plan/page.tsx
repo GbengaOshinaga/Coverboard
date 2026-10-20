@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
+import { PRICING } from "@/config/pricing";
 
 type BillingSummary = {
   plan: string;
@@ -24,66 +25,25 @@ type BillingSummary = {
 
 type PlanKey = "starter" | "growth" | "scale" | "pro";
 
+// The paid plans as the pricing page describes them (src/config/pricing.ts),
+// so what's listed here can't drift from what's sold.
+const PAID_PLAN_KEYS: readonly PlanKey[] = ["starter", "growth", "scale", "pro"];
 const PLANS: ReadonlyArray<{
   key: PlanKey;
   name: string;
   priceGbp: number;
   blurb: string;
   features: string[];
-}> = [
-  {
-    key: "starter",
-    name: "Starter",
-    priceGbp: 19,
-    blurb: "For growing UK teams",
-    features: [
-      "Annual leave & team calendar",
-      "Pro-rata for part-time",
-      "Custom carry-over rules",
-      "Bank holiday region config",
-      "Up to 15 employees, 2 admins",
-    ],
-  },
-  {
-    key: "growth",
-    name: "Growth",
-    priceGbp: 49,
-    blurb: "For a care home or busy site",
-    features: [
-      "Everything in Starter",
-      "Statutory pay worked out for payroll",
-      "Bradford Factor reporting",
-      "Right to work tracking",
-      "Up to 75 employees, 5 admins",
-    ],
-  },
-  {
-    key: "scale",
-    name: "Scale",
-    priceGbp: 99,
-    blurb: "For groups with several locations",
-    features: [
-      "Everything in Growth",
-      "Absence trend analysis",
-      "Custom leave types",
-      "Scheduled compliance reports",
-      "Leave operations dashboard",
-      "Unlimited employees and admins",
-    ],
-  },
-  {
-    key: "pro",
-    name: "Pro",
-    priceGbp: 179,
-    blurb: "Enterprise-ready",
-    features: [
-      "Everything in Scale",
-      "Activity log — see who viewed each profile, sickness note, and report",
-      "Audit trail + SAR exports",
-      "Priority email support (2 working-day target)",
-    ],
-  },
-];
+}> = PAID_PLAN_KEYS.map((key) => {
+  const tier = PRICING.tiers.find((t) => t.name.toLowerCase() === key)!;
+  return {
+    key,
+    name: tier.name,
+    priceGbp: tier.price_monthly,
+    blurb: tier.tagline,
+    features: [tier.headcount, ...tier.features],
+  };
+});
 
 const FMT = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",

@@ -8,6 +8,9 @@
  * `planFeatures.ts` only cover features actually wired into the codebase
  * today.
  *
+ * What each plan lists must match what's gated in `planFeatures.ts` and
+ * `plans.ts`: anything not gated is on every plan, so it belongs under Free.
+ *
  * Headcount caps and admin caps live in `src/lib/plans.ts`
  * (PLAN_MAX_EMPLOYEES, PLAN_DEFAULT_MAX_ADMINS) and are enforced server-
  * side. Keep the human-readable copy here in sync with those numbers.
@@ -44,9 +47,11 @@ export const PRICING: PricingConfig = {
       features: [
         "Minimum cover & shift alerts",
         "See who's free to cover",
-        "Annual leave tracking",
-        "Team calendar",
-        "Leave requests & approvals",
+        "Holiday for every contract type, pro-rated (part-time, irregular and zero hours)",
+        "All UK statutory leave types",
+        "Carry-over rules and bank holidays by UK nation",
+        "Sickness logging and fit notes",
+        "Team calendar, leave requests & approvals",
         "Email notifications",
         "1 admin user",
       ],
@@ -60,9 +65,6 @@ export const PRICING: PricingConfig = {
       highlighted: false,
       features: [
         "Everything in Free",
-        "Pro-rata for part-time",
-        "Custom carry-over rules",
-        "Bank holiday region config",
         "Up to 2 admin users",
       ],
     },
@@ -78,9 +80,7 @@ export const PRICING: PricingConfig = {
         "Statutory pay worked out: SSP, SMP, SAP, SPP, ShPP, neonatal",
         "Every statutory payment in the payroll report",
         "52-week holiday pay, and what leavers are owed",
-        "All UK statutory leave types",
-        "Fit note tracking and alerts",
-        "Pro-rata for all contract types",
+        "Weekly fit note alerts by email",
         "Bradford Factor reporting",
         "Right to work tracking",
         "Up to 5 admin users",
@@ -114,7 +114,7 @@ export const PRICING: PricingConfig = {
       features: [
         "Everything in Scale",
         "Activity log — see who viewed each profile, sickness note, and report",
-        "Audit log + SAR exports",
+        "Audit log",
         "Priority email support (2 working-day target)",
       ],
     },

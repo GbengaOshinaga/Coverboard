@@ -295,7 +295,9 @@ async function handleRequestLeave(
     daysRequested: result.daysRequested,
   });
 
-  const headline = result.autoApproved
+  const headline = result.sicknessReported
+    ? `Recorded: you're off sick, ${result.daysRequested} day(s). Your managers have been told. Get well soon.`
+    : result.autoApproved
     ? `Leave request auto-approved: ${result.request.leaveType.name}, ${result.daysRequested} day(s).`
     : `Leave request submitted: ${result.request.leaveType.name}, ${result.daysRequested} day(s).`;
 

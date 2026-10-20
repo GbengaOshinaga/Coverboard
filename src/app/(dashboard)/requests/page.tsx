@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { APPROVALS_CHANGED_EVENT } from "@/components/layout/sidebar";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -130,6 +131,10 @@ export default function RequestsPage() {
 
   const [cancelTarget, setCancelTarget] = useState<(typeof requests)[number] | null>(null);
   const [cancelBusy, setCancelBusy] = useState(false);
+  // Rejecting asks first, with an optional reason the employee will see.
+  const [rejectTarget, setRejectTarget] = useState<(typeof requests)[number] | null>(null);
+  const [rejectNote, setRejectNote] = useState("");
+  const [rejectBusy, setRejectBusy] = useState(false);
   const [overrideTarget, setOverrideTarget] = useState<{
     id: string;
     requesterName: string;
@@ -153,6 +158,8 @@ export default function RequestsPage() {
     if (res.ok) {
       toast(`Request ${successLabel}`, successKind);
       fetchRequests();
+      // The sidebar's "waiting for approval" count refreshes now, not on the next page.
+      window.dispatchEvent(new Event(APPROVALS_CHANGED_EVENT));
       return true;
     }
     const data = await res.json().catch(() => null);
@@ -167,11 +174,16 @@ export default function RequestsPage() {
       if (target) setCancelTarget(target);
       return;
     }
+    if (status === "REJECTED") {
+      const target = requests.find((r) => r.id === id);
+      if (target) {
+        setRejectNote("");
+        setRejectTarget(target);
+      }
+      return;
+    }
     if (status !== "APPROVED") {
-      const label =
-        status === "REJECTED" ? "rejected" : "cancelled";
-      const kind = status === "REJECTED" ? "error" : "info";
-      await patchStatus(id, { status }, label, kind);
+      await patchStatus(id, { status }, "cancelled", "info");
       return;
     }
 
@@ -261,12 +273,22 @@ export default function RequestsPage() {
         <TableSkeleton rows={4} />
       ) : requests.length === 0 ? (
         <div className="py-12 text-center">
-          <p className="text-sm text-gray-400">No leave requests found.</p>
-          <Link href="/requests/new">
-            <Button variant="outline" className="mt-3">
-              Submit your first request
-            </Button>
-          </Link>
+          {filter === "PENDING" ? (
+            <p className="text-sm text-gray-500">
+              {isReviewer ? "All caught up: nothing is waiting for approval." : "Nothing is waiting for approval."}
+            </p>
+          ) : filter === "ALL" ? (
+            <>
+              <p className="text-sm text-gray-400">No leave requests yet.</p>
+              <Link href="/requests/new">
+                <Button variant="outline" className="mt-3">
+                  Request time off
+                </Button>
+              </Link>
+            </>
+          ) : (
+            <p className="text-sm text-gray-400">No {filter.toLowerCase()} requests.</p>
+          )}
         </div>
       ) : (
         <div className="space-y-3">
@@ -338,6 +360,65 @@ export default function RequestsPage() {
                 }}
               >
                 {cancelBusy ? "Cancelling…" : "Cancel leave"}
+              </Button>
+            </div>
+          </>
+        )}
+      </Dialog>
+
+      <Dialog
+        open={!!rejectTarget}
+        onClose={() => {
+          if (!rejectBusy) setRejectTarget(null);
+        }}
+        title={rejectTarget ? `Reject ${rejectTarget.user.name}'s request?` : "Reject request?"}
+      >
+        {rejectTarget && (
+          <>
+            <p className="text-sm text-gray-700">
+              {rejectTarget.leaveType.name},{" "}
+              {new Date(rejectTarget.startDate).toLocaleDateString("en-GB", { timeZone: "UTC" })} –{" "}
+              {new Date(rejectTarget.endDate).toLocaleDateString("en-GB", { timeZone: "UTC" })}.
+            </p>
+            <div className="mt-3 space-y-1">
+              <label htmlFor="rejectNote" className="block text-sm font-medium text-gray-700">
+                Reason (optional)
+              </label>
+              <textarea
+                id="rejectNote"
+                rows={3}
+                maxLength={500}
+                value={rejectNote}
+                onChange={(e) => setRejectNote(e.target.value)}
+                placeholder="e.g. We're already two short that week. Could you take the week after?"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-base sm:text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+              />
+              <p className="text-xs text-gray-500">
+                {rejectTarget.user.name} is emailed that it was rejected, with this reason.
+              </p>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button type="button" variant="outline" size="sm" disabled={rejectBusy} onClick={() => setRejectTarget(null)}>
+                Back
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                disabled={rejectBusy}
+                onClick={async () => {
+                  setRejectBusy(true);
+                  const ok = await patchStatus(
+                    rejectTarget.id,
+                    { status: "REJECTED", reviewNote: rejectNote.trim() || undefined },
+                    "rejected",
+                    "info"
+                  );
+                  setRejectBusy(false);
+                  if (ok) setRejectTarget(null);
+                }}
+              >
+                {rejectBusy ? "Rejecting…" : "Reject request"}
               </Button>
             </div>
           </>

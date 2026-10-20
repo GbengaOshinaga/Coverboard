@@ -1,21 +1,16 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import {
-  addMonths,
-  subMonths,
-  format,
-  startOfMonth,
-  endOfMonth,
-  startOfWeek,
-  endOfWeek,
-} from "date-fns";
-import { MonthView } from "@/components/calendar/month-view";
+import { addMonths, subMonths, addWeeks, subWeeks, format, endOfDay } from "date-fns";
+import { useSession } from "next-auth/react";
+import { MonthView, calendarRange } from "@/components/calendar/month-view";
+import { AWAY_LEAVE_TYPE, canSeeLeaveReasons } from "@/lib/leave-privacy";
 import { Card, CardContent } from "@/components/ui/card";
 import { CalendarSkeleton } from "@/components/ui/skeleton";
 import { Select } from "@/components/ui/select";
 
 const REGION_FILTER_STORAGE_KEY = "coverboard.calendar.regionFilter";
+const VIEW_STORAGE_KEY = "coverboard.calendar.view";
 
 type Region = {
   id: string;
@@ -31,6 +26,8 @@ type LeaveData = {
   endDate: string;
   user: { id: string; name: string; regionId?: string | null };
   leaveType: { name: string; color: string };
+  /** Their own request, still waiting for approval. */
+  pending?: boolean;
 };
 
 type DailyCover = {
@@ -51,16 +48,36 @@ type CoverShiftData = {
 };
 
 export default function CalendarPage() {
+  const { data: session } = useSession();
+  // Staff see colleagues as "Away" (leave-privacy.ts), so the legend says so.
+  const seesColleaguesAsAway = !!session && !canSeeLeaveReasons((session.user as Record<string, unknown>)?.role);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [leaves, setLeaves] = useState<LeaveData[]>([]);
   // Accepted cover shifts (managers see everyone's; staff see their own).
   const [coverShifts, setCoverShifts] = useState<CoverShiftData[]>([]);
-  const [holidays, setHolidays] = useState([]);
+  const [holidays, setHolidays] = useState<Array<{ id: string; name: string; date: string; countryCode: string }>>([]);
   const [regions, setRegions] = useState<Region[]>([]);
   const [regionsEnabled, setRegionsEnabled] = useState(false);
   const [regionFilter, setRegionFilter] = useState<string>("ALL");
   const [coverDays, setCoverDays] = useState<DailyCover[]>([]);
   const [loading, setLoading] = useState(true);
+  // Month or week, remembered in this browser.
+  const [view, setView] = useState<"month" | "week">("month");
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(VIEW_STORAGE_KEY) === "week") setView("week");
+    } catch {
+      // storage unavailable: month view
+    }
+  }, []);
+  function chooseView(next: "month" | "week") {
+    setView(next);
+    try {
+      window.localStorage.setItem(VIEW_STORAGE_KEY, next);
+    } catch {
+      // not remembered, still switches
+    }
+  }
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -96,36 +113,35 @@ export default function CalendarPage() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const monthStart = startOfMonth(currentDate);
-    const monthEnd = endOfMonth(currentDate);
+    // Every day on screen, including the ends of the months either side.
+    const { start, end } = calendarRange(currentDate, view);
 
     const params = new URLSearchParams({
-      from: monthStart.toISOString(),
-      to: monthEnd.toISOString(),
-      status: "APPROVED",
-    });
-
-    const yearParam = new URLSearchParams({
-      year: format(currentDate, "yyyy"),
+      from: start.toISOString(),
+      to: endOfDay(end).toISOString(),
     });
 
     const coverParams = new URLSearchParams({
-      from: format(monthStart, "yyyy-MM-dd"),
-      to: format(monthEnd, "yyyy-MM-dd"),
+      from: format(start, "yyyy-MM-dd"),
+      to: format(end, "yyyy-MM-dd"),
     });
 
-    const [leavesRes, holidaysRes, coverRes] = await Promise.all([
-      fetch(`/api/leave-requests?${params}`),
-      fetch(`/api/holidays?${yearParam}`),
+    // A week or grid that spans New Year needs both years' holidays.
+    const years = [...new Set([format(start, "yyyy"), format(end, "yyyy")])];
+    const [leavesRes, coverRes, ...holidayRes] = await Promise.all([
+      // Approved leave, with colleagues shown to staff as "Away".
+      fetch(`/api/leave-calendar?${params}`),
       fetch(`/api/cover-shifts?${coverParams}`),
+      ...years.map((year) => fetch(`/api/holidays?${new URLSearchParams({ year })}`)),
     ]);
 
     if (leavesRes.ok) setLeaves(await leavesRes.json());
-    if (holidaysRes.ok) setHolidays(await holidaysRes.json());
+    const holidayLists = await Promise.all(holidayRes.map((r) => (r.ok ? r.json() : [])));
+    setHolidays(holidayLists.flat());
     setCoverShifts(coverRes.ok ? await coverRes.json() : []);
 
     setLoading(false);
-  }, [currentDate]);
+  }, [currentDate, view]);
 
   useEffect(() => {
     fetchData();
@@ -136,8 +152,7 @@ export default function CalendarPage() {
       setCoverDays([]);
       return;
     }
-    const calStart = startOfWeek(startOfMonth(currentDate));
-    const calEnd = endOfWeek(endOfMonth(currentDate));
+    const { start: calStart, end: calEnd } = calendarRange(currentDate, view);
     const url = `/api/regions/${regionFilter}/cover/range?start=${format(calStart, "yyyy-MM-dd")}&end=${format(calEnd, "yyyy-MM-dd")}`;
     let cancelled = false;
     fetch(url)
@@ -149,7 +164,7 @@ export default function CalendarPage() {
     return () => {
       cancelled = true;
     };
-  }, [regionFilter, currentDate]);
+  }, [regionFilter, currentDate, view]);
 
   const filteredLeaves = useMemo(() => {
     if (regionFilter === "ALL") return leaves;
@@ -177,6 +192,22 @@ export default function CalendarPage() {
         <p className="text-sm text-gray-500">
           Team absences, cover shifts and public holidays at a glance
         </p>
+      </div>
+
+      <div className="inline-flex rounded-md border border-gray-300 bg-white p-0.5" role="group" aria-label="Calendar view">
+        {(["month", "week"] as const).map((v) => (
+          <button
+            key={v}
+            type="button"
+            aria-pressed={view === v}
+            onClick={() => chooseView(v)}
+            className={`rounded px-3 py-1 text-sm font-medium ${
+              view === v ? "bg-brand-600 text-white" : "text-gray-600 hover:bg-gray-50"
+            }`}
+          >
+            {v === "month" ? "Month" : "Week"}
+          </button>
+        ))}
       </div>
 
       {regionsEnabled && (
@@ -214,8 +245,9 @@ export default function CalendarPage() {
               coverShifts={filteredCoverShifts}
               holidays={holidays}
               coverByDate={coverByDate}
-              onPrevMonth={() => setCurrentDate((d) => subMonths(d, 1))}
-              onNextMonth={() => setCurrentDate((d) => addMonths(d, 1))}
+              view={view}
+              onPrevMonth={() => setCurrentDate((d) => (view === "week" ? subWeeks(d, 1) : subMonths(d, 1)))}
+              onNextMonth={() => setCurrentDate((d) => (view === "week" ? addWeeks(d, 1) : addMonths(d, 1)))}
             />
           )}
         </CardContent>
@@ -224,9 +256,19 @@ export default function CalendarPage() {
       {/* Legend */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-500">
         <span className="font-medium">Legend:</span>
+        {seesColleaguesAsAway && (
+          <div className="flex items-center gap-1.5">
+            <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: AWAY_LEAVE_TYPE.color }} />
+            Away (colleagues)
+          </div>
+        )}
         <div className="flex items-center gap-1.5">
           <div className="h-2.5 w-2.5 rounded-sm border border-emerald-400 bg-emerald-50" />
           Cover shift
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="h-2.5 w-4 rounded-sm border border-gray-400 bg-white" />
+          Your request, waiting for approval
         </div>
         <div className="flex items-center gap-1.5">
           <div className="h-2.5 w-2.5 rounded-full bg-[#3b82f6]" />

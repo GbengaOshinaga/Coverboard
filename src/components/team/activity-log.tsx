@@ -57,6 +57,7 @@ const ACTION_LABEL: Record<string, string> = {
   "cover_offer.cancelled": "Cover request withdrawn by manager",
   "cover_offer.withdrawn": "Dropped out of a covered shift",
   "leave_request.ssp_cap_reached": "SSP cap reached",
+  "leave_request.ssp_not_entitled": "No SSP: form SSP1 due",
   "leave_request.cover_overridden": "Cover override applied",
   "leave_request.sickness_viewed": "Sickness note viewed",
 };

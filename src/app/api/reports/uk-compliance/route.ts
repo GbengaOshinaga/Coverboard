@@ -27,7 +27,8 @@ import { recordReadAudit, requestAuditContext } from "@/lib/audit";
 import { keepingInTouchRule } from "@/lib/keeping-in-touch";
 import { rightToWorkLabel, rightToWorkStatus } from "@/lib/right-to-work";
 import { isSicknessLeaveTypeName } from "@/lib/leave-requests/rules";
-import { sspRateFor, sspDaysRemainingAfter } from "@/lib/leave-requests/ssp-spell";
+import { sspRateFor, sspDaysRemainingAfter, sspRunsOutFor } from "@/lib/leave-requests/ssp-spell";
+import { ssp1ForNoEarnings, ssp1ForSspEnding } from "@/lib/ssp1";
 import {
   UK_COMPLIANCE_TABLES,
   isUkComplianceTableId,
@@ -105,20 +106,25 @@ export async function GET(request: Request) {
   const currentLeaveYear = leaveYearOf(new Date(), leaveYearStart);
   const { start: lyStart, end: lyEnd } = leaveYearBounds(currentLeaveYear, leaveYearStart);
 
+  // Annual leave overlapping the year for everyone, in one query (bookings
+  // across its start or end count for the days inside it). One query per
+  // person made this report slow for bigger teams.
+  const annualLeave = await prisma.leaveRequest.findMany({
+    where: {
+      userId: { in: users.map((u) => u.id) },
+      status: "APPROVED",
+      leaveType: { name: "Annual Leave" },
+      startDate: { lte: lyEnd },
+      endDate: { gte: lyStart },
+    },
+    select: { userId: true, startDate: true, endDate: true, hoursBooked: true },
+  });
+  const annualLeaveByUser = new Map<string, typeof annualLeave>();
+  for (const r of annualLeave) annualLeaveByUser.set(r.userId, [...(annualLeaveByUser.get(r.userId) ?? []), r]);
+
   const holidayUsage = await Promise.all(
     users.map(async (user): Promise<HolidayUsageRow> => {
-      const balances = await prisma.leaveRequest.findMany({
-        where: {
-          userId: user.id,
-          status: "APPROVED",
-          leaveType: { name: "Annual Leave" },
-          // Overlapping the year, so bookings across its start or end count
-          // for the days inside it.
-          startDate: { lte: lyEnd },
-          endDate: { gte: lyStart },
-        },
-        select: { startDate: true, endDate: true, hoursBooked: true },
-      });
+      const balances = annualLeaveByUser.get(user.id) ?? [];
       // Irregular/zero-hours workers take holiday in hours (every user here is
       // already workCountry=GB), so report their usage in hours.
       const isHours = isHoursAveragedEmploymentType(user.employmentType);
@@ -193,6 +199,20 @@ export async function GET(request: Request) {
         // The stored SSP days already reflect linked spells and the 28-week
         // cap, so the whole-absence figure uses them.
         const sspDays = r.sspDaysPaid ?? 0;
+        // Form SSP1: no SSP (earnings were £0), or SSP running out while
+        // they're off (week 22 of SSP, or booked past the day it ends).
+        const ssp1 =
+          ssp1ForNoEarnings({ startDate: r.startDate, averageWeeklyEarnings: rate?.averageWeeklyEarnings ?? null }) ??
+          ssp1ForSspEnding({
+            runsOut: await sspRunsOutFor({
+              userId: user.id,
+              startDate: r.startDate,
+              weekdays: workingWeek.weekdays,
+              daysPerWeek: qDays,
+            }),
+            absenceEnd: r.endDate,
+            today: now,
+          });
         return {
           userId: user.id,
           name: user.name,
@@ -215,6 +235,7 @@ export async function GET(request: Request) {
             user.averageWeeklyEarnings === undefined
               ? null
               : Number(user.averageWeeklyEarnings) < UK_LEL_WEEKLY,
+          ssp1,
         };
       });
   }));

@@ -20,6 +20,7 @@ export const AUDIT_ACTIONS = [
   "leave_request.fit_note_recorded",
   "leave_request.fit_note_removed",
   "leave_request.ssp_cap_reached",
+  "leave_request.ssp_not_entitled",
   "leave_request.cover_overridden",
   "leave_request.sickness_viewed",
   "cover_offer.created",

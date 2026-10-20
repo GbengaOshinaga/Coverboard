@@ -9,6 +9,8 @@ export type CalendarEvent = {
   color: string;
   isStart: boolean;
   isEnd: boolean;
+  /** Their own request, still waiting for approval. */
+  pending?: boolean;
 };
 
 export type HolidayEvent = {
@@ -37,6 +39,7 @@ export function DayCell({
   holidays,
   cover,
   coverShifts = [],
+  expanded = false,
 }: {
   date: Date;
   isCurrentMonth: boolean;
@@ -46,14 +49,18 @@ export function DayCell({
   cover?: CoverIndicator;
   /** Accepted cover shifts starting this day. */
   coverShifts?: CoverShiftEvent[];
+  /** Week view: every absence, each with its name, in a taller cell. */
+  expanded?: boolean;
 }) {
+  const shown = expanded ? events : events.slice(0, 2);
   const dayNumber = date.getDate();
   const isWeekend = date.getDay() === 0 || date.getDay() === 6;
 
   return (
     <div
       className={cn(
-        "min-h-[60px] border-b border-r border-gray-200 p-0.5 sm:min-h-[100px] sm:p-1",
+        "border-b border-r border-gray-200 p-0.5 sm:p-1",
+        expanded ? "min-h-[160px] sm:min-h-[220px]" : "min-h-[60px] sm:min-h-[100px]",
         !isCurrentMonth && "bg-gray-50",
         isWeekend && isCurrentMonth && "bg-gray-50/50"
       )}
@@ -80,7 +87,7 @@ export function DayCell({
             />
           )}
         </div>
-        {events.length > 2 && (
+        {!expanded && events.length > 2 && (
           <span className="text-[9px] text-gray-400 sm:text-[10px]">
             +{events.length - 2}
           </span>
@@ -107,7 +114,7 @@ export function DayCell({
             {c.userName} · {c.shiftName}
           </div>
         ))}
-        {events.slice(0, 2).map((event) => (
+        {shown.map((event) => (
           <div
             key={event.id}
             className={cn(
@@ -116,10 +123,15 @@ export function DayCell({
               event.isEnd && "rounded-r",
               !event.isStart && !event.isEnd && "rounded-none"
             )}
-            style={{ backgroundColor: event.color }}
-            title={`${event.userName} — ${event.leaveTypeName}`}
+            // Pending: outlined in the type's colour rather than filled.
+            style={
+              event.pending
+                ? { color: event.color, boxShadow: `inset 0 0 0 1px ${event.color}`, backgroundColor: "white" }
+                : { backgroundColor: event.color }
+            }
+            title={`${event.userName} — ${event.leaveTypeName}${event.pending ? " (waiting for approval)" : ""}`}
           >
-            {event.isStart ? event.userName : ""}
+            {event.isStart || expanded ? `${event.userName}${event.pending ? " (pending)" : ""}` : ""}
           </div>
         ))}
       </div>

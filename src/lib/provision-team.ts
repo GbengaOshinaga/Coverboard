@@ -4,6 +4,7 @@ import { STRIPE_PRICE_IDS, type StripePlanKey } from "@/config/stripePrices";
 import { ensureStripeCustomer } from "@/lib/billing-customer";
 import { DEFAULT_BILLING_COUNTRY } from "@/config/billing-countries";
 import { alertNewSignup } from "@/lib/signup-alerts";
+import { TRIAL_DAYS } from "@/lib/plans";
 
 export type SignupPlanKey = "free" | "starter" | "growth" | "scale" | "pro";
 
@@ -29,7 +30,6 @@ export interface ProvisionTeamResult {
   initialPlanEnum: "FREE" | "TRIAL";
 }
 
-const TRIAL_DAYS = 14;
 
 /**
  * Creates an organisation + its admin user and provisions the Stripe customer

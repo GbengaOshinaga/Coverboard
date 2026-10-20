@@ -28,12 +28,13 @@ type Region = {
 type Member = {
   id: string;
   name: string;
-  email: string;
+  /** Null for staff looking at a colleague (see /api/team-members). */
+  email: string | null;
   role: string;
   memberType: string;
-  employmentType: string;
-  daysWorkedPerWeek: number;
-  fteRatio: number;
+  employmentType: string | null;
+  daysWorkedPerWeek: number | null;
+  fteRatio: number | null;
   rightToWorkVerified: boolean | null;
   rightToWorkExpiresOn?: string | null;
   rightToWorkCheckedOn?: string | null;
@@ -602,9 +603,20 @@ export default function TeamPage() {
           <MemberForm
             initialData={{
               ...editMember,
+              // Editors are admins and managers, who get every field.
+              email: editMember.email ?? "",
+              employmentType: editMember.employmentType ?? "FULL_TIME",
+              daysWorkedPerWeek: editMember.daysWorkedPerWeek ?? 5,
+              fteRatio: editMember.fteRatio ?? 1,
               department: editMember.department ?? undefined,
               workCountry: editMember.workCountry ?? editMember.countryCode,
             }}
+            // For the "Set working pattern" link (the location picker is for new members only).
+            locations={
+              regionsEnabled
+                ? regions.filter((r) => r.isActive).map((r) => ({ id: r.id, name: r.name }))
+                : undefined
+            }
             onSubmit={handleEditMember}
             onCancel={() => setEditMember(undefined)}
             canSetRoles={userRole === "ADMIN"}

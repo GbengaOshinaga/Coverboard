@@ -926,3 +926,85 @@ _add("ssp", how=["Average weekly earnings aren't rounded; 80% of them is rounded
      refs=["govuk_ssp_calc"])
 _add("maternity", how=["Average weekly earnings aren't rounded (kept to 7 decimal places, as GOV.UK shows them); 90% is rounded up to the penny, for SMP, SAP, SPP, ShPP and neonatal pay alike. Checked against GOV.UK's calculator in src/lib/govuk-calculators.test.ts."],
      refs=["govuk_parent_calc"])
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Updates, 19 Oct 2026: form SSP1 (dated 10/26) and £0 earnings.
+# ════════════════════════════════════════════════════════════════════════
+R.update({
+    "ssp1_form": ("GOV.UK – Employer form: employee not entitled to SSP (SSP1, dated 10/26)", "https://www.gov.uk/government/publications/statutory-sick-pay-employee-not-entitled-form-for-employers"),
+    "ssp1_when": ("GOV.UK – SSP: eligibility and form SSP1", "https://www.gov.uk/employers-sick-pay/eligibility-and-form-ssp1"),
+})
+_add("ssp", how=["£0 earnings in the 8 weeks before (every week recorded as no pay; every week since they started for someone newer) means no SSP from 6 April 2026. Weeks not entered give the flat rate instead.",
+                 "Form SSP1: the SSP report and its CSV say when it's due, which box to tick and link the form. No SSP: within 7 days of the first day off (the manager recording it sees this, and admins and managers are emailed). SSP running out: by the start of week 23, warned from week 22 or once the absence booked runs past SSP's end.",
+                 "The 28-week email gives the day SSP actually ends, which can be before the absence does, and links the form."],
+     code=[("src/lib/ssp1.ts", "Form SSP1: reasons, deadlines, sspRunsOut()"),
+           ("src/lib/smpCalculator.ts", "sspEarningsFromRows()")],
+     refs=["ssp1_form", "ssp1_when"])
+_add("leavers", how=["Off sick past their last day: the leaving dialog says SSP stops then and form SSP1 is due within 7 days (\u201ccontract has ended\u201d box)."],
+     refs=["ssp1_form"])
+
+_NEW_19OCT = [
+    ("logsick", dict(id="offsick", ch="sickness", title="“I'm off sick” (staff)", plan="All plans",
+         summary="Staff report their own sickness from the dashboard or My time off: first day, when they expect to be back, an optional note. Recorded straight away; their managers are emailed to arrange cover.",
+         how=["Uses the team's sickness type (the SSP one for UK teams); nothing to approve, no reviewer.",
+              "Admins and managers (not the person, if they're a manager) get “X is off sick” with the dates, never the note.",
+              "Sickness booked from the request form or Slack is recorded the same way.",
+              "Only admins and managers can extend it; the confirmation says so, and mentions fit notes after 7 days for UK workers."],
+         code=[("src/app/(dashboard)/my-time-off/off-sick/page.tsx", "I'm off sick page"),
+               ("src/components/leave/off-sick-form.tsx", "Form"),
+               ("src/lib/leave-requests/create.ts", "selfReportedSickness")],
+         refs=["sick_leave"], docs=[], related=["logsick", "ssp", "covercheck"])),
+    ("roles", dict(id="glossary", ch="start", title="Plain-English terms", plan="All plans",
+         summary="A “?” next to SSP, SMP, SPL, ShPP, KIT, FTE, Bradford, SAR, cover by location, the 48-hour opt-out and right to work opens a one- or two-sentence meaning, on tap as well as hover. Help lists them all.",
+         how=["One source for every hint, the line under a chosen leave type and the Help glossary.",
+              "Rates aren't repeated in the glossary; they stay with the rules."],
+         code=[("src/lib/glossary.ts", "GLOSSARY"),
+               ("src/components/ui/term-hint.tsx", "TermHint")],
+         refs=[], docs=[], related=["requests", "reports"])),
+]
+for _after, _feature_new in _NEW_19OCT:
+    _i = next(i for i, f in enumerate(FEATURES) if f["id"] == _after)
+    FEATURES.insert(_i + 1, _feature_new)
+_add("requests", how=["The leave-type list puts everyday leave first (annual, sickness, unpaid, carer's), then family leave as its own group; sickness shows as “Sickness (SSP)”.",
+                      "Family leave shows what can be taken (“up to 52 weeks”), not a balance; types with no allowance show no “days left”.",
+                      "A first request approved because the requester is the only approver says so, rather than “you'll hear back”.",
+                      "The Jira check shows nothing until it knows Jira is connected (it said “Checking project coverage…” to every team)."],
+     code=[("src/lib/leave-type-labels.ts", "compareLeaveTypesForList(), leaveTypeListHint()")])
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Updates, 20 Oct 2026: tester round (approvals badge, calendar, onboarding, staff privacy).
+# ════════════════════════════════════════════════════════════════════════
+_add("requests", how=["Admins and managers see a count on Requests in the sidebar of requests waiting for them (not their own, not leavers').",
+                      "An empty Pending tab says “All caught up” for approvers, not “Submit your first request”."],
+     code=[("src/app/api/leave-requests/pending-count/route.ts", "Waiting-for-approval count"),
+           ("src/components/layout/sidebar.tsx", "Badge")])
+_add("calendar", how=["Weeks start on Monday. A Month/Week switch (remembered in the browser); the week view shows every absence by name.",
+                      "Loads every day on screen, including the ends of the months either side, and both years' bank holidays across New Year."],
+     code=[("src/components/calendar/month-view.tsx", "calendarRange(), Monday-first weeks")])
+_add("onboarding", how=["“Care home or home care” is an industry, and like healthcare is offered cover by location; the UK is selected to start with, and Continue says why it's disabled."])
+_add("team", how=["Staff see colleagues' names, roles, departments, locations and who's off, not emails, contracts, FTE or start and leaving dates."],
+     code=[("src/app/api/team-members/route.ts", "Staff view of the team list")])
+_add("slack", how=["The Slack and Jira cards in Settings are shown to admins and managers only."])
+_add("calendar", how=["Staff see colleagues' approved leave as “Away” in grey, and their own with its type (leave privacy); /api/leave-calendar sends only dates, names and the type as the viewer may see it."],
+     code=[("src/app/api/leave-calendar/route.ts", "Calendar leave, as each viewer may see it")])
+_add("leaveprivacy", how=["Now also on the staff calendar: colleagues show as “Away”."])
+_add("bankhol", how=["A monthly job (1st, 03:00) adds any missing year so every team holds this year's and next year's bank and public holidays; before, teams only had the two years from when they were set up."],
+     code=[("src/lib/holiday-years.ts", "holidayYears(), topUpHolidaysForAllTeams()"),
+           ("src/app/api/cron/holidays/route.ts", "Monthly holidays job")])
+_add("landing", how=["Statutory pay is labelled “On Growth and above” on the homepage, and where a page sells it (the homepage section, the SSP calculator, the guides) the button starts a 14-day Growth trial rather than Free; “Start free” stays where the page sells cover, which is on Free."],
+     code=[("src/components/landing/statutory-pay-trial.tsx", "Trial button and note")])
+_add("billing", how=["Plan lists match what's gated: pro-rata for every contract type, carry-over, bank holidays by nation, all UK statutory leave types, fit notes and SAR export are on Free; statutory pay, payroll, holiday pay, right to work, Bradford and fit note alert emails on Growth; the audit and activity logs on Pro. Starter adds headcount (15) and admins (2).",
+                     "The Change plan page reads the same pricing config, so it can't drift from the pricing page."],
+     code=[("src/config/pricing.ts", "Plan lists (marketing and Change plan)")])
+
+# ════════════════════════════════════════════════════════════════════════
+# Updates, 21 Oct 2026: tester round (rejecting, confirmations, member form).
+# ════════════════════════════════════════════════════════════════════════
+_add("requests", how=["Approve and Reject are labelled buttons. Rejecting asks first, with an optional reason (up to 500 characters) that's stored on the request (reviewNote), emailed and sent in Slack to the employee, shown on the request and kept in the audit log.",
+                      "Every booking ends with a message: sent for approval, approved (only approver), recorded (sickness or for someone else), plus any balance warning.",
+                      "The sidebar's waiting-for-approval count updates as soon as a request is approved or rejected."],
+     code=[("src/lib/leave-requests/review.ts", "reviewNote")])
+_add("calendar", how=["People also see their own requests waiting for approval, outlined and marked “(pending)”; nobody else's pending requests show."])
+_add("team", how=["The edit form explains each role, lists the UK first and, for teams with locations, links to the person's working pattern."])

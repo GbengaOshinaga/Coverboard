@@ -45,6 +45,9 @@ export function Dialog({
     >
       <div className="fixed inset-0 bg-black/50" />
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
         className={cn(
           // Cap height to viewport and let the body scroll so tall dialogs
           // (e.g. the member form) don't overflow off-screen on phones.
@@ -57,6 +60,7 @@ export function Dialog({
             <h2 className="text-lg font-semibold">{title}</h2>
             <button
               onClick={onClose}
+              aria-label="Close"
               className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
             >
               <X className="h-5 w-5" />

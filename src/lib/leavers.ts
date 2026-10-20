@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { dbDate, endWorkPatternOps } from "@/lib/workPattern";
 import { recomputeAllSspSpells } from "@/lib/leave-requests/ssp-spell";
 import { isSicknessLeaveTypeName } from "@/lib/leave-requests/rules";
+import { sspAppliesTo } from "@/lib/ssp-scope";
+import { ssp1ForLeaver, type Ssp1Due } from "@/lib/ssp1";
 
 /**
  * Someone leaving, defined once. The leaving date is their last day of
@@ -100,6 +102,7 @@ export async function recordLeaving(input: { userId: string; organizationId: str
     futureLeaveCancelled: cancelledLeave.count,
     futureCoverWithdrawn: cancelledCover.count,
     leaveCutShort: trimmedLeave.count,
+    ssp1: await ssp1OnLeaving({ userId: input.userId, lastDay, cutShort: spanning }),
   };
 }
 
@@ -138,5 +141,24 @@ export async function previewLeaving(input: { userId: string; lastDay: string })
     startDate: r.startDate.toISOString().slice(0, 10),
     endDate: r.endDate.toISOString().slice(0, 10),
   });
-  return { leaveCancelled: cancelled.map(row), leaveCutShort: cutShort.map(row), coverWithdrawn: cover };
+  return {
+    leaveCancelled: cancelled.map(row),
+    leaveCutShort: cutShort.map(row),
+    coverWithdrawn: cover,
+    ssp1: await ssp1OnLeaving({ userId: input.userId, lastDay, cutShort }),
+  };
+}
+
+/**
+ * Off sick past their last day: their SSP stops when their contract ends, so
+ * the employer must give them form SSP1 (src/lib/ssp1.ts). UK workers only.
+ */
+async function ssp1OnLeaving(input: {
+  userId: string;
+  lastDay: Date;
+  cutShort: { leaveType: { name: string } }[];
+}): Promise<Ssp1Due | null> {
+  if (!input.cutShort.some((r) => isSicknessLeaveTypeName(r.leaveType.name))) return null;
+  const user = await prisma.user.findUnique({ where: { id: input.userId }, select: { workCountry: true } });
+  return user && sspAppliesTo(user.workCountry) ? ssp1ForLeaver(input.lastDay) : null;
 }

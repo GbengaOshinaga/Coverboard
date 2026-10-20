@@ -56,6 +56,9 @@ export function planAtLeast(
   return PLAN_RANK[plan] >= PLAN_RANK[minimum];
 }
 
+/** Length of the free trial a paid-plan signup starts with (every feature included). */
+export const TRIAL_DAYS = 14;
+
 export const PLAN_LABELS: Record<SubscriptionPlan, string> = {
   FREE: "Free",
   STARTER: "Starter",

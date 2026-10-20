@@ -21,6 +21,7 @@ type LeaveRequest = {
   };
   leaveType: { id: string; name: string; color: string };
   reviewedBy: { name: string } | null;
+  reviewNote?: string | null;
 };
 
 export function MyRequests({

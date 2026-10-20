@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getAppBaseUrl } from "@/lib/app-url";
 import { SspCalculator } from "./calculator";
+import { StatutoryPayTrialButton, StatutoryPayTrialNote } from "@/components/landing/statutory-pay-trial";
 
 export const dynamic = "force-static";
 
@@ -36,7 +37,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Is there a minimum earnings level to get SSP?",
-    a: "No. The Lower Earnings Limit eligibility test was removed for SSP from 6 April 2026 — every employee qualifies regardless of earnings.",
+    a: "No minimum. The Lower Earnings Limit test was removed for SSP from 6 April 2026, so low earners qualify. But SSP is 80% of average weekly earnings at most, so someone who earned £0 in the 8 weeks before their sickness gets no SSP, and their employer must give them form SSP1.",
   },
   {
     q: "How long can SSP be paid?",
@@ -104,8 +105,8 @@ export default function SspCalculatorPage() {
           The 2026 reform made SSP more generous in three ways. There are no
           longer any <strong>waiting days</strong> — SSP is paid from the first
           qualifying day, not the fourth. The <strong>Lower Earnings Limit</strong>{" "}
-          eligibility test was removed, so every employee qualifies regardless of
-          earnings. And the rate is now the <strong>lower of £123.25 a week or
+          eligibility test was removed, so low earners qualify too (though
+          someone who earned nothing in the 8 weeks before gets nothing). And the rate is now the <strong>lower of £123.25 a week or
           80% of average weekly earnings</strong>, so low earners who previously
           got little or nothing now receive 80% of their pay.
         </p>
@@ -159,12 +160,8 @@ export default function SspCalculatorPage() {
           employee — daily rate, the 28-week cap and linked spells — using the
           exact method behind this calculator.
         </p>
-        <Link
-          href="/signup"
-          className="mt-4 inline-block rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
-        >
-          Start free
-        </Link>
+        <StatutoryPayTrialButton className="mt-4" />
+        <StatutoryPayTrialNote className="mt-2" />
       </aside>
     </article>
   );

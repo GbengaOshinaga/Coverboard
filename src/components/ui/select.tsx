@@ -4,8 +4,22 @@ import { cn } from "@/lib/utils";
 export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;
   error?: string;
-  options: { value: string; label: string }[];
+  /** Consecutive options with the same `group` are shown under that heading. */
+  options: { value: string; label: string; group?: string }[];
   placeholder?: string;
+}
+
+type Option = SelectProps["options"][number];
+
+/** Splits options into runs of the same group, keeping their order. */
+function groupRuns(options: Option[]): { group?: string; options: Option[] }[] {
+  const runs: { group?: string; options: Option[] }[] = [];
+  for (const option of options) {
+    const last = runs[runs.length - 1];
+    if (last && last.group === option.group) last.options.push(option);
+    else runs.push({ group: option.group, options: [option] });
+  }
+  return runs;
 }
 
 const Select = forwardRef<HTMLSelectElement, SelectProps>(
@@ -35,11 +49,23 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
               {placeholder}
             </option>
           )}
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
+          {groupRuns(options).map((run, i) =>
+            run.group ? (
+              <optgroup key={`${run.group}-${i}`} label={run.group}>
+                {run.options.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </optgroup>
+            ) : (
+              run.options.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))
+            )
+          )}
         </select>
         {error && <p className="text-sm text-red-600">{error}</p>}
       </div>
