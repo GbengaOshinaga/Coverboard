@@ -140,6 +140,16 @@ const STAFF_HOW_TOS: HowTo[] = [
   },
 ];
 
+/** The reply we aim for on each support level (Pro, Scale, everyone else). */
+const REPLY = {
+  pro: "within 2 working days",
+  scale: "within 3 working days",
+  standard: "within a week",
+} as const;
+
+/** Shown to teams on the standard reply time: what a faster plan gets. */
+const FASTER_ON = `On Scale we aim to reply ${REPLY.scale}, and on Pro ${REPLY.pro}.`;
+
 /** Which email to use, the reply we aim for, and a line about the plan. */
 function supportFor(
   plan: AnyPlan | undefined,
@@ -157,10 +167,11 @@ function supportFor(
   if (trial?.tone === "ended") {
     return {
       email: CONTACT_EMAIL,
-      reply: "within a week",
+      reply: REPLY.standard,
       planNote: (
         <>
-          Your trial ended on {DATE_FMT.format(trial.endsAt)}.{billingLink}
+          Your trial ended on {DATE_FMT.format(trial.endsAt)}. {FASTER_ON}
+          {billingLink}
         </>
       ),
     };
@@ -176,17 +187,17 @@ function supportFor(
         : null;
 
   if (hasSlaSupport(plan)) {
-    return { email: SLA_EMAIL, reply: "within 2 working days", planNote };
+    return { email: SLA_EMAIL, reply: REPLY.pro, planNote };
   }
   if (hasPrioritySupport(plan)) {
-    return { email: PRIORITY_EMAIL, reply: "within 3 working days", planNote };
+    return { email: PRIORITY_EMAIL, reply: REPLY.scale, planNote };
   }
   return {
     email: CONTACT_EMAIL,
-    reply: "within a week",
+    reply: REPLY.standard,
     planNote: (
       <>
-        {planNote} Scale and Pro get a faster reply.
+        {planNote} {FASTER_ON}
         {billingLink}
       </>
     ),
