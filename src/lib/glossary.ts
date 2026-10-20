@@ -1,9 +1,17 @@
 /**
  * Plain-English meanings for the terms the app can't avoid, defined once:
  * the "?" next to a term (TermHint), the explanation under a chosen leave
- * type, and the glossary on the Help page all read from here. Rates aren't
- * repeated here; they live with the rules (uk-compliance.ts, smpCalculator.ts).
+ * type, and the glossary on the Help page all read from here. The weekly
+ * figures come from the rules (uk-compliance.ts, smpCalculator.ts), so they
+ * change when the rates are updated each April.
  */
+
+import { UK_SSP_WEEKLY_RATE } from "@/lib/uk-compliance";
+import { SMP_FLAT_RATE } from "@/lib/smpCalculator";
+import { formatGBP } from "@/lib/money";
+
+const SSP_RATE = formatGBP(UK_SSP_WEEKLY_RATE);
+const SMP_RATE = formatGBP(SMP_FLAT_RATE);
 
 export type GlossaryEntry = {
   term: string;
@@ -17,7 +25,7 @@ export const GLOSSARY = {
   ssp: {
     term: "SSP (Statutory Sick Pay)",
     meaning:
-      "The minimum sick pay employers must pay, from the first day off sick, for up to 28 weeks. It's the lower of a flat weekly rate and 80% of what they earned on average in the 8 weeks before.",
+      `The minimum sick pay employers must pay, from the first day off sick, for up to 28 weeks: ${SSP_RATE} a week, or 80% of their average weekly pay if that's less.`,
     link: "https://www.gov.uk/statutory-sick-pay",
   },
   qualifyingDays: {
@@ -28,7 +36,7 @@ export const GLOSSARY = {
   smp: {
     term: "SMP (Statutory Maternity Pay)",
     meaning:
-      "Pay for up to 39 weeks of maternity leave: 90% of average weekly earnings for the first 6 weeks, then a flat weekly rate (or 90%, if that's lower). SAP is the same for adoption.",
+      `Pay for up to 39 weeks of maternity leave: 90% of their average weekly pay for the first 6 weeks, then ${SMP_RATE} a week (or 90% of their pay, if that's less). SAP is the same for adoption.`,
     link: "https://www.gov.uk/maternity-pay-leave",
   },
   spl: {
@@ -39,7 +47,7 @@ export const GLOSSARY = {
   },
   shpp: {
     term: "ShPP (Statutory Shared Parental Pay)",
-    meaning: "Pay for up to 37 weeks of shared parental leave, at the same flat weekly rate as SMP (or 90% of earnings, if lower).",
+    meaning: `Pay for up to 37 weeks of shared parental leave: ${SMP_RATE} a week, or 90% of their average weekly pay if that's less.`,
     link: "https://www.gov.uk/shared-parental-leave-and-pay",
   },
   kit: {
@@ -56,7 +64,7 @@ export const GLOSSARY = {
   bradford: {
     term: "Bradford score",
     meaning:
-      "A way of spotting frequent short absences: the number of sickness spells, squared, times the days off, over the last 12 months. Six 1-day absences score 216; one 6-day absence scores 6. A high score is a prompt for a conversation, not a rule.",
+      "A way of spotting frequent short absences: the number of sickness spells, squared, times the days off, over the last 12 months. Six 1-day absences score 216; one 6-day absence scores 6. Use a high score as a reason to talk to the person, not to act on its own.",
   },
   sar: {
     term: "SAR (subject access request)",
