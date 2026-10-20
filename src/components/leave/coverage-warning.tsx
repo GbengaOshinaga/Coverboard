@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  SquareKanban,
   ExternalLink,
   ChevronDown,
   ChevronUp,
@@ -83,18 +82,9 @@ export function CoverageWarning({
     }
   }, [userId, startDate, endDate]);
 
-  if (loading) {
-    return (
-      <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
-        <div className="flex items-center gap-2 text-xs text-gray-400">
-          <SquareKanban size={14} />
-          Checking project coverage...
-        </div>
-      </div>
-    );
-  }
-
-  if (!data?.connected) return null;
+  // Nothing shows while it checks: most teams don't use Jira, and a
+  // "checking" line would appear for them on every booking.
+  if (loading || !data?.connected) return null;
   if (data.userMapped === false) return null;
 
   const openIssues = data.issues.filter((i) => !reassigned.has(i.key));

@@ -12,6 +12,7 @@ import {
   leaveCancelledForYouEmail,
   sspCapReachedEmail,
   sspNotEntitledEmail,
+  sicknessReportedEmail,
   esc,
 } from "@/lib/email-templates";
 import { countWeekdays } from "@/lib/utils";
@@ -133,6 +134,37 @@ export async function emailNewRequest(data: {
   await Promise.all(
     managers.map((m) => sendEmail({ to: m.email, subject, html }))
   );
+}
+
+// ─── Someone reported themselves off sick (notify approvers) ─────────
+
+export async function emailSicknessReported(data: {
+  employeeName: string;
+  employeeId: string;
+  startDate: Date;
+  endDate: Date;
+  organizationId: string;
+}) {
+  // Admins and managers, not the person who's ill (a manager can be off sick too).
+  const approvers: EmailRecipient[] = await prisma.user.findMany({
+    where: {
+      organizationId: data.organizationId,
+      role: { in: ["ADMIN", "MANAGER"] },
+      isActive: true,
+      id: { not: data.employeeId },
+    },
+    select: { email: true },
+  });
+  if (approvers.length === 0) return;
+
+  // No note: what's wrong stays with them and admins (see leave privacy).
+  const { subject, html } = sicknessReportedEmail({
+    employeeName: data.employeeName,
+    startDate: data.startDate,
+    endDate: data.endDate,
+    dashboardUrl: `${getAppBaseUrl()}/dashboard`,
+  });
+  await Promise.all(approvers.map((m) => sendEmail({ to: m.email, subject, html })));
 }
 
 // ─── Approved Leave Cancelled (notify the other approvers) ───────────

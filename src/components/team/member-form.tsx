@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { COUNTRY_NAMES } from "@/lib/utils";
 import { EMPLOYMENT_TYPE_OPTIONS, isHoursAveragedEmploymentType } from "@/lib/employment-types";
+import { TermHint } from "@/components/ui/term-hint";
 
 type MemberData = {
   id?: string;
@@ -227,20 +228,26 @@ export function MemberForm({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {isHoursAveragedEmploymentType(employmentType) ? (
           <p className="self-end pb-2 text-xs text-gray-500">
-            FTE is worked out from their logged weekly hours.
+            FTE is worked out from their logged weekly hours. <TermHint term="fte" />
           </p>
         ) : (
-          <Input
-            id="fteRatio"
-            label="Contracted FTE"
-            type="number"
-            min="0"
-            max="1"
-            step="0.01"
-            value={fteRatio}
-            onChange={(e) => setFteRatio(e.target.value)}
-          />
+          <div className="space-y-1">
+            <Input
+              id="fteRatio"
+              label="Contracted FTE"
+              type="number"
+              min="0"
+              max="1"
+              step="0.01"
+              value={fteRatio}
+              onChange={(e) => setFteRatio(e.target.value)}
+            />
+            <p className="text-xs text-gray-500">
+              1 is full time; 0.6 is 3 days of a 5-day week. <TermHint term="fte" />
+            </p>
+          </div>
         )}
+
         <Input
           id="department"
           label="Department"

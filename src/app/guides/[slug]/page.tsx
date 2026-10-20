@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { getAllGuides, getGuide, getGuideSlugs } from "@/lib/guides";
 import { getAppBaseUrl } from "@/lib/app-url";
+import { StatutoryPayTrialButton, StatutoryPayTrialNote } from "@/components/landing/statutory-pay-trial";
 
 export const dynamic = "force-static";
 // Every guide is known at build time; reject unknown slugs with a 404 instead of
@@ -109,12 +110,8 @@ export default async function GuidePage({
           Coverboard handles statutory leave, holiday pay and bank holidays for UK
           teams automatically — so the calculations in this guide just happen.
         </p>
-        <Link
-          href="/signup"
-          className="mt-4 inline-block rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
-        >
-          Start free
-        </Link>
+        <StatutoryPayTrialButton className="mt-4" />
+        <StatutoryPayTrialNote className="mt-2" />
       </aside>
     </article>
   );

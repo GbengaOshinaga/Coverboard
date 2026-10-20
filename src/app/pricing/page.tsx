@@ -20,7 +20,7 @@ const faqs = [
   },
   {
     q: "Do I need a card to start?",
-    a: "Not for Free (up to 5 employees). Paid plans start with a 14-day free trial.",
+    a: "No. Free (up to 5 employees) needs no card, and paid plans start with a 14-day free trial, no card required.",
   },
   {
     q: "Can I change plan later?",

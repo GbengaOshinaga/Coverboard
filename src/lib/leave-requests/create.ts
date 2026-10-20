@@ -4,7 +4,13 @@ import { recomputeBradfordScore } from "./bradford";
 import { getUserLeaveBalance } from "@/lib/leave-balances";
 import { countWeekdays } from "@/lib/utils";
 import { notifyNewRequest } from "@/lib/slack-notifications";
-import { emailNewRequest, emailRequestStatusChange, emailSspCapReached, emailSspNotEntitled } from "@/lib/email-notifications";
+import {
+  emailNewRequest,
+  emailRequestStatusChange,
+  emailSicknessReported,
+  emailSspCapReached,
+  emailSspNotEntitled,
+} from "@/lib/email-notifications";
 import { UK_SSP_WEEKLY_RATE } from "@/lib/uk-compliance";
 import { recordAudit, type AuditContext } from "@/lib/audit";
 import { AnalyticsEvents } from "@/lib/analytics/events";
@@ -98,6 +104,8 @@ export type CreateLeaveResult =
       sncpInfo: { eligible: boolean; weeklyRate: number | null; basis: string; weeksEntitled: number } | null;
       firstRequest: boolean;
       autoApproved: boolean;
+      /** They reported themselves off sick: recorded, and their managers told. */
+      sicknessReported: boolean;
       daysRequested: number;
     }
   | { ok: false; status: number; error: string };
@@ -488,8 +496,11 @@ export async function createLeaveRequest(
       isActive: true,
     },
   });
-  // Sickness logged by a manager is a record of fact, not a request to review.
-  const autoApprove = onBehalf || otherApprovers === 0;
+  // Sickness is a record of fact, not a request to review: logged by a
+  // manager, or reported by the person themselves (there's nothing to approve
+  // about being ill; their managers are told instead, below).
+  const selfReportedSickness = isSicknessType && !onBehalf;
+  const autoApprove = onBehalf || selfReportedSickness || otherApprovers === 0;
 
   const leaveRequest = await createRequestRow({
     startDate,
@@ -528,7 +539,8 @@ export async function createLeaveRequest(
     ...(autoApprove
       ? {
           status: "APPROVED" as const,
-          reviewedById: actor.id,
+          // Reported sickness isn't reviewed by anyone, so no reviewer.
+          reviewedById: selfReportedSickness ? null : actor.id,
           reviewedAt: new Date(),
         }
       : {}),
@@ -561,6 +573,18 @@ export async function createLeaveRequest(
       note: note ?? null,
       organizationId: orgId,
     }).catch((err) => console.error("Email notification error:", err));
+  }
+
+  // Someone reporting themselves off sick: their managers need to know now,
+  // to arrange cover.
+  if (selfReportedSickness) {
+    emailSicknessReported({
+      employeeName: leaveRequest.user.name,
+      employeeId: userId,
+      startDate,
+      endDate,
+      organizationId: orgId,
+    }).catch((err) => console.error("Sickness reported email error:", err));
   }
 
   // Planned leave a manager records for someone is news to them in the app:
@@ -700,6 +724,7 @@ export async function createLeaveRequest(
     sncpInfo,
     firstRequest,
     autoApproved: autoApprove,
+    sicknessReported: selfReportedSickness,
     daysRequested,
   };
 }

@@ -6,10 +6,10 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
   getCountryPolicies,
-  getHolidaysForYear,
   baseLeaveTypesFor,
 } from "@/lib/country-policies";
 import { enableUkStatutoryLeaveTypes } from "@/lib/uk-statutory";
+import { addPublicHolidays, holidayYears } from "@/lib/holiday-years";
 import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
 import { sendTeamInviteEmail } from "@/lib/email-notifications";
@@ -89,8 +89,6 @@ export async function POST(request: Request) {
       }
     }
 
-    const currentYear = new Date().getFullYear();
-
     // Update the admin user's default and work country to the first selected country
     await prisma.user.update({
       where: { id: userId },
@@ -161,23 +159,9 @@ export async function POST(request: Request) {
       })
     );
 
-    // Public holidays for this year and next — one batched insert (upsert
-    // bodies were no-op updates, so skipDuplicates is equivalent and far faster).
-    const standardCountries = countries.filter((code) => code !== "GB");
-    const publicHolidayRows = [currentYear, currentYear + 1].flatMap((year) =>
-      getHolidaysForYear(standardCountries, year).map((h) => ({
-        name: h.name,
-        date: h.date,
-        countryCode: h.countryCode,
-        organizationId: orgId,
-      }))
-    );
-    if (publicHolidayRows.length > 0) {
-      await prisma.publicHoliday.createMany({
-        data: publicHolidayRows,
-        skipDuplicates: true,
-      });
-    }
+    // Public holidays for this year and next; the monthly job adds later
+    // years (src/lib/holiday-years.ts).
+    await addPublicHolidays(orgId, countries, holidayYears());
 
     // Create invited team members and send invite emails
     let invitesCreated = 0;

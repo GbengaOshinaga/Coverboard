@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SSP1_FORM_URL, ssp1Summary, type Ssp1Due } from "@/lib/ssp1";
+import { TermHint } from "@/components/ui/term-hint";
 import { HolidayOnLeavingCard } from "@/components/team/holiday-on-leaving-card";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -835,7 +836,8 @@ export default function EmployeeProfilePage({
               </div>
               <p className="mt-1 text-sm text-gray-500">
                 {formatEmploymentType(member.employmentType)} ·{" "}
-                {member.fte ? fteLabel(member.fte) : `FTE ${member.fteRatio}`} ·{" "}
+                {member.fte ? fteLabel(member.fte) : `FTE ${member.fteRatio}`}
+                <TermHint term="fte" className="mx-0.5" /> ·{" "}
                 {member.daysWorkedPerWeek} days/week
                 {member.daysFromPattern ? " (from working pattern)" : ""}
               </p>
@@ -869,6 +871,7 @@ export default function EmployeeProfilePage({
                   Export data (SAR)
                 </a>
               )}
+              {isAdmin && <TermHint term="sar" className="self-center" />}
               {isAdmin &&
                 (sessionUserId === undefined || sessionUserId !== memberId) &&
                 (member.isActive === false ? (

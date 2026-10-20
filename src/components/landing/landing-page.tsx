@@ -2,6 +2,11 @@
 
 import Link from "next/link";
 import {
+  STATUTORY_PAY_PLAN_NOTE,
+  StatutoryPayTrialButton,
+  StatutoryPayTrialNote,
+} from "./statutory-pay-trial";
+import {
   AlertTriangle,
   Phone,
   Users,
@@ -294,14 +299,10 @@ const findCoverPoints = [
   },
 ];
 
-// Kept deliberately quiet: cover is the pitch. Per-plan detail lives in pricing.
-const hrEssentials = [
-  "Holiday entitlement",
-  "all UK statutory leave types",
-  "fit notes",
-  "6-year holiday records",
-  "audit trail",
-];
+// Kept deliberately quiet: cover is the pitch. Split by plan so nothing paid
+// reads as free (planFeatures.ts, plans.ts); per-plan detail lives in pricing.
+const hrEssentials = ["Holiday for every contract type", "all UK statutory leave types", "fit notes", "6-year holiday records"];
+const hrEssentialsOnPaidPlans = ["statutory pay", "right to work checks", "an audit log"];
 
 function FeaturesSection() {
   return (
@@ -330,7 +331,7 @@ function FeaturesSection() {
 
         <p className="mt-8 text-center text-sm text-gray-500">
           <span className="font-medium text-gray-700">Plus the HR essentials:</span>{" "}
-          {hrEssentials.join(" · ")}.{" "}
+          {hrEssentials.join(" · ")}. On paid plans: {hrEssentialsOnPaidPlans.join(" · ")}.{" "}
           <Link href="/pricing" className="whitespace-nowrap text-brand-600 hover:text-brand-700">
             See what&apos;s in each plan
           </Link>
@@ -452,7 +453,12 @@ function StatutoryPaySection() {
     <section id="statutory-pay" className="py-20 md:py-28 bg-white">
       <div className="mx-auto max-w-6xl px-6 grid md:grid-cols-2 gap-10 md:gap-14 items-center">
         <div className="md:order-2">
-          <p className="text-sm font-semibold text-brand-600 mb-3">Statutory pay</p>
+          <p className="text-sm font-semibold text-brand-600 mb-3">
+            Statutory pay{" "}
+            <span className="ml-1 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700 ring-1 ring-brand-100">
+              {STATUTORY_PAY_PLAN_NOTE}
+            </span>
+          </p>
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight">
             The pay that goes with the leave, worked out.
           </h2>
@@ -472,13 +478,17 @@ function StatutoryPaySection() {
               </li>
             ))}
           </ul>
-          <Link
-            href="/guides/uk-statutory-leave-types"
-            className="mt-8 inline-flex items-center gap-1 text-sm font-medium text-brand-600 hover:text-brand-700"
-          >
-            UK statutory leave types explained
-            <ArrowRight size={14} aria-hidden />
-          </Link>
+          <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-3">
+            <StatutoryPayTrialButton />
+            <Link
+              href="/guides/uk-statutory-leave-types"
+              className="inline-flex items-center gap-1 text-sm font-medium text-brand-600 hover:text-brand-700"
+            >
+              UK statutory leave types explained
+              <ArrowRight size={14} aria-hidden />
+            </Link>
+          </div>
+          <StatutoryPayTrialNote className="mt-3 max-w-md" />
         </div>
 
         <div className="md:order-1 rounded-lg border border-gray-200 bg-white p-5" aria-hidden>

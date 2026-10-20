@@ -1,7 +1,7 @@
 <!-- Internal engineering note — NOT published to the GitBook help centre. -->
 # Decision log
 
-_Last updated: 2026-10-19_
+_Last updated: 2026-10-20_
 
 Why Coverboard works the way it does. The [feature guide](../guide/) says **what** the app does; this page says **why**, so nobody undoes a decision without knowing what it protects against. Many of these came from tester findings, and several were got wrong at least once before.
 
@@ -85,7 +85,8 @@ If you change one, update its entry and add the date. If you make a new decision
   - the colour is neutral because colours give the type away.
 - **Kept as is on 2026-10-09:** no team setting and no "visible to colleagues" switch per leave type. Revisit only if customers ask.
 - **Protects against:** health data leaking to colleagues.
-- **Where:** `src/lib/leave-privacy.ts` (the single rule), used by the dashboard, the overlap check, `regionCover.ts` cover checks and Slack. Staff's calendar only shows their own leave. Sickness-note redaction is in `src/app/api/leave-requests/`.
+- **Where:** `src/lib/leave-privacy.ts` (the single rule), used by the dashboard, the overlap check, `regionCover.ts` cover checks and Slack. Staff's calendar shows colleagues as "Away" too (since 2026-10-20, via `/api/leave-calendar`, which sends only dates, names and the type as the viewer may see it); before, it showed only their own leave. Sickness-note redaction is in `src/app/api/leave-requests/`.
+- **The same applies to the Team list (2026-10-20):** staff see colleagues' names, roles, departments, locations and whether they're off, not their email, contract, FTE, start date or leaving date. Admins and managers see everything, and a colleague's own page is theirs only. Slack and Jira settings are shown to admins and managers only. `GET /api/team-members`.
 
 ### 9. Slack channel posts never include the leave type or note
 - **Why:** everyone in the channel can read them, whatever their role. This follows from 8.
@@ -272,11 +273,20 @@ If you change one, update its entry and add the date. If you make a new decision
 - **Protects against:** an employee left without SSP or the form to claim benefits; telling an employer to pay nothing because earnings weren't entered.
 - **Where:** `src/lib/ssp1.ts` (the form, reasons, deadlines, run-out dates); `sspEarningsFromRows()` in `src/lib/smpCalculator.ts`; `calculateSspEntitlement()` in `src/lib/uk-compliance.ts`.
 
+### 27. Sickness is recorded, not approved (2026-10-19)
+- **Decision:** sickness is recorded as approved straight away, whether a manager logs it or the person reports it themselves ("I'm off sick", the request form or Slack). Self-reported sickness has no reviewer, and admins and managers are emailed "X is off sick" so they can arrange cover. Other leave still waits for approval.
+- **Why:**
+  - there's nothing to approve about being ill, and a carer ringing in at 7am needs it on the rota now, not in a queue;
+  - staff only had "Request time off", where sickness was one of a long list and then waited for approval.
+- **Privacy:** the email says who and when, never the note (see 8). There's no Slack channel post, because staff can see the channel and see colleagues' leave only as "Away".
+- **Protects against:** a reported absence sitting unapproved while the shift goes uncovered.
+- **Where:** `selfReportedSickness` in `src/lib/leave-requests/create.ts`; `src/app/(dashboard)/my-time-off/off-sick/page.tsx`; `emailSicknessReported()`.
+
 ---
 
 ## Engineering conventions
 
-### 27. Each rule lives in one place
+### 28. Each rule lives in one place
 - **Decision:** a rule lives in one helper, and every route, page and Slack handler calls it. Examples:
   - the working week (21);
   - leave privacy (8);
@@ -284,18 +294,19 @@ If you change one, update its entry and add the date. If you make a new decision
   - the last-admin check (7);
   - leave booking (`createLeaveRequest()`) and approving (`reviewLeaveRequest()`), shared by the web app and Slack.
 - **Why:** copies drift apart. Several tester findings were one surface missing a rule that another applied.
+- **Pricing copy follows the gates (2026-10-20):** what `src/config/pricing.ts` lists per plan must match `planFeatures.ts` and `plans.ts`. Anything not gated is on every plan, so it's listed under Free; the in-app Change plan page reads the same config. Pricing had listed ungated features (pro-rata, carry-over, bank holiday regions, statutory leave types, SAR export) under paid plans.
 
-### 28. The Stripe webhook takes its dependencies as a parameter
+### 29. The Stripe webhook takes its dependencies as a parameter
 - **Decision:** handlers get their database and email functions through `WebhookDeps`, so tests can run every event in any order without Stripe or a database.
 - **Where:** `src/lib/stripe-webhook-handlers.ts` and its `.test.ts`.
 
-### 29. Hand-written migrations are checked without a shadow database
+### 30. Hand-written migrations are checked without a shadow database
 - **Never** pass a real database as `--shadow-database-url`. Prisma resets the shadow database, and that wiped the local one on 2026-10-10.
 - **Instead,** check drift with:
   - `prisma migrate status`; or
   - `prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma`.
 
-### 30. The two sets of docs
+### 31. The two sets of docs
 - **Help pages in `docs/*.md`:** for customers. Rewrite them when something they describe changes.
 - **The feature guide in `docs/guide/`:** for us. Add changes as a dated updates block in `content.py`, not by rewriting entries. Then run:
   - `check.py --links` first, which fails on a missing code path or broken legal link;

@@ -22,6 +22,7 @@ export default async function NewRequestPage() {
       requiresEvidence: true,
       minNoticeDays: true,
       allowanceUnit: true,
+      defaultDays: true,
     },
     orderBy: { name: "asc" },
   });

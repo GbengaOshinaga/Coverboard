@@ -201,6 +201,8 @@ export async function POST(request: Request) {
           ? { smpInfo: result.smpInfo, shppInfo: result.shppInfo, sppInfo: result.sppInfo, sncpInfo: result.sncpInfo }
           : { smpInfo: null, shppInfo: null, sppInfo: null, sncpInfo: null }),
         firstRequest: result.firstRequest,
+        autoApproved: result.autoApproved,
+        sicknessReported: result.sicknessReported,
       },
       { status: 201 }
     );

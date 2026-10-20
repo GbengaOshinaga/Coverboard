@@ -47,6 +47,8 @@ When an employee is too ill to work, you must pay SSP. **The rules changed on 6 
 - **SSP running out:** by the start of week 23 of SSP. The report warns from week 22, or as soon as the absence booked runs past the day SSP ends.
 - **A leaver still off sick:** SSP stops on their last day, so the form is due within 7 days. The leaving dialog says so before you save.
 
+**Reporting sickness.** Staff press **I'm off sick** on their dashboard or My time off, and give their first day and when they expect to be back. It's recorded straight away (there's nothing to approve) and admins and managers are emailed so they can arrange cover; the email doesn't include their note. Managers can still record it for someone who rings in, with **Log someone's sickness**. Only admins and managers can extend it later.
+
 **Fit notes.** Employees can self-certify sickness for up to 7 calendar days. After that, a fit note from a GP is required. Mark this on the leave request using the **Evidence provided** flag.
 
 Coverboard pays from day 1 with no earnings gate, caps the rate at 80% of average weekly earnings, calculates the daily figure using qualifying days per week, and tracks the cumulative 28-week ceiling automatically. The created leave request returns an `sspInfo` block with eligibility, daily rate, days paid this request, cumulative days paid, and remaining days. (Sickness that started before 6 April 2026 still serves the 3 waiting days and the old earnings gate for its pre-reform portion.)

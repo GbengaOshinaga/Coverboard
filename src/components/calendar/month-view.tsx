@@ -39,8 +39,20 @@ type DailyCoverInput = {
   coverRequired: boolean;
 };
 
-const WEEKDAYS_FULL = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const WEEKDAYS_SHORT = ["S", "M", "T", "W", "T", "F", "S"];
+// UK weeks start on Monday.
+const WEEKDAYS_FULL = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const WEEKDAYS_SHORT = ["M", "T", "W", "T", "F", "S", "S"];
+export const WEEK_STARTS_ON = 1 as const;
+
+/** The days on screen: whole weeks covering the month, or the week of `date`. */
+export function calendarRange(date: Date, view: "month" | "week"): { start: Date; end: Date } {
+  return view === "week"
+    ? { start: startOfWeek(date, { weekStartsOn: WEEK_STARTS_ON }), end: endOfWeek(date, { weekStartsOn: WEEK_STARTS_ON }) }
+    : {
+        start: startOfWeek(startOfMonth(date), { weekStartsOn: WEEK_STARTS_ON }),
+        end: endOfWeek(endOfMonth(date), { weekStartsOn: WEEK_STARTS_ON }),
+      };
+}
 
 export function MonthView({
   currentDate,
@@ -50,6 +62,7 @@ export function MonthView({
   coverByDate,
   onPrevMonth,
   onNextMonth,
+  view = "month",
 }: {
   currentDate: Date;
   leaves: LeaveData[];
@@ -59,14 +72,10 @@ export function MonthView({
   coverByDate?: Map<string, DailyCoverInput>;
   onPrevMonth: () => void;
   onNextMonth: () => void;
+  view?: "month" | "week";
 }) {
-  const days = useMemo(() => {
-    const monthStart = startOfMonth(currentDate);
-    const monthEnd = endOfMonth(currentDate);
-    const calStart = startOfWeek(monthStart);
-    const calEnd = endOfWeek(monthEnd);
-    return eachDayOfInterval({ start: calStart, end: calEnd });
-  }, [currentDate]);
+  const days = useMemo(() => eachDayOfInterval(calendarRange(currentDate, view)), [currentDate, view]);
+  const unit = view === "week" ? "week" : "month";
 
   function getEventsForDay(day: Date): CalendarEvent[] {
     return leaves
@@ -122,13 +131,15 @@ export function MonthView({
       {/* Header */}
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-base font-semibold text-gray-900 sm:text-lg">
-          {format(currentDate, "MMMM yyyy")}
+          {view === "week"
+            ? `${format(days[0], "d MMM")} – ${format(days[6], "d MMM yyyy")}`
+            : format(currentDate, "MMMM yyyy")}
         </h2>
         <div className="flex items-center gap-1 sm:gap-2">
           <button
             onClick={onPrevMonth}
             className="rounded-md border border-gray-300 p-1.5 text-gray-700 hover:bg-gray-50 sm:px-3 sm:py-1.5"
-            aria-label="Previous month"
+            aria-label={`Previous ${unit}`}
           >
             <ChevronLeft className="h-4 w-4 sm:hidden" />
             <span className="hidden sm:inline text-sm font-medium">Prev</span>
@@ -136,7 +147,7 @@ export function MonthView({
           <button
             onClick={onNextMonth}
             className="rounded-md border border-gray-300 p-1.5 text-gray-700 hover:bg-gray-50 sm:px-3 sm:py-1.5"
-            aria-label="Next month"
+            aria-label={`Next ${unit}`}
           >
             <ChevronRight className="h-4 w-4 sm:hidden" />
             <span className="hidden sm:inline text-sm font-medium">Next</span>
@@ -166,12 +177,13 @@ export function MonthView({
               <DayCell
                 key={day.toISOString()}
                 date={day}
-                isCurrentMonth={isSameMonth(day, currentDate)}
+                isCurrentMonth={view === "week" || isSameMonth(day, currentDate)}
                 isToday={isToday(day)}
                 events={getEventsForDay(day)}
                 coverShifts={getCoverShiftsForDay(day)}
                 holidays={getHolidaysForDay(day)}
                 cover={getCoverForDay(day)}
+                expanded={view === "week"}
               />
             ))}
           </div>

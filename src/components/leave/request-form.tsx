@@ -8,6 +8,13 @@ import { Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import {
+  compareLeaveTypesForList,
+  leaveTypeGroup,
+  leaveTypeListHint,
+  leaveTypeListName,
+} from "@/lib/leave-type-labels";
+import { glossaryForLeaveType } from "@/lib/glossary";
 import { useToast } from "@/components/ui/toast";
 import { OverlapWarning } from "./overlap-warning";
 import { BalanceIndicator } from "./balance-indicator";
@@ -26,6 +33,8 @@ type LeaveType = {
   minNoticeDays: number;
   /** WEEKS for statutory family leave (shown in weeks as well as days). */
   allowanceUnit?: "DAYS" | "WEEKS";
+  /** The type's allowance, in its unit. */
+  defaultDays: number;
 };
 
 type OverlapData = {
@@ -135,9 +144,14 @@ export function RequestForm({
     if (n.includes("compassionate"))
       return "We hope everything's okay. Just the essentials below — you can add more later if you need to.";
     if (n.includes("ssp") || n.includes("sick"))
-      return "Hope you feel better soon. Only the essentials below — you don't need to share a diagnosis.";
+      return forSomeoneElse
+        ? "Hope they feel better soon. Only the essentials below — no diagnosis needed."
+        : "Hope you feel better soon. This is recorded straight away and your managers are told; you don't need to share a diagnosis.";
     return null;
-  }, [selectedLeaveType]);
+  }, [selectedLeaveType, forSomeoneElse]);
+
+  // What the chosen type means, in plain English (src/lib/glossary.ts).
+  const selectedTypeMeaning = selectedLeaveType ? glossaryForLeaveType(selectedLeaveType.name) : null;
 
   const selectedBalance = useMemo(
     () => balances.find((b) => b.leaveTypeId === leaveTypeId) ?? null,
@@ -318,9 +332,13 @@ export function RequestForm({
 
       if (forSomeoneElse) {
         toast(`Recorded for ${subjectName ?? "them"} as approved. They've been emailed.`, "success");
+      } else if (data.sicknessReported) {
+        toast("Recorded: you're off sick. Your managers have been told. Get well soon.", "success");
       } else if (data.firstRequest) {
         toast(
-          "🎉 Your first request is in! You'll hear back once it's reviewed.",
+          data.autoApproved
+            ? "🎉 Your first request is in, and approved: there's no one else on the team to approve it."
+            : "🎉 Your first request is in! You'll hear back once it's reviewed.",
           "success"
         );
       }
@@ -373,16 +391,11 @@ export function RequestForm({
     }
   }
 
-  const leaveTypeOptions = leaveTypes.map((lt) => {
-    const bal = balances.find((b) => b.leaveTypeId === lt.id);
-    // Neonatal leave depends on the time in care, not the type's allowance:
-    // the box under the dates shows what's left.
-    if (!bal || /neonatal/i.test(lt.name)) return { value: lt.id, label: lt.name };
-    const left =
-      bal.unit === "hours"
-        ? `${bal.remaining.toFixed(1)} hrs left`
-        : `${bal.remaining} days left`;
-    return { value: lt.id, label: `${lt.name} (${left})` };
+  // Everyday leave first, family leave as its own group (leave-type-labels.ts).
+  const leaveTypeOptions = [...leaveTypes].sort(compareLeaveTypesForList).map((lt) => {
+    const hint = leaveTypeListHint(lt, balances.find((b) => b.leaveTypeId === lt.id) ?? null);
+    const name = leaveTypeListName(lt.name);
+    return { value: lt.id, label: hint ? `${name} (${hint})` : name, group: leaveTypeGroup(lt.name) };
   });
 
   return (
@@ -459,6 +472,11 @@ export function RequestForm({
         onChange={(e) => setLeaveTypeId(e.target.value)}
         required
       />
+      {selectedTypeMeaning && (
+        <p className="-mt-4 text-xs text-gray-500">
+          <span className="font-medium text-gray-700">{selectedTypeMeaning.term}:</span> {selectedTypeMeaning.meaning}
+        </p>
+      )}
 
       {/* Unpaid parental leave: which child (limits are per child) */}
       {isUnpaidParental && currentUserId && (

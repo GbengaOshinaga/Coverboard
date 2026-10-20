@@ -10,6 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { TermHint } from "@/components/ui/term-hint";
 
 /**
  * Regional cover analytics section for the reports page. Scale-tier.
@@ -126,6 +127,7 @@ export function RegionalCoverSection() {
         <CardTitle className="flex items-center gap-2 text-base">
           <Building2 className="h-4 w-4 text-brand-600" />
           Cover by location — last 13 weeks
+          <TermHint term="coverByLocation" />
         </CardTitle>
         <CardDescription>
           Each square is one week. Green = met cover every day; amber = 1–2

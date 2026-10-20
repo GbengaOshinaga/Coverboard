@@ -5,6 +5,7 @@ import { Download } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { WorkingTimeRow } from "@/lib/working-time";
+import { TermHint } from "@/components/ui/term-hint";
 
 const fmt = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
 
@@ -40,7 +41,7 @@ export function WorkingTimeSection() {
       <CardHeader>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <CardTitle>Working time</CardTitle>
+            <CardTitle className="flex items-center gap-1">Working time <TermHint term="optOut48" /></CardTitle>
             <CardDescription>
               The last 17 full weeks{data ? ` (${fmt(data.from)} – week of ${fmt(data.toWeekStarting)})` : ""}:
               average weekly hours against the 48-hour limit, and rest under 11

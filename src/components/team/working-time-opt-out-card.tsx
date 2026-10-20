@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/toast";
 import { optOutInForce } from "@/lib/working-time";
+import { TermHint } from "@/components/ui/term-hint";
 
 const day = (d: string | null | undefined) => (d ? d.slice(0, 10) : "");
 const fmt = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-GB", { timeZone: "UTC" });
@@ -60,7 +61,7 @@ export function WorkingTimeOptOutCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>48-hour week opt-out</CardTitle>
+        <CardTitle className="flex items-center gap-1">48-hour week opt-out <TermHint term="optOut48" /></CardTitle>
         <CardDescription>
           Staff can choose to work more than 48 hours a week on average by
           opting out in writing. It must be voluntary, and they can cancel it

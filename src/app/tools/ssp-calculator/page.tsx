@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getAppBaseUrl } from "@/lib/app-url";
 import { SspCalculator } from "./calculator";
+import { StatutoryPayTrialButton, StatutoryPayTrialNote } from "@/components/landing/statutory-pay-trial";
 
 export const dynamic = "force-static";
 
@@ -159,12 +160,8 @@ export default function SspCalculatorPage() {
           employee — daily rate, the 28-week cap and linked spells — using the
           exact method behind this calculator.
         </p>
-        <Link
-          href="/signup"
-          className="mt-4 inline-block rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
-        >
-          Start free
-        </Link>
+        <StatutoryPayTrialButton className="mt-4" />
+        <StatutoryPayTrialNote className="mt-2" />
       </aside>
     </article>
   );

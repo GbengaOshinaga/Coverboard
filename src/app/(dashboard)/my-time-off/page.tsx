@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Plus, CalendarHeart, CalendarDays } from "lucide-react";
+import { Plus, CalendarHeart, CalendarDays, Thermometer } from "lucide-react";
 import { requireActiveSession } from "@/lib/require-active-session";
 import { leaveYearForOrg } from "@/lib/leave-year-server";
 import { prisma } from "@/lib/prisma";
@@ -118,13 +118,22 @@ export default async function MyTimeOffPage() {
             Your balance, upcoming time off, and request history.
           </p>
         </div>
-        <Link
-          href="/requests/new"
-          className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-700"
-        >
-          <Plus className="h-4 w-4" />
-          Request time off
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/my-time-off/off-sick"
+            className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50"
+          >
+            <Thermometer className="h-4 w-4" />
+            I&apos;m off sick
+          </Link>
+          <Link
+            href="/requests/new"
+            className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-700"
+          >
+            <Plus className="h-4 w-4" />
+            Request time off
+          </Link>
+        </div>
       </div>
 
       {/* Staff land here, so cover requests waiting on them show here too. */}

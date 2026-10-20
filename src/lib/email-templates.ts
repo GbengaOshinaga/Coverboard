@@ -485,6 +485,35 @@ export function leaveRequestSubmittedEmail(data: {
   };
 }
 
+// ─── Someone reported themselves off sick (to approvers) ────────────
+
+export function sicknessReportedEmail(data: {
+  employeeName: string;
+  startDate: Date;
+  endDate: Date;
+  dashboardUrl: string;
+}): { subject: string; html: string } {
+  return {
+    subject: `${data.employeeName} is off sick`,
+    html: layout(`
+      <h1 style="margin:0 0 8px;font-size:20px;color:#111827;">${esc(data.employeeName)} is off sick</h1>
+      <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
+        They've reported it themselves, and it's recorded: there's nothing to approve.
+        Check whether you need cover.
+      </p>
+      <div style="background-color:#f9fafb;border-radius:6px;padding:16px;margin-bottom:16px;">
+        <table cellpadding="0" cellspacing="0" style="width:100%;font-size:14px;">
+          <tr>
+            <td style="padding:4px 0;color:#6b7280;width:100px;">Expected</td>
+            <td style="padding:4px 0;color:#111827;">${formatDateRange(data.startDate, data.endDate)}</td>
+          </tr>
+        </table>
+      </div>
+      ${button("Check cover", data.dashboardUrl)}
+    `),
+  };
+}
+
 // ─── Leave Request Status Update (to requester) ─────────────────────
 
 export function leaveRequestStatusEmail(data: {

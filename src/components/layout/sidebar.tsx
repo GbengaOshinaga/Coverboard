@@ -58,6 +58,22 @@ export function Sidebar({
     };
   }, [pathname]);
 
+  // Requests waiting for this admin or manager to approve, shown as a count.
+  const [pendingApprovals, setPendingApprovals] = useState(0);
+  useEffect(() => {
+    if (role !== "ADMIN" && role !== "MANAGER") return;
+    let cancelled = false;
+    fetch("/api/leave-requests/pending-count")
+      .then((r) => (r.ok ? r.json() : { count: 0 }))
+      .then((d: { count: number }) => {
+        if (!cancelled) setPendingApprovals(d.count);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname, role]);
+
   // Close drawer on route change
   useEffect(() => {
     onMobileClose?.();
@@ -113,6 +129,14 @@ export function Sidebar({
               {item.href === "/cover-requests" && pendingCover > 0 && (
                 <span className="ml-auto rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800">
                   {pendingCover}
+                </span>
+              )}
+              {item.href === "/requests" && pendingApprovals > 0 && (
+                <span
+                  className="ml-auto rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800"
+                  aria-label={`${pendingApprovals} waiting for approval`}
+                >
+                  {pendingApprovals}
                 </span>
               )}
             </Link>

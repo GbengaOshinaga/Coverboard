@@ -261,12 +261,22 @@ export default function RequestsPage() {
         <TableSkeleton rows={4} />
       ) : requests.length === 0 ? (
         <div className="py-12 text-center">
-          <p className="text-sm text-gray-400">No leave requests found.</p>
-          <Link href="/requests/new">
-            <Button variant="outline" className="mt-3">
-              Submit your first request
-            </Button>
-          </Link>
+          {filter === "PENDING" ? (
+            <p className="text-sm text-gray-500">
+              {isReviewer ? "All caught up: nothing is waiting for approval." : "Nothing is waiting for approval."}
+            </p>
+          ) : filter === "ALL" ? (
+            <>
+              <p className="text-sm text-gray-400">No leave requests yet.</p>
+              <Link href="/requests/new">
+                <Button variant="outline" className="mt-3">
+                  Request time off
+                </Button>
+              </Link>
+            </>
+          ) : (
+            <p className="text-sm text-gray-400">No {filter.toLowerCase()} requests.</p>
+          )}
         </div>
       ) : (
         <div className="space-y-3">
