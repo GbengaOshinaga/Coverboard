@@ -1008,3 +1008,14 @@ _add("requests", how=["Approve and Reject are labelled buttons. Rejecting asks f
      code=[("src/lib/leave-requests/review.ts", "reviewNote")])
 _add("calendar", how=["People also see their own requests waiting for approval, outlined and marked “(pending)”; nobody else's pending requests show."])
 _add("team", how=["The edit form explains each role, lists the UK first and, for teams with locations, links to the person's working pattern."])
+
+# ════════════════════════════════════════════════════════════════════════
+# Updates, 21 Oct 2026: Starter gets sick pay; Help page; fit-note alerts.
+# ════════════════════════════════════════════════════════════════════════
+_feature("ssp").update(plan="Starter+")
+_feature("fitnotes").update(plan="Recording: all · alerts: Starter+")
+_feature("earnings").update(plan="Starter+ (holiday pay: Growth+)")
+_feature("planlimits").update(plan="Free, Starter, Growth, Scale")
+_add("planlimits", how=["Scale is capped at 200 people (from 21 Oct 2026); Pro is the only plan with no limit. The same checks apply as for the other caps: adding people, CSV import, onboarding invites, bringing a leaver back, and admins held at Billing while the team is over the limit."])
+_add("billing", how=["Starter (£19) includes SSP, the SSP report, fit-note alerts and weekly earnings records; family leave pay, holiday pay, the payroll report, Bradford and right to work are Growth and above. Pro is described as for groups that need a record of who saw what."])
+_add("fitnotes", how=["An absence is only listed as missing a fit note if it lasted more than 7 days; a short self-certified absence is never listed, however long ago it was. The dashboard, the leave operations report and the Monday email share this rule."])

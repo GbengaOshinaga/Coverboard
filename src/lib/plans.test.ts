@@ -56,7 +56,7 @@ test("employee caps match the launch pricing structure", () => {
   assert.equal(PLAN_MAX_EMPLOYEES.FREE, 5);
   assert.equal(PLAN_MAX_EMPLOYEES.STARTER, 15);
   assert.equal(PLAN_MAX_EMPLOYEES.GROWTH, 75);
-  assert.equal(PLAN_MAX_EMPLOYEES.SCALE, 0);
+  assert.equal(PLAN_MAX_EMPLOYEES.SCALE, 200);
   assert.equal(PLAN_MAX_EMPLOYEES.PRO, 0);
 });
 
@@ -89,14 +89,22 @@ test("maxEmployeesForPlan: same shape as maxAdminsForPlan", () => {
   assert.equal(maxEmployeesForPlan("FREE"), 5);
   assert.equal(maxEmployeesForPlan("STARTER"), 15);
   assert.equal(maxEmployeesForPlan("GROWTH"), 75);
-  assert.equal(maxEmployeesForPlan("SCALE"), Infinity);
+  assert.equal(maxEmployeesForPlan("SCALE"), 200);
   assert.equal(maxEmployeesForPlan("PRO"), Infinity);
   assert.equal(maxEmployeesForPlan("TRIAL"), Infinity);
   assert.equal(maxEmployeesForPlan("LOCKED"), 0);
 });
 
-test("statutory pay, earnings, Bradford and right to work are Growth and above", () => {
-  for (const f of ["payroll_report", "ssp_tracking", "parental_leave_tracker", "bradford_factor", "right_to_work", "earnings_history", "holiday_pay_calculator"]) {
+test("sick pay and earnings are Starter and above", () => {
+  for (const f of ["ssp_tracking", "earnings_history"]) {
+    assert.equal(hasFeatureForEnum("FREE", f), false, f);
+    assert.equal(hasFeatureForEnum("STARTER", f), true, f);
+    assert.equal(hasFeatureForEnum("TRIAL", f), true, f);
+  }
+});
+
+test("other statutory pay, Bradford and right to work are Growth and above", () => {
+  for (const f of ["payroll_report", "parental_leave_tracker", "bradford_factor", "right_to_work", "holiday_pay_calculator"]) {
     assert.equal(hasFeatureForEnum("STARTER", f), false, f);
     assert.equal(hasFeatureForEnum("FREE", f), false, f);
     assert.equal(hasFeatureForEnum("GROWTH", f), true, f);

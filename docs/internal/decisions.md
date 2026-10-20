@@ -111,8 +111,11 @@ If you change one, update its entry and add the date. If you make a new decision
   - Free: 5 people, 1 admin;
   - Starter: 15 people, 2 admins;
   - Growth: 75 people, 5 admins;
-  - Scale and Pro: unlimited.
+  - Scale: 200 people, unlimited admins;
+  - Pro: unlimited.
 - **Why Growth is capped at 75 (2026-10-08):** so a large group can't get every statutory pay feature for £49. Groups go to Scale.
+- **Why Scale is capped at 200 (2026-10-21):** unlimited at £99 was about 50p a head at 200 and 20p at 500, far below what a large group would pay. Above 200, teams move to Pro, the only plan with no limit.
+- **Why Starter includes SSP (2026-10-21):** every employer pays sick pay, so it's the first pay a small team needs; family leave pay is rare at that size. Starter had been Free with more people, and a team of 10 had to pay £49 for sick pay. Starter now has SSP, the SSP report, fit-note alerts and weekly earnings records (SSP needs earnings for the 80% limit and the £0 rule). Family leave pay, holiday pay, the payroll report, Bradford and right to work stay on Growth.
 - **Where:** `src/lib/plans.ts` holds the numbers; `src/lib/plan-headcount.ts` the checks.
 
 ### 12. Limits apply as the plan a team is moving to (2026-10-09)

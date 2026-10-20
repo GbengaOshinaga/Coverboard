@@ -85,13 +85,15 @@ export const PLAN_DEFAULT_MAX_ADMINS: Record<SubscriptionPlan, number> = {
  * roster API rejects invites past this limit; existing rosters that exceed
  * the limit (e.g. after a downgrade) are not retroactively deactivated.
  * Growth is capped (8 Oct 2026) so a large group doesn't get every statutory
- * pay feature at a single-home price; groups move up to Scale.
+ * pay feature at a single-home price; groups move up to Scale. Scale is
+ * capped at 200 (21 Oct 2026), so the largest groups move up to Pro, the
+ * only plan with no limit.
  */
 export const PLAN_MAX_EMPLOYEES: Record<SubscriptionPlan, number> = {
   FREE: 5,
   STARTER: 15,
   GROWTH: 75,
-  SCALE: 0,
+  SCALE: 200,
   PRO: 0,
 };
 

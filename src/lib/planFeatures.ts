@@ -38,17 +38,19 @@ const STARTER_FEATURES = [
   "pro_rata",
   "carry_over_rules",
   "bank_holiday_config",
+  // Sick pay worked out (and the fit-note alerts that go with it). SSP needs
+  // weekly earnings for the 80% limit and the £0 rule, so earnings come too.
+  "ssp_tracking",
+  "earnings_history",
 ] as const;
 
 const GROWTH_FEATURES = [
   ...STARTER_FEATURES,
-  "ssp_tracking",
   "parental_leave_tracker",
   "kit_split_days",
   "right_to_work",
   "bradford_factor",
   "holiday_pay_calculator",
-  "earnings_history",
   // Statutory pay and holiday pay for each pay period (/api/reports/payroll).
   "payroll_report",
 ] as const;

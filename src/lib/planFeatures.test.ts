@@ -31,8 +31,11 @@ test("starter plan inherits free features + adds its own", () => {
   assert.equal(hasFeature("starter", "bank_holiday_config"), true);
 });
 
-test("starter plan does NOT get UK statutory features", () => {
-  assert.equal(hasFeature("starter", "ssp_tracking"), false);
+test("starter plan gets sick pay and earnings, not the other statutory features", () => {
+  assert.equal(hasFeature("starter", "ssp_tracking"), true);
+  assert.equal(hasFeature("starter", "earnings_history"), true);
+  assert.equal(hasFeature("free", "ssp_tracking"), false);
+  assert.equal(hasFeature("free", "earnings_history"), false);
   assert.equal(hasFeature("starter", "bradford_factor"), false);
   assert.equal(hasFeature("starter", "right_to_work"), false);
   assert.equal(hasFeature("starter", "parental_leave_tracker"), false);

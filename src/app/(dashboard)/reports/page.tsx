@@ -665,8 +665,9 @@ export default function ReportsPage() {
           </div>
           {userPlan && !hasGrowthReports && (
             <p className="text-xs text-gray-500">
-              Bradford Factor, SSP, parental leave, right to work and the payroll
-              report with statutory pay are on the Growth plan.{" "}
+              {hasFeatureForEnum((userPlan as AnyPlan | undefined) ?? null, "ssp_tracking")
+                ? "Bradford Factor, parental leave, right to work and the payroll report with statutory pay are on the Growth plan."
+                : "SSP is on the Starter plan; Bradford Factor, parental leave, right to work and the payroll report with statutory pay are on Growth."}{" "}
               {isAdmin ? (
                 <Link href="/settings/billing/change-plan" className="font-medium text-brand-600 hover:text-brand-700">
                   See plans

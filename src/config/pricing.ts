@@ -58,13 +58,16 @@ export const PRICING: PricingConfig = {
     },
     {
       name: "Starter",
-      tagline: "For growing teams",
+      tagline: "For small teams, with sick pay worked out",
       price_monthly: 19,
       headcount: "Up to 15 employees",
       cta: "Start free trial",
       highlighted: false,
       features: [
         "Everything in Free",
+        "Statutory Sick Pay worked out, with the SSP report",
+        "Weekly fit note alerts by email",
+        "Weekly earnings records",
         "Up to 2 admin users",
       ],
     },
@@ -77,10 +80,9 @@ export const PRICING: PricingConfig = {
       highlighted: true,
       features: [
         "Everything in Starter",
-        "Statutory pay worked out: SSP, SMP, SAP, SPP, ShPP, neonatal",
+        "Family leave pay worked out: SMP, SAP, SPP, ShPP, neonatal",
         "Every statutory payment in the payroll report",
         "52-week holiday pay, and what leavers are owed",
-        "Weekly fit note alerts by email",
         "Bradford Factor reporting",
         "Right to work tracking",
         "Up to 5 admin users",
@@ -90,7 +92,7 @@ export const PRICING: PricingConfig = {
       name: "Scale",
       tagline: "For groups with several locations",
       price_monthly: 99,
-      headcount: "Unlimited employees",
+      headcount: "Up to 200 employees",
       cta: "Start free trial",
       highlighted: false,
       features: [
@@ -106,7 +108,7 @@ export const PRICING: PricingConfig = {
     },
     {
       name: "Pro",
-      tagline: "Enterprise-ready",
+      tagline: "For groups that need a record of who saw what",
       price_monthly: 179,
       headcount: "Unlimited employees",
       cta: "Start free trial",
