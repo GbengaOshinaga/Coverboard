@@ -49,6 +49,7 @@ export async function notifyRequestStatusChange(data: {
   startDate: Date;
   endDate: Date;
   reviewerName: string;
+  reviewNote?: string | null;
 }) {
   if (!isSlackAppConfigured()) return;
 
@@ -69,6 +70,7 @@ export async function notifyRequestStatusChange(data: {
       endDate: data.endDate,
       reviewerName: data.reviewerName,
       daysRequested,
+      reviewNote: data.reviewNote,
     });
 
     await slack.chat.postMessage({

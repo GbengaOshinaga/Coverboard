@@ -24,6 +24,8 @@ const updateSchema = z.object({
   evidenceProvided: z.boolean().optional(),
   splCurtailmentConfirmed: z.boolean().optional(),
   coverOverride: z.boolean().optional(),
+  /** Rejecting: why (optional), shown to the employee. */
+  reviewNote: z.string().trim().max(500).optional(),
   /** Sickness only: move the end date (off longer, or back early). */
   endDate: isoDateSchema.optional(),
   /** Maternity: the due date, added or corrected after booking (sets the qualifying week). */
@@ -85,7 +87,8 @@ export async function PATCH(
       );
     }
 
-    const { status, kitDaysUsed, splitDaysUsed, evidenceProvided, splCurtailmentConfirmed, coverOverride, endDate } = parsed.data;
+    const { status, kitDaysUsed, splitDaysUsed, evidenceProvided, splCurtailmentConfirmed, coverOverride, endDate, reviewNote } =
+      parsed.data;
     const { expectedDueDate, matchedDate, shppClaimed, neonatalCareLastDay, neonatalCareFirstDay } = parsed.data;
 
     // Date changes stand alone so they can't be mixed with a status change.
@@ -141,6 +144,7 @@ export async function PATCH(
         },
         organizationId: orgId,
         coverOverride,
+        reviewNote,
         context: requestAuditContext(request),
       });
 

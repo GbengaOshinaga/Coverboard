@@ -85,10 +85,16 @@ export const GLOSSARY = {
 
 export type GlossaryKey = keyof typeof GLOSSARY;
 
+/** Which glossary entry explains a leave type, if any. */
+export function glossaryKeyForLeaveType(name: string): GlossaryKey | null {
+  if (/SSP|sick/i.test(name)) return "ssp";
+  if (/shared parental/i.test(name)) return "spl";
+  if (/maternity|adoption/i.test(name)) return "smp";
+  return null;
+}
+
 /** The glossary entry that explains a leave type, shown under it when it's chosen. */
 export function glossaryForLeaveType(name: string): GlossaryEntry | null {
-  if (/SSP|sick/i.test(name)) return GLOSSARY.ssp;
-  if (/shared parental/i.test(name)) return GLOSSARY.spl;
-  if (/maternity|adoption/i.test(name)) return GLOSSARY.smp;
-  return null;
+  const key = glossaryKeyForLeaveType(name);
+  return key ? GLOSSARY[key] : null;
 }

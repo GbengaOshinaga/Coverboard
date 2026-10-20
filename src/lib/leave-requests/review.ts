@@ -34,6 +34,8 @@ export type ReviewLeaveInput = {
   reviewer: ReviewActor;
   organizationId: string;
   coverOverride?: boolean;
+  /** Rejecting: why, if the approver says. Shown to the employee. */
+  reviewNote?: string | null;
   context?: AuditContext;
 };
 
@@ -63,6 +65,8 @@ export async function reviewLeaveRequest(
 ): Promise<ReviewLeaveResult> {
   const { requestId, decision, reviewer, organizationId, coverOverride, context } =
     input;
+  // A reason only goes with a rejection.
+  const reviewNote = decision === "REJECTED" ? input.reviewNote?.trim().slice(0, 500) || null : null;
 
   if (reviewer.role !== "ADMIN" && reviewer.role !== "MANAGER") {
     return {
@@ -129,6 +133,7 @@ export async function reviewLeaveRequest(
     status: decision,
     reviewedById: reviewer.id,
     reviewedAt: new Date(),
+    reviewNote,
   };
 
   // SMP or SAP for requests from before pay was tracked: the shared
@@ -180,6 +185,7 @@ export async function reviewLeaveRequest(
     startDate: updated.startDate,
     endDate: updated.endDate,
     reviewerName: reviewer.name,
+    reviewNote,
   }).catch((err) => console.error("Slack notification error:", err));
 
   emailRequestStatusChange({
@@ -190,6 +196,7 @@ export async function reviewLeaveRequest(
     startDate: updated.startDate,
     endDate: updated.endDate,
     reviewerName: reviewer.name,
+    reviewNote,
   }).catch((err) => console.error("Email notification error:", err));
 
   const actor = { id: reviewer.id, email: reviewer.email, role: reviewer.role };
@@ -214,6 +221,7 @@ export async function reviewLeaveRequest(
       ...(decision === "APPROVED" && coverOverride === true
         ? { coverOverride: true }
         : {}),
+      ...(reviewNote ? { reason: reviewNote } : {}),
     },
     context,
   });

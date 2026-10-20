@@ -9,6 +9,8 @@ export type CalendarEvent = {
   color: string;
   isStart: boolean;
   isEnd: boolean;
+  /** Their own request, still waiting for approval. */
+  pending?: boolean;
 };
 
 export type HolidayEvent = {
@@ -121,10 +123,15 @@ export function DayCell({
               event.isEnd && "rounded-r",
               !event.isStart && !event.isEnd && "rounded-none"
             )}
-            style={{ backgroundColor: event.color }}
-            title={`${event.userName} — ${event.leaveTypeName}`}
+            // Pending: outlined in the type's colour rather than filled.
+            style={
+              event.pending
+                ? { color: event.color, boxShadow: `inset 0 0 0 1px ${event.color}`, backgroundColor: "white" }
+                : { backgroundColor: event.color }
+            }
+            title={`${event.userName} — ${event.leaveTypeName}${event.pending ? " (waiting for approval)" : ""}`}
           >
-            {event.isStart || expanded ? event.userName : ""}
+            {event.isStart || expanded ? `${event.userName}${event.pending ? " (pending)" : ""}` : ""}
           </div>
         ))}
       </div>

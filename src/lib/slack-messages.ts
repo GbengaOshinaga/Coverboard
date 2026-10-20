@@ -239,8 +239,12 @@ export function buildStatusUpdateMessage(data: {
   endDate: Date;
   reviewerName: string;
   daysRequested: number;
+  /** Why it was rejected, if the approver said. */
+  reviewNote?: string | null;
 }): KnownBlock[] {
   const emoji = data.status === "APPROVED" ? ":white_check_mark:" : ":x:";
+  // Slack mrkdwn: &, < and > must be escaped in text people typed.
+  const note = data.reviewNote?.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const statusText = data.status === "APPROVED" ? "approved" : "rejected";
 
   return [
@@ -264,6 +268,9 @@ export function buildStatusUpdateMessage(data: {
         },
       ],
     },
+    ...(note
+      ? [{ type: "section" as const, text: { type: "mrkdwn" as const, text: `*Reason:* ${note}` } }]
+      : []),
   ];
 }
 

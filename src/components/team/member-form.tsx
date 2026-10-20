@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import Link from "next/link";
 import { COUNTRY_NAMES } from "@/lib/utils";
 import { EMPLOYMENT_TYPE_OPTIONS, isHoursAveragedEmploymentType } from "@/lib/employment-types";
 import { TermHint } from "@/components/ui/term-hint";
@@ -32,16 +33,26 @@ const roleOptions = [
   { value: "ADMIN", label: "Admin" },
 ];
 
+/** What each role can do, under the role picker. */
+const ROLE_HELP: Record<string, string> = {
+  MEMBER: "Books their own leave and reports sickness. Sees colleagues' leave only as “Away”.",
+  MANAGER: "Approves leave, records sickness and arranges cover. Sees leave types, but not sickness notes.",
+  ADMIN: "Everything a manager can do, plus settings, billing, sickness notes and people's records.",
+};
+
 const memberTypeOptions = [
   { value: "EMPLOYEE", label: "Employee" },
   { value: "CONTRACTOR", label: "Contractor" },
   { value: "FREELANCER", label: "Freelancer" },
 ];
 
-const countryOptions = Object.entries(COUNTRY_NAMES).map(([code, name]) => ({
-  value: code,
-  label: `${name} (${code})`,
-}));
+// The UK first (most teams are UK-based), then the rest by name.
+const countryOptions = Object.entries(COUNTRY_NAMES)
+  .sort(([a, an], [b, bn]) => (a === "GB" ? -1 : b === "GB" ? 1 : an.localeCompare(bn)))
+  .map(([code, name]) => ({
+    value: code,
+    label: `${name} (${code})`,
+  }));
 
 export function MemberForm({
   initialData,
@@ -170,6 +181,7 @@ export function MemberForm({
             onChange={(e) => setRole(e.target.value)}
             disabled={isEdit && (!canSetRoles || isOnlyAdmin)}
           />
+          {ROLE_HELP[role] && <p className="mt-1 text-xs text-gray-500">{ROLE_HELP[role]}</p>}
           {isEdit && isOnlyAdmin && (
             <p className="mt-1 text-xs text-gray-500">
               This is the team&apos;s only admin. Make someone else an admin first.
@@ -224,6 +236,16 @@ export function MemberForm({
           disabled={employmentType === "ZERO_HOURS"}
         />
       </div>
+      {/* Working patterns are set per person, for people in a location with shifts. */}
+      {isEdit && locations && locations.length > 0 && (
+        <p className="-mt-2 text-xs text-gray-500">
+          In a location with shifts, the days and shifts they work come from their working pattern, which cover and
+          sick pay use.{" "}
+          <Link href={`/team/${initialData!.id}#working-pattern`} className="font-medium text-brand-600 hover:underline">
+            Set working pattern
+          </Link>
+        </p>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {isHoursAveragedEmploymentType(employmentType) ? (
@@ -253,7 +275,7 @@ export function MemberForm({
           label="Department"
           value={department}
           onChange={(e) => setDepartment(e.target.value)}
-          placeholder="Engineering"
+          placeholder="e.g. Day unit"
         />
         <Input
           id="serviceStartDate"

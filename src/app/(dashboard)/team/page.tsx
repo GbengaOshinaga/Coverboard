@@ -611,6 +611,12 @@ export default function TeamPage() {
               department: editMember.department ?? undefined,
               workCountry: editMember.workCountry ?? editMember.countryCode,
             }}
+            // For the "Set working pattern" link (the location picker is for new members only).
+            locations={
+              regionsEnabled
+                ? regions.filter((r) => r.isActive).map((r) => ({ id: r.id, name: r.name }))
+                : undefined
+            }
             onSubmit={handleEditMember}
             onCancel={() => setEditMember(undefined)}
             canSetRoles={userRole === "ADMIN"}

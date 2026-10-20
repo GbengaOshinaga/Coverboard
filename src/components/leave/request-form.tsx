@@ -341,7 +341,16 @@ export function RequestForm({
             : "🎉 Your first request is in! You'll hear back once it's reviewed.",
           "success"
         );
+      } else {
+        // Every booking says what happened, so nobody lands on the list wondering.
+        toast(
+          data.autoApproved
+            ? "Booked and approved: there's no one else on the team to approve it."
+            : "Request sent. You'll hear back once it's reviewed.",
+          "success"
+        );
       }
+      if (data.balanceWarning) toast(data.balanceWarning, "warning");
       // Neonatal care leave: the rate and weeks the time in care gives.
       if (data.sncpInfo) {
         const weeks = `${data.sncpInfo.weeksEntitled} week${data.sncpInfo.weeksEntitled === 1 ? "" : "s"} of leave from the time in care`;

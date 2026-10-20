@@ -21,6 +21,7 @@ type LeaveData = {
   endDate: string;
   user: { name: string };
   leaveType: { name: string; color: string };
+  pending?: boolean;
 };
 
 type HolidayData = {
@@ -93,6 +94,7 @@ export function MonthView({
         color: leave.leaveType.color,
         isStart: isSameDay(day, new Date(leave.startDate)),
         isEnd: isSameDay(day, new Date(leave.endDate)),
+        pending: leave.pending,
       }));
   }
 

@@ -527,6 +527,8 @@ export function leaveRequestStatusEmail(data: {
   dashboardUrl: string;
   /** A manager recorded this leave for them; they didn't request it. */
   recorded?: boolean;
+  /** Why it was rejected, if the approver said. */
+  reviewNote?: string | null;
 }): { subject: string; html: string } {
   const isApproved = data.status === "APPROVED";
   const statusText = isApproved ? "approved" : "rejected";
@@ -565,6 +567,7 @@ export function leaveRequestStatusEmail(data: {
             <td style="padding:4px 0;color:#6b7280;">Status</td>
             <td style="padding:4px 0;color:${statusColor};font-weight:600;">${data.status}</td>
           </tr>
+          ${data.reviewNote ? `<tr><td style="padding:4px 0;color:#6b7280;vertical-align:top;">Reason</td><td style="padding:4px 0;color:#111827;">${esc(data.reviewNote)}</td></tr>` : ""}
         </table>
       </div>
       ${button("View in Coverboard", data.dashboardUrl)}

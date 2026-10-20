@@ -8,6 +8,9 @@ import { cn } from "@/lib/utils";
 import { MEMBER_HIDDEN_NAV_HREFS } from "@/lib/member-route-access";
 import { X, LayoutDashboard, Calendar, FileText, Users, BarChart3, Settings, LifeBuoy, ScrollText, CalendarHeart, Hand } from "lucide-react";
 
+/** Sent after a request is approved or rejected, so the count refreshes. */
+export const APPROVALS_CHANGED_EVENT = "coverboard:approvals-changed";
+
 const navigation = [
   { name: "My time off", href: "/my-time-off", icon: CalendarHeart },
   { name: "Cover requests", href: "/cover-requests", icon: Hand },
@@ -59,18 +62,23 @@ export function Sidebar({
   }, [pathname]);
 
   // Requests waiting for this admin or manager to approve, shown as a count.
+  // Refreshed on each page and whenever a request is approved or rejected.
   const [pendingApprovals, setPendingApprovals] = useState(0);
   useEffect(() => {
     if (role !== "ADMIN" && role !== "MANAGER") return;
     let cancelled = false;
-    fetch("/api/leave-requests/pending-count")
-      .then((r) => (r.ok ? r.json() : { count: 0 }))
-      .then((d: { count: number }) => {
-        if (!cancelled) setPendingApprovals(d.count);
-      })
-      .catch(() => {});
+    const load = () =>
+      fetch("/api/leave-requests/pending-count")
+        .then((r) => (r.ok ? r.json() : { count: 0 }))
+        .then((d: { count: number }) => {
+          if (!cancelled) setPendingApprovals(d.count);
+        })
+        .catch(() => {});
+    load();
+    window.addEventListener(APPROVALS_CHANGED_EVENT, load);
     return () => {
       cancelled = true;
+      window.removeEventListener(APPROVALS_CHANGED_EVENT, load);
     };
   }, [pathname, role]);
 

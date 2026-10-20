@@ -12,6 +12,8 @@ import {
 } from "@/lib/leave-year";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { allowanceLabel } from "@/lib/leave-type-labels";
+import { glossaryKeyForLeaveType } from "@/lib/glossary";
+import { TermHint } from "@/components/ui/term-hint";
 import { peopleOnSspToday, type UkComplianceReport } from "@/lib/uk-compliance-columns";
 import { useSession } from "next-auth/react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -1124,11 +1126,15 @@ export default function SettingsPage() {
             ) : ukReport ? (
               <>
                 <p>Holiday usage rows: <strong>{ukReport.holidayUsage.length}</strong></p>
-                <p>
+                <p className="flex flex-wrap items-center gap-1">
                   Bradford triggers above {ukReport.absenceTrigger.threshold}:{" "}
                   <strong>{ukReport.absenceTrigger.rows.filter((r) => r.flagged).length}</strong>
+                  <TermHint term="bradford" />
                 </p>
-                <p>Employees on SSP today: <strong>{peopleOnSspToday(ukReport.sspLiability)}</strong></p>
+                <p className="flex flex-wrap items-center gap-1">
+                  Employees on SSP today: <strong>{peopleOnSspToday(ukReport.sspLiability)}</strong>
+                  <TermHint term="ssp" />
+                </p>
                 <p>Active parental leave cases: <strong>{ukReport.parentalTracker.length}</strong></p>
               </>
             ) : null}
@@ -1253,6 +1259,7 @@ export default function SettingsPage() {
                       style={{ backgroundColor: lt.color }}
                     />
                     <span className="text-sm font-medium">{lt.name}</span>
+                    {glossaryKeyForLeaveType(lt.name) && <TermHint term={glossaryKeyForLeaveType(lt.name)!} />}
                   </div>
                   <div className="flex items-center gap-2 sm:gap-3">
                     <span className="text-xs text-gray-500">

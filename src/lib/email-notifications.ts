@@ -241,11 +241,14 @@ export async function emailRequestStatusChange(data: {
   reviewerName: string;
   /** A manager recorded the leave for them. */
   recorded?: boolean;
+  /** Why it was rejected, if the approver said. */
+  reviewNote?: string | null;
 }) {
   const daysRequested = countWeekdays(data.startDate, data.endDate);
 
   const { subject, html } = leaveRequestStatusEmail({
     recorded: data.recorded,
+    reviewNote: data.reviewNote,
     requesterName: data.requesterName,
     status: data.status,
     leaveTypeName: data.leaveTypeName,

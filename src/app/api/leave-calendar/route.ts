@@ -5,7 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { leaveTypeSeenBy } from "@/lib/leave-privacy";
 
 /**
- * Approved leave between two dates for the team calendar: who, when and the
+ * Approved leave between two dates for the team calendar, plus the viewer's
+ * own requests still waiting for approval (marked pending): who, when and the
  * type as this viewer may see it. Staff see colleagues as "Away"
  * (src/lib/leave-privacy.ts); admins and managers, and everyone for their own
  * leave, see the type. Nothing else (notes, fit notes, emails) is sent.
@@ -28,13 +29,14 @@ export async function GET(request: Request) {
 
   const rows = await prisma.leaveRequest.findMany({
     where: {
-      status: "APPROVED",
       user: { organizationId: viewer.organizationId as string },
+      OR: [{ status: "APPROVED" }, { status: "PENDING", userId: viewer.id as string }],
       startDate: { lte: to },
       endDate: { gte: from },
     },
     select: {
       id: true,
+      status: true,
       startDate: true,
       endDate: true,
       user: { select: { id: true, name: true, regionId: true } },
@@ -46,6 +48,7 @@ export async function GET(request: Request) {
   return NextResponse.json(
     rows.map((r) => ({
       id: r.id,
+      pending: r.status === "PENDING",
       startDate: r.startDate.toISOString(),
       endDate: r.endDate.toISOString(),
       user: r.user,

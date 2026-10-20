@@ -998,3 +998,13 @@ _add("landing", how=["Statutory pay is labelled “On Growth and above” on the
 _add("billing", how=["Plan lists match what's gated: pro-rata for every contract type, carry-over, bank holidays by nation, all UK statutory leave types, fit notes and SAR export are on Free; statutory pay, payroll, holiday pay, right to work, Bradford and fit note alert emails on Growth; the audit and activity logs on Pro. Starter adds headcount (15) and admins (2).",
                      "The Change plan page reads the same pricing config, so it can't drift from the pricing page."],
      code=[("src/config/pricing.ts", "Plan lists (marketing and Change plan)")])
+
+# ════════════════════════════════════════════════════════════════════════
+# Updates, 21 Oct 2026: tester round (rejecting, confirmations, member form).
+# ════════════════════════════════════════════════════════════════════════
+_add("requests", how=["Approve and Reject are labelled buttons. Rejecting asks first, with an optional reason (up to 500 characters) that's stored on the request (reviewNote), emailed and sent in Slack to the employee, shown on the request and kept in the audit log.",
+                      "Every booking ends with a message: sent for approval, approved (only approver), recorded (sickness or for someone else), plus any balance warning.",
+                      "The sidebar's waiting-for-approval count updates as soon as a request is approved or rejected."],
+     code=[("src/lib/leave-requests/review.ts", "reviewNote")])
+_add("calendar", how=["People also see their own requests waiting for approval, outlined and marked “(pending)”; nobody else's pending requests show."])
+_add("team", how=["The edit form explains each role, lists the UK first and, for teams with locations, links to the person's working pattern."])

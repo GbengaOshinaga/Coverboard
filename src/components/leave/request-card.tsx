@@ -49,6 +49,8 @@ type LeaveRequest = {
     color: string;
   };
   reviewedBy: { id?: string; name: string } | null;
+  /** Why it was rejected, if the approver said. */
+  reviewNote?: string | null;
   fitNotes?: FitNoteRow[];
   /** Days they'd have worked (from the API, on their working week). */
   workingDays?: number;
@@ -211,6 +213,12 @@ export function RequestCard({
           <p className="mt-1.5 text-xs text-gray-500">{request.note}</p>
         )}
 
+        {request.status === "REJECTED" && request.reviewNote && (
+          <p className="mt-1 text-xs text-gray-600">
+            <span className="font-medium">Reason:</span> {request.reviewNote}
+          </p>
+        )}
+
         {request.reviewedBy && (
           <p className="mt-1 text-[10px] text-gray-400">
             {request.reviewedBy.id && request.reviewedBy.id === request.user.id
@@ -250,17 +258,17 @@ export function RequestCard({
                   size="sm"
                   variant="default"
                   onClick={() => onAction?.(request.id, "APPROVED")}
-                  title="Approve"
                 >
-                  <Check className="h-3.5 w-3.5" />
+                  <Check className="mr-1 h-3.5 w-3.5" />
+                  Approve
                 </Button>
                 <Button
                   size="sm"
                   variant="destructive"
                   onClick={() => onAction?.(request.id, "REJECTED")}
-                  title="Reject"
                 >
-                  <X className="h-3.5 w-3.5" />
+                  <X className="mr-1 h-3.5 w-3.5" />
+                  Reject
                 </Button>
               </>
             )}

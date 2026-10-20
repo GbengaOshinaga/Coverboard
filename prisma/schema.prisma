@@ -236,6 +236,8 @@ model LeaveRequest {
   leaveTypeId              String
   reviewedById             String?
   reviewedAt               DateTime?
+  /// Why it was rejected, if the approver said (shown to the employee).
+  reviewNote               String?
   evidenceProvided         Boolean     @default(false)
   kitDaysUsed              Int         @default(0)
   splitDaysUsed            Int         @default(0)

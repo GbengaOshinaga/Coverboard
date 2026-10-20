@@ -101,6 +101,7 @@ export default async function MyTimeOffPage() {
     },
     leaveType: r.leaveType,
     reviewedBy: r.reviewedBy,
+    reviewNote: r.reviewNote,
   }));
 
   const nextOff = rawRequests

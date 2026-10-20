@@ -26,6 +26,8 @@ type LeaveData = {
   endDate: string;
   user: { id: string; name: string; regionId?: string | null };
   leaveType: { name: string; color: string };
+  /** Their own request, still waiting for approval. */
+  pending?: boolean;
 };
 
 type DailyCover = {
@@ -263,6 +265,10 @@ export default function CalendarPage() {
         <div className="flex items-center gap-1.5">
           <div className="h-2.5 w-2.5 rounded-sm border border-emerald-400 bg-emerald-50" />
           Cover shift
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="h-2.5 w-4 rounded-sm border border-gray-400 bg-white" />
+          Your request, waiting for approval
         </div>
         <div className="flex items-center gap-1.5">
           <div className="h-2.5 w-2.5 rounded-full bg-[#3b82f6]" />
