@@ -15,6 +15,8 @@
  * (PLAN_MAX_EMPLOYEES, PLAN_DEFAULT_MAX_ADMINS) and are enforced server-
  * side. Keep the human-readable copy here in sync with those numbers.
  */
+import { SUPPORT_REPLY } from "@/lib/plans";
+
 export type PricingTier = {
   /** Display name. Matches the `PLAN_LABELS` value in `plans.ts`. */
   name: string;
@@ -53,6 +55,7 @@ export const PRICING: PricingConfig = {
         "Sickness logging and fit notes",
         "Team calendar, leave requests & approvals",
         "Email notifications",
+        `Email support, with a reply ${SUPPORT_REPLY.standard}`,
         "1 admin user",
       ],
     },
@@ -103,6 +106,7 @@ export const PRICING: PricingConfig = {
         "Scheduled report delivery (email)",
         "Data export in multiple formats",
         "Leave operations dashboard",
+        `Faster email support, with a reply ${SUPPORT_REPLY.scale}`,
         "Unlimited admin users",
       ],
     },
@@ -117,7 +121,8 @@ export const PRICING: PricingConfig = {
         "Everything in Scale",
         "Activity log — see who viewed each profile, sickness note, and report",
         "Audit log",
-        "Priority email support (2 working-day target)",
+        `Priority email support, with a reply ${SUPPORT_REPLY.pro}`,
+        "Unlimited admin users",
       ],
     },
   ],

@@ -13,6 +13,7 @@ import {
   hasPrioritySupport,
   hasSlaSupport,
   PLAN_LABELS,
+  SUPPORT_REPLY as REPLY,
   type AnyPlan,
 } from "@/lib/plans";
 import { computeTrialState } from "@/lib/trial";
@@ -139,13 +140,6 @@ const STAFF_HOW_TOS: HowTo[] = [
     ),
   },
 ];
-
-/** The reply we aim for on each support level (Pro, Scale, everyone else). */
-const REPLY = {
-  pro: "within 2 working days",
-  scale: "within 3 working days",
-  standard: "within a week",
-} as const;
 
 /** Shown to teams on the standard reply time: what a faster plan gets. */
 const FASTER_ON = `On Scale we aim to reply ${REPLY.scale}, and on Pro ${REPLY.pro}.`;

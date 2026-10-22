@@ -123,6 +123,17 @@ export function maxEmployeesForPlan(plan: AnyPlan | null | undefined): number {
   return raw === 0 ? Infinity : raw;
 }
 
+/**
+ * The email reply we aim for on each support level: Pro (hasSlaSupport),
+ * Scale (hasPrioritySupport) and every other plan. Read by the pricing cards
+ * and the Help page. Targets, not guarantees.
+ */
+export const SUPPORT_REPLY = {
+  pro: "within 2 working days",
+  scale: "within 3 working days",
+  standard: "within a week",
+} as const;
+
 /** Whether the plan unlocks priority response targets. */
 export function hasPrioritySupport(
   plan: AnyPlan | null | undefined
