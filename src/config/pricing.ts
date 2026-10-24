@@ -15,6 +15,8 @@
  * (PLAN_MAX_EMPLOYEES, PLAN_DEFAULT_MAX_ADMINS) and are enforced server-
  * side. Keep the human-readable copy here in sync with those numbers.
  */
+import { SUPPORT_REPLY } from "@/lib/plans";
+
 export type PricingTier = {
   /** Display name. Matches the `PLAN_LABELS` value in `plans.ts`. */
   name: string;
@@ -53,18 +55,22 @@ export const PRICING: PricingConfig = {
         "Sickness logging and fit notes",
         "Team calendar, leave requests & approvals",
         "Email notifications",
+        `Email support, with a reply ${SUPPORT_REPLY.standard}`,
         "1 admin user",
       ],
     },
     {
       name: "Starter",
-      tagline: "For growing teams",
+      tagline: "For small teams, with sick pay worked out",
       price_monthly: 19,
       headcount: "Up to 15 employees",
       cta: "Start free trial",
       highlighted: false,
       features: [
         "Everything in Free",
+        "Statutory Sick Pay worked out, with the SSP report",
+        "Weekly fit note alerts by email",
+        "Weekly earnings records",
         "Up to 2 admin users",
       ],
     },
@@ -77,10 +83,9 @@ export const PRICING: PricingConfig = {
       highlighted: true,
       features: [
         "Everything in Starter",
-        "Statutory pay worked out: SSP, SMP, SAP, SPP, ShPP, neonatal",
+        "Family leave pay worked out: SMP, SAP, SPP, ShPP, neonatal",
         "Every statutory payment in the payroll report",
         "52-week holiday pay, and what leavers are owed",
-        "Weekly fit note alerts by email",
         "Bradford Factor reporting",
         "Right to work tracking",
         "Up to 5 admin users",
@@ -90,7 +95,7 @@ export const PRICING: PricingConfig = {
       name: "Scale",
       tagline: "For groups with several locations",
       price_monthly: 99,
-      headcount: "Unlimited employees",
+      headcount: "Up to 200 employees",
       cta: "Start free trial",
       highlighted: false,
       features: [
@@ -101,12 +106,13 @@ export const PRICING: PricingConfig = {
         "Scheduled report delivery (email)",
         "Data export in multiple formats",
         "Leave operations dashboard",
+        `Faster email support, with a reply ${SUPPORT_REPLY.scale}`,
         "Unlimited admin users",
       ],
     },
     {
       name: "Pro",
-      tagline: "Enterprise-ready",
+      tagline: "For groups that need a record of who saw what",
       price_monthly: 179,
       headcount: "Unlimited employees",
       cta: "Start free trial",
@@ -115,7 +121,8 @@ export const PRICING: PricingConfig = {
         "Everything in Scale",
         "Activity log — see who viewed each profile, sickness note, and report",
         "Audit log",
-        "Priority email support (2 working-day target)",
+        `Priority email support, with a reply ${SUPPORT_REPLY.pro}`,
+        "Unlimited admin users",
       ],
     },
   ],

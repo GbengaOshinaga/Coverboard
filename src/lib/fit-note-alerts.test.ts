@@ -121,6 +121,28 @@ test("ignores leaves under the 7-day fit-note threshold", () => {
   assert.equal(day3.length, 0);
 });
 
+test("ignores a short absence once it's more than 7 days in the past", () => {
+  // Marcus: off 21–22 Sept, self-certified; checked weeks later. It was
+  // flagged because only the start date was compared with today.
+  const twoDays = selectOverdueFitNotes(
+    [leave({ startDate: daysAgo(29), endDate: daysAgo(28) })],
+    NOW
+  );
+  assert.equal(twoDays.length, 0);
+  // Exactly 7 days: still self-certified.
+  const sevenDays = selectOverdueFitNotes(
+    [leave({ startDate: daysAgo(20), endDate: daysAgo(14) })],
+    NOW
+  );
+  assert.equal(sevenDays.length, 0);
+  // 8 days: day 8 needs a fit note.
+  const eightDays = selectOverdueFitNotes(
+    [leave({ startDate: daysAgo(20), endDate: daysAgo(13) })],
+    NOW
+  );
+  assert.equal(eightDays.length, 1);
+});
+
 test("includes a September absence that ended weeks ago", () => {
   // Frank: off 14–28 Sept, fit note due from 21 Sept, none recorded; checked
   // on 4 Oct. It used to drop off after 7 days.

@@ -4,13 +4,13 @@ import { TRIAL_DAYS } from "@/lib/plans";
 
 /**
  * Where a page sells statutory pay (SSP, SMP and the rest, holiday pay, the
- * payroll report), the button starts a Growth trial, not Free: those features
- * are on Growth and above (planFeatures.ts), and "Start free" would land
- * someone who came for them on a plan without them. Defined once for the
- * homepage, the calculators and the guides.
+ * payroll report), the button starts a Growth trial, not Free: sick pay is on
+ * Starter and the rest on Growth and above (planFeatures.ts), and "Start
+ * free" would land someone who came for them on a plan without them. Defined
+ * once for the homepage, the calculators and the guides.
  */
 export const STATUTORY_PAY_TRIAL_HREF = "/signup?plan=growth";
-export const STATUTORY_PAY_PLAN_NOTE = "On Growth and above";
+export const STATUTORY_PAY_PLAN_NOTE = "Sick pay from Starter, the rest from Growth";
 
 export function StatutoryPayTrialButton({ className = "" }: { className?: string }) {
   return (
@@ -27,8 +27,9 @@ export function StatutoryPayTrialButton({ className = "" }: { className?: string
 export function StatutoryPayTrialNote({ className = "" }: { className?: string }) {
   return (
     <p className={`text-xs leading-relaxed text-gray-600 ${className}`}>
-      Everything&apos;s included during the trial, and no card is required. Statutory pay is on Growth and above;
-      the free plan covers leave, cover and the calendar for up to 5 people.
+      Everything&apos;s included during the trial, and no card is required. Sick pay is on Starter and above, and
+      the other statutory pay, holiday pay and the payroll report on Growth and above. The free plan covers
+      leave, cover and the calendar for up to 5 people.
     </p>
   );
 }

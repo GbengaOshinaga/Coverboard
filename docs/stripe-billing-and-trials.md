@@ -14,7 +14,7 @@ This page covers what admins need to know day to day.
 | Free | £0 | Up to 5 | 1 |
 | Starter | £19 | Up to 15 | 2 |
 | Growth | £49 | Up to 75 | 5 |
-| Scale | £99 | Unlimited | Unlimited |
+| Scale | £99 | Up to 200 | Unlimited |
 | Pro | £179 | Unlimited | Unlimited |
 
 All plans are billed **monthly only**; there's no annual billing. VAT is added on top through Stripe Tax.

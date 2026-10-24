@@ -26,7 +26,9 @@
  *     employees who still owe a fit note.
  */
 
-const FIT_NOTE_THRESHOLD_DAYS = 7;
+import { SELF_CERT_DAYS } from "./fit-notes";
+
+const FIT_NOTE_THRESHOLD_DAYS = SELF_CERT_DAYS;
 /**
  * How long after an absence ends its missing fit note stays on the list.
  * Employers can still get a backdated fit note (and need one to support SSP
@@ -102,7 +104,9 @@ function calendarDaysBetween(start: Date, end: Date): number {
  *   1. Status is APPROVED (we don't chase fit notes for pending requests).
  *   2. The leave type is a statutory sickness type.
  *   3. `evidenceProvided` is false.
- *   4. The leave started more than 7 calendar days ago.
+ *   4. The leave is booked for more than 7 calendar days (shorter
+ *      absences are self-certified, however long ago they were) and
+ *      started more than 7 calendar days ago.
  *   5. The leave is still active, OR it ended within the last 90 days
  *      (the fit note is still owed, so admins can still chase it).
  */
@@ -115,6 +119,8 @@ export function selectOverdueFitNotes(
     if (leave.status !== "APPROVED") continue;
     if (leave.evidenceProvided) continue;
     if (!isSicknessLeaveType(leave.leaveType.name)) continue;
+
+    if (calendarDaysBetween(leave.startDate, leave.endDate) + 1 <= FIT_NOTE_THRESHOLD_DAYS) continue;
 
     const daysSinceStart = calendarDaysBetween(leave.startDate, now);
     if (daysSinceStart <= FIT_NOTE_THRESHOLD_DAYS) continue;
