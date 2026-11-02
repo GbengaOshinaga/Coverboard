@@ -24,6 +24,31 @@ import { sendEmail } from "@/lib/email";
 import { emailVerificationEmail } from "@/lib/email-templates";
 import { getAppBaseUrl } from "@/lib/app-url";
 import { maybeSendFounderEmail } from "@/lib/founder-outreach";
+import { NextResponse } from "next/server";
+
+/**
+ * Inviting people needs a verified email. Signing in doesn't (a trial starts
+ * straight away), but without this anyone could sign up as someone else's
+ * work address and send invites from Coverboard to real staff in that
+ * person's name. Every invite route checks it: adding someone, bulk import,
+ * resending an invite and onboarding.
+ */
+export const VERIFY_BEFORE_INVITING =
+  "Verify your email address before inviting people. Use the link we sent you, or send a new one from the banner at the top of the page.";
+
+export async function hasVerifiedEmail(userId: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { emailVerified: true },
+  });
+  return Boolean(user?.emailVerified);
+}
+
+/** The 403 an invite route sends when the inviter's email isn't verified, or null. */
+export async function inviteVerificationGate(userId: string): Promise<NextResponse | null> {
+  if (await hasVerifiedEmail(userId)) return null;
+  return NextResponse.json({ error: VERIFY_BEFORE_INVITING }, { status: 403 });
+}
 
 export const EMAIL_VERIFICATION_EXPIRES_HOURS = 24;
 

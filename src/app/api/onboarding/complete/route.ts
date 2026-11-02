@@ -13,6 +13,7 @@ import { addPublicHolidays, holidayYears } from "@/lib/holiday-years";
 import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
 import { sendTeamInviteEmail } from "@/lib/email-notifications";
+import { inviteVerificationGate } from "@/lib/email-verification";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { peopleLimit } from "@/lib/plan-headcount";
 import { z } from "zod";
@@ -69,6 +70,13 @@ export async function POST(request: Request) {
     }
 
     const { countries, industry, regionsEnabled, invites } = parsed.data;
+
+    // Inviting needs a verified email (the onboarding page hides the invite
+    // fields until then). Checked before anything is saved.
+    if (invites && invites.length > 0) {
+      const unverified = await inviteVerificationGate(userId);
+      if (unverified) return unverified;
+    }
 
     // Invites count towards the plan's limit like anyone added later, so a
     // new Free team can't start over it (and be held at Billing). Checked

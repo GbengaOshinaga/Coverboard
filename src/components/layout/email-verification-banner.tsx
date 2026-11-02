@@ -6,10 +6,9 @@ import { useToast } from "@/components/ui/toast";
 
 /**
  * Banner shown at the top of the dashboard when the signed-in user's email
- * hasn't been verified yet. Login isn't blocked by the verification state in
- * v1 — instead the banner sits at the top of every dashboard page with a
- * one-click resend, and any team-invite flow gates on verified status
- * separately.
+ * hasn't been verified yet. Signing in isn't blocked, so a trial starts
+ * straight away, but inviting people is (inviteVerificationGate in
+ * email-verification.ts), so the banner says so.
  */
 export function EmailVerificationBanner({
   emailVerified,
@@ -47,9 +46,8 @@ export function EmailVerificationBanner({
       <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-3 gap-y-1.5">
         <MailCheck className="h-4 w-4 shrink-0" />
         <span className="flex-1">
-          Please verify your email. We sent a link to{" "}
-          <strong>{email}</strong> — click it to confirm you control this
-          inbox.
+          Verify your email to invite people. We sent a link to{" "}
+          <strong>{email}</strong>.
         </span>
         <button
           type="button"

@@ -14,6 +14,7 @@ import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
 import { maxAdminsForPlan, maxEmployeesForPlan } from "@/lib/plans";
 import { planForLimits } from "@/lib/plan-headcount";
+import { inviteVerificationGate } from "@/lib/email-verification";
 
 export async function GET(request: Request) {
   const session = await getServerSession(authOptions);
@@ -109,6 +110,8 @@ export async function POST(request: Request) {
   if (userRole !== "ADMIN" && userRole !== "MANAGER") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  const unverified = await inviteVerificationGate((session.user as Record<string, unknown>).id as string);
+  if (unverified) return unverified;
 
   try {
     const body = await request.json();
@@ -217,10 +220,8 @@ export async function POST(request: Request) {
         workCountry,
         serviceStartDate: serviceStartDate ? new Date(serviceStartDate) : null,
         organizationId: orgId,
-        // Invited members get their temp password emailed to this address, so
-        // logging in already proves control of it — no separate verification
-        // step needed (and no "verify your email" banner to confuse them).
-        emailVerified: new Date(),
+        // Not verified yet: opening the invite link to set a password (or
+        // signing in with Google) proves they control this address.
       },
       select: {
         id: true,

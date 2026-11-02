@@ -103,6 +103,12 @@ If you change one, update its entry and add the date. If you make a new decision
 
 ---
 
+### 32. Inviting needs a verified email (2026-11-02)
+- **Decision:** signing up with email and password doesn't need a verified address, so a trial starts straight away. Inviting anyone does: adding someone, bulk import, resending an invite and the invites in onboarding are refused until the inviter has used their verification link. Invited people are marked verified only when they use their set-password link (or sign in with Google), not when they're added.
+- **Why:** otherwise anyone could sign up as ceo@real-company.com without access to that inbox and send Coverboard invites to that company's real staff, in that person's name. Blocking sign-in instead would slow every genuine trial.
+- **Squatted addresses:** whoever really owns the address can take the account over with Forgot password, which also verifies it.
+- **Where:** `inviteVerificationGate` in `src/lib/email-verification.ts`, called by each invite route; the onboarding page hides the invite fields until the email is verified.
+
 ## Plans and billing
 
 ### 11. Plan limits count people still on the team, admins included
