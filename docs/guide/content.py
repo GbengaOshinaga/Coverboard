@@ -1036,3 +1036,10 @@ _add("signup", how=["Signing in doesn't wait for email verification, so a trial 
 _add("slack", how=["Jira coverage: staff only see their own open tickets; admins and managers see anyone's on the team, plus who's free to take them (people still on the team, names only, no emails). Reassigning only goes to an active member of the same team. Booking for someone else checks their tickets, not the booker's."],
      code=[("src/app/api/jira/coverage/route.ts", "Jira coverage"),
            ("src/app/api/jira/reassign/route.ts", "Jira reassign")])
+_add("signup", how=["Emails are stored in lower case wherever they come in, so Jo@Care.co.uk and jo@care.co.uk are one account.",
+                    "Changing or resetting a password signs out every other session (User.sessionVersion); the device that changed it stays signed in.",
+                    "Reset, invite and verification links are stored only as SHA-256 hashes."],
+     code=[("src/lib/email-address.ts", "normalizeEmail(), emailField()"),
+           ("src/lib/auth-tokens.ts", "hashToken(), newLinkToken()")])
+_add("reports", how=["Every CSV goes through one cell function (csvCell), which puts an apostrophe before text starting with = + - or @ so spreadsheet apps show it rather than run it; numbers are left alone."],
+     code=[("src/lib/csv-export.ts", "csvCell()")])

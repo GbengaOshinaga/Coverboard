@@ -125,6 +125,9 @@ model User {
   emailVerified             DateTime?
   name                      String
   passwordHash              String
+  /// Goes up when the password changes or is reset; sessions signed in
+  /// before that stop working (checked on every request in auth.ts).
+  sessionVersion            Int            @default(0)
   role                      Role           @default(MEMBER)
   memberType                MemberType     @default(EMPLOYEE)
   employmentType            EmploymentType @default(FULL_TIME)

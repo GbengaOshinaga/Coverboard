@@ -14,10 +14,11 @@ import {
   DEFAULT_BILLING_COUNTRY,
   isValidBillingCountry,
 } from "@/config/billing-countries";
+import { emailField } from "@/lib/email-address";
 
 const signupSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
-  email: z.string().email("Invalid email address"),
+  email: emailField(),
   password: z.string().min(8, "Password must be at least 8 characters"),
   orgName: z.string().min(2, "Team name must be at least 2 characters"),
   plan: z.enum(["free", "starter", "growth", "scale", "pro"]).default("free"),

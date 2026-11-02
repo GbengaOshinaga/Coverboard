@@ -17,6 +17,7 @@ import { inviteVerificationGate } from "@/lib/email-verification";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { peopleLimit } from "@/lib/plan-headcount";
 import { z } from "zod";
+import { emailField } from "@/lib/email-address";
 
 const onboardingSchema = z.object({
   countries: z.array(z.string().length(2)).min(1, "Select at least one country"),
@@ -25,7 +26,7 @@ const onboardingSchema = z.object({
   invites: z.array(
     z.object({
       name: z.string().min(1),
-      email: z.string().email(),
+      email: emailField(),
       countryCode: z.string().length(2),
     })
   ).optional(),

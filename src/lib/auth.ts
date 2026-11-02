@@ -9,6 +9,7 @@ import {
   checkAuthRateLimit,
   getClientIpFromAuthorizeReq,
 } from "@/lib/rate-limit";
+import { normalizeEmail } from "@/lib/email-address";
 
 // Google sign-in is opt-in: the provider is only registered when both env
 // vars are present, so the "Continue with Google" button (which checks
@@ -25,7 +26,7 @@ const googleEnabled =
 async function hydrateTokenFromEmail(token: JWT, email?: string | null) {
   if (!email) return;
   const dbUser = await prisma.user.findUnique({
-    where: { email },
+    where: { email: normalizeEmail(email) },
     include: { organization: true },
   });
   if (!dbUser) return;
@@ -35,6 +36,7 @@ async function hydrateTokenFromEmail(token: JWT, email?: string | null) {
   token.organizationId = dbUser.organizationId;
   token.organizationName = dbUser.organization.name;
   token.plan = dbUser.organization.plan;
+  token.sessionVersion = dbUser.sessionVersion;
 }
 
 export const authOptions: NextAuthOptions = {
@@ -72,7 +74,7 @@ export const authOptions: NextAuthOptions = {
         }
 
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
+          where: { email: normalizeEmail(credentials.email) },
           include: { organization: true },
         });
 
@@ -99,6 +101,7 @@ export const authOptions: NextAuthOptions = {
           organizationId: user.organizationId,
           organizationName: user.organization.name,
           plan: user.organization.plan,
+          sessionVersion: user.sessionVersion,
         };
       },
     }),
@@ -131,7 +134,7 @@ export const authOptions: NextAuthOptions = {
       // allowed through too; middleware routes them to /welcome to create a
       // team, after which their account exists.
       const dbUser = await prisma.user.findUnique({
-        where: { email },
+        where: { email: normalizeEmail(email) },
         select: { id: true, emailVerified: true, isActive: true },
       });
       // People who've left the team can't sign in.
@@ -162,6 +165,7 @@ export const authOptions: NextAuthOptions = {
           token.organizationId = u.organizationId;
           token.organizationName = u.organizationName;
           token.plan = u.plan;
+          token.sessionVersion = u.sessionVersion;
         }
       } else if (trigger === "update" && !token.organizationId && token.email) {
         // A Google user who just created their team via /welcome calls
@@ -185,18 +189,22 @@ export const authOptions: NextAuthOptions = {
       // fetches its session, so middleware sees the change after a reload.
       // Someone marked as left (or deleted) is signed out the same way: the
       // token is flagged, the session callback hands back no session, and
-      // middleware clears the cookie.
+      // middleware clears the cookie. So is a session signed in before the
+      // password was last changed or reset (sessionVersion; tokens from
+      // before the column existed count as 0).
       if (token.id && !user) {
         const me = await prisma.user.findUnique({
           where: { id: token.id as string },
           select: {
             isActive: true,
+            sessionVersion: true,
             role: true,
             memberType: true,
             organization: { select: { plan: true, name: true } },
           },
         });
-        token.revoked = !me || !me.isActive;
+        token.revoked =
+          !me || !me.isActive || ((token.sessionVersion as number | undefined) ?? 0) !== me.sessionVersion;
         // Bigger than the plan it pays for: middleware holds admins at Billing.
         // Only admins are held, so only they pay for the two counts.
         token.overPlan =

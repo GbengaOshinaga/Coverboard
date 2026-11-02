@@ -49,9 +49,11 @@ export async function POST(request: Request) {
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
 
+    // Ends every session signed in with the old password, including this
+    // one; the profile page signs straight back in with the new password.
     await prisma.user.update({
       where: { id: userId },
-      data: { passwordHash },
+      data: { passwordHash, sessionVersion: { increment: 1 } },
     });
 
     return NextResponse.json({ success: true });

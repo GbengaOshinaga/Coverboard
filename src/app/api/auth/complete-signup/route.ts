@@ -11,6 +11,7 @@ import { maybeSendFounderEmail } from "@/lib/founder-outreach";
 import { AnalyticsEvents } from "@/lib/analytics/events";
 import { trackServer } from "@/lib/analytics/server";
 import { checkAuthRateLimit, getClientIp } from "@/lib/rate-limit";
+import { normalizeEmail } from "@/lib/email-address";
 
 /**
  * Completes Google sign-up: the user has authenticated via OAuth but has no
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
     if (!rateLimit.ok) return rateLimit.response;
 
     const session = await getServerSession(authOptions);
-    const email = session?.user?.email;
+    const email = session?.user?.email ? normalizeEmail(session.user.email) : null;
     const name = session?.user?.name;
     if (!email || !name) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
