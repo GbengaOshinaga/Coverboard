@@ -28,14 +28,14 @@ export default function PrivacyPage() {
 
       <section className="space-y-3 text-sm leading-relaxed text-gray-700">
         <p>
-          This Privacy Policy explains how Coverboard
+          This Privacy Policy explains how {COMPANY.name}
           (&ldquo;Coverboard&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;)
           collects, uses and protects personal data when you use our
           team-leave management service (the &ldquo;Service&rdquo;) and our
           website.
         </p>
         <p>
-          Coverboard is provided by {COMPANY.name}, a company registered in{" "}
+          {COMPANY.name} is a company registered in{" "}
           {COMPANY.registeredIn} (company number {COMPANY.number}), with its
           registered office at {COMPANY.registeredOffice}. The Service is
           hosted in the United Kingdom. We comply with the UK General Data
@@ -48,7 +48,7 @@ export default function PrivacyPage() {
           For data about your customers&rsquo; employees that an
           organisation stores in the Service (leave records, sickness notes,
           earnings history, etc.), the Customer is the <strong>data
-          controller</strong> and Coverboard is the <strong>data
+          controller</strong> and {COMPANY.name} is the <strong>data
           processor</strong>. We process this data on the Customer&rsquo;s
           documented instructions, as set out in our Terms of Service.
         </p>
