@@ -1,5 +1,6 @@
 import { formatDateRange, countWeekdays, getInitials } from "@/lib/utils";
 import { SSP1_FORM_URL, ssp1DueAfterSspEnds } from "@/lib/ssp1";
+import { COMPANY_DISCLOSURE } from "@/config/company";
 
 const BRAND_COLOR = "#2563eb";
 
@@ -28,6 +29,7 @@ function layout(content: string): string {
           <tr>
             <td style="padding:16px 32px;border-top:1px solid #f3f4f6;">
               <p style="margin:0;font-size:12px;color:#9ca3af;">Sent by Coverboard &middot; Staff cover for shift-based teams</p>
+              <p style="margin:6px 0 0;font-size:11px;color:#9ca3af;">${esc(COMPANY_DISCLOSURE)}</p>
             </td>
           </tr>
         </table>
@@ -707,7 +709,7 @@ export function founderOutreachEmail(data: {
   `;
   return {
     subject: `Welcome to Coverboard — quick note from ${data.founderName}`,
-    html: `<!DOCTYPE html><html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:15px;line-height:1.55;color:#111827;max-width:560px;margin:32px auto;padding:0 16px;">${body}<p style="margin-top:24px;font-size:12px;color:#9ca3af;">Replies go to ${esc(data.replyAddress)}.</p></body></html>`,
+    html: `<!DOCTYPE html><html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:15px;line-height:1.55;color:#111827;max-width:560px;margin:32px auto;padding:0 16px;">${body}<p style="margin-top:24px;font-size:12px;color:#9ca3af;">Replies go to ${esc(data.replyAddress)}.</p><p style="font-size:11px;color:#9ca3af;">${esc(COMPANY_DISCLOSURE)}</p></body></html>`,
   };
 }
 

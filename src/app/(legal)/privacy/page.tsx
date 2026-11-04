@@ -6,6 +6,7 @@
 // sub-processor.
 
 import type { Metadata } from "next";
+import { COMPANY } from "@/config/company";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
@@ -13,7 +14,7 @@ export const metadata: Metadata = {
     "How Coverboard collects, uses, stores and shares personal data — your rights under UK GDPR.",
 };
 
-const LAST_UPDATED = "2 June 2026";
+const LAST_UPDATED = "4 November 2026";
 
 export default function PrivacyPage() {
   return (
@@ -34,9 +35,11 @@ export default function PrivacyPage() {
           website.
         </p>
         <p>
-          Coverboard is a UK company hosted in the United Kingdom. We comply
-          with the UK General Data Protection Regulation (UK GDPR) and the
-          Data Protection Act 2018.
+          Coverboard is provided by {COMPANY.name}, a company registered in{" "}
+          {COMPANY.registeredIn} (company number {COMPANY.number}), with its
+          registered office at {COMPANY.registeredOffice}. The Service is
+          hosted in the United Kingdom. We comply with the UK General Data
+          Protection Regulation (UK GDPR) and the Data Protection Act 2018.
         </p>
       </section>
 
@@ -52,7 +55,7 @@ export default function PrivacyPage() {
         <p>
           For data we collect directly from individuals interacting with our
           website or signing up for an account (your name, email, billing
-          details), Coverboard is the controller.
+          details), {COMPANY.name} is the controller.
         </p>
       </Section>
 
@@ -389,7 +392,8 @@ export default function PrivacyPage() {
           >
             dpo@coverboard.io
           </a>
-          . For general or billing questions, use{" "}
+          , or write to {COMPANY.name}, {COMPANY.registeredOffice}. For
+          general or billing questions, use{" "}
           <a
             href="mailto:support@coverboard.io"
             className="text-brand-600 hover:underline"

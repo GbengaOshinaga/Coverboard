@@ -1053,3 +1053,6 @@ _add("statutorytypes", how=["UK teams get Trade Union Duties (paid, for reps, le
      code=[("src/lib/country-policies.ts", "GB leave types"),
            ("scripts/backfill-uk-statutory-leave-types.ts", "Add missing UK leave types")])
 _add("signup", how=["Changing your password re-issues this browser's session on the server, so it stays signed in while every other session is signed out."])
+_add("landing", how=["Every public footer (home, pricing, guides, tools, terms, privacy) and every app email shows the company's registered name, number, registered office and where it's registered, from src/config/company.ts. The terms name Coverboard Ltd as the company customers contract with, and the privacy policy names it as controller."],
+     code=[("src/config/company.ts", "Company details"),
+           ("src/components/legal/company-notice.tsx", "Footer notice")])
