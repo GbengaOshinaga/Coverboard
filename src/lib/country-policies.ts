@@ -173,6 +173,35 @@ export const COUNTRY_POLICIES: CountryPolicy[] = [
         durationLogic: "Up to 12 weeks (1 week per 7 full days in neonatal care); day-one right; taken within 68 weeks of birth",
         note: "Statutory Neonatal Care Leave & Pay (in force 6 April 2025); pay is £194.32 or 90% of AWE. Baby born on/after 6 April 2025",
       },
+      {
+        // GOV.UK: reps (including learning and equality reps) have the right
+        // to reasonable paid time off for union duties. No fixed amount, so
+        // no allowance: the time is agreed between rep and employer.
+        leaveType: "Trade Union Duties",
+        color: "#0ea5e9",
+        isPaid: true,
+        annualAllowance: 0,
+        carryOverMax: 0,
+        category: "PAID",
+        requiresEvidence: false,
+        minNoticeDays: 0,
+        durationLogic: "Reasonable paid time off for union reps' duties; no fixed amount (TULRCA 1992 s.168, s.168A)",
+        note: "For union reps, learning reps and equality reps of a recognised union",
+      },
+      {
+        // GOV.UK: members must be allowed unpaid time off for union
+        // activities (meetings, union elections); employers may choose to pay.
+        leaveType: "Trade Union Activities",
+        color: "#64748b",
+        isPaid: false,
+        annualAllowance: 0,
+        carryOverMax: 0,
+        category: "UNPAID",
+        requiresEvidence: false,
+        minNoticeDays: 0,
+        durationLogic: "Reasonable unpaid time off for union members' activities; no fixed amount (TULRCA 1992 s.170)",
+        note: "Unpaid by law; an employer can choose to pay it",
+      },
     ],
     // UK bank holidays move with Easter and differ by nation; do not use this list for dates.
     // Seeded per region from `getUkBankHolidaysForRegion` in `src/lib/uk-compliance.ts` (e.g. Easter Monday in England & Wales and NI, not Scotland).

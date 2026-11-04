@@ -1043,3 +1043,13 @@ _add("signup", how=["Emails are stored in lower case wherever they come in, so J
            ("src/lib/auth-tokens.ts", "hashToken(), newLinkToken()")])
 _add("reports", how=["Every CSV goes through one cell function (csvCell), which puts an apostrophe before text starting with = + - or @ so spreadsheet apps show it rather than run it; numbers are left alone."],
      code=[("src/lib/csv-export.ts", "csvCell()")])
+
+# ════════════════════════════════════════════════════════════════════════
+# Updates, 3 Nov 2026: trade union time off.
+# ════════════════════════════════════════════════════════════════════════
+_add("statutorytypes", how=["UK teams get Trade Union Duties (paid, for reps, learning reps and equality reps) and Trade Union Activities (unpaid, for members). The law sets no fixed amount, so neither has an allowance; both sit with everyday leave and explain themselves with the glossary hint.",
+                            "No leave type without an allowance (sickness, unpaid leave, union time) warns that a booking exceeds a balance.",
+                            "npm run backfill:uk-leave-types now only adds missing UK types; types a team already has, and their allowances, are left as the team set them."],
+     code=[("src/lib/country-policies.ts", "GB leave types"),
+           ("scripts/backfill-uk-statutory-leave-types.ts", "Add missing UK leave types")])
+_add("signup", how=["Changing your password re-issues this browser's session on the server, so it stays signed in while every other session is signed out."])

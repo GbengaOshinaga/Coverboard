@@ -111,7 +111,7 @@ If you change one, update its entry and add the date. If you make a new decision
 
 ### 33. Account security basics (2026-11-02)
 - **Emails are stored in lower case**, everywhere one comes in (`normalizeEmail` and `emailField` in `src/lib/email-address.ts`), so capitals can't create a second account or stop someone signing in. Migration `20261102090000_lowercase_emails` converts existing rows and stops if two accounts differ only by capitals.
-- **Changing or resetting a password signs out every other session.** `User.sessionVersion` goes up, and `auth.ts` refuses a session from before the change on its next request. The profile page signs the current device back in with the new password.
+- **Changing or resetting a password signs out every other session.** `User.sessionVersion` goes up, and `auth.ts` refuses a session from before the change on its next request. The browser that made the change keeps its session: the change-password route re-issues its session cookie with the new version, so it's never signed out.
 - **One-time links are stored hashed.** Password-reset, invite and verification tokens are kept as SHA-256 hashes (`src/lib/auth-tokens.ts`); the email carries the token.
 - **CSV exports can't run formulas.** Text starting with = + - or @ gets an apostrophe in front (`csvCell` in `src/lib/csv-export.ts`, the one cell function for every CSV). Excel downloads write text cells, which never run.
 - **Not done, on purpose:** Jira and Slack connection keys aren't encrypted yet (that protects only against a leaked database and needs a new secret setting); sign-in rate limits read the forwarded IP header, which Vercel sets itself, so it can't be faked there.

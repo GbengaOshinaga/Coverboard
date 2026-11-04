@@ -2,7 +2,7 @@
 
 import { formatGBP } from "@/lib/money";
 import { useState, useEffect } from "react";
-import { signIn, useSession } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -139,12 +139,7 @@ export default function ProfilePage() {
         const data = await res.json();
         setPasswordError(data.error ?? "Failed to change password");
       } else {
-        // Changing the password signs out every session, this one included;
-        // sign this device straight back in with the new password.
-        const email = session?.user?.email;
-        if (email) {
-          await signIn("credentials", { email, password: newPassword, redirect: false });
-        }
+        // Other sessions are signed out; the server re-issued this one.
         setPasswordSuccess(true);
         toast("Password changed. You've been signed out everywhere else.", "success");
         setCurrentPassword("");

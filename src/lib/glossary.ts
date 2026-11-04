@@ -83,6 +83,12 @@ export const GLOSSARY = {
       "By law, workers can't average more than 48 hours a week (usually over 17 weeks) unless they agree in writing to opt out. They can cancel it by giving notice: 7 days, or up to 3 months if agreed.",
     link: "https://www.gov.uk/maximum-weekly-working-hours",
   },
+  tradeUnion: {
+    term: "Trade union time off",
+    meaning:
+      "Union reps, learning reps and equality reps get reasonable paid time off for union duties, such as helping a member at a grievance. Members get reasonable unpaid time off for union activities, such as union meetings or votes. The law sets no fixed amount.",
+    link: "https://www.gov.uk/rights-of-trade-union-reps/time-off-work",
+  },
   rightToWork: {
     term: "Right to work",
     meaning:
@@ -96,6 +102,7 @@ export type GlossaryKey = keyof typeof GLOSSARY;
 /** Which glossary entry explains a leave type, if any. */
 export function glossaryKeyForLeaveType(name: string): GlossaryKey | null {
   if (/SSP|sick/i.test(name)) return "ssp";
+  if (/trade union/i.test(name)) return "tradeUnion";
   if (/shared parental/i.test(name)) return "spl";
   if (/maternity|adoption/i.test(name)) return "smp";
   return null;

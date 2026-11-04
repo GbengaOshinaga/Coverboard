@@ -15,5 +15,7 @@ test("leave types that need explaining get their meaning", () => {
   assert.equal(glossaryForLeaveType("Shared Parental Leave (SPL)"), GLOSSARY.spl);
   assert.equal(glossaryForLeaveType("Statutory Maternity Leave"), GLOSSARY.smp);
   assert.equal(glossaryForLeaveType("Adoption Leave"), GLOSSARY.smp);
+  assert.equal(glossaryForLeaveType("Trade Union Duties"), GLOSSARY.tradeUnion);
+  assert.equal(glossaryForLeaveType("Trade Union Activities"), GLOSSARY.tradeUnion);
   assert.equal(glossaryForLeaveType("Annual Leave"), null);
 });
