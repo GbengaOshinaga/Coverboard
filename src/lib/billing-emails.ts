@@ -58,10 +58,10 @@ export async function emailPaymentFailed({ to }: { to: string }) {
 export async function emailSubscriptionCanceled({ to }: { to: string }) {
   await sendEmail({
     to,
-    subject: "Your Coverboard subscription was canceled",
+    subject: "Your Coverboard subscription was cancelled",
     html: billingEmailLayout(`
-      <h2 style="margin:0 0 12px">Subscription canceled</h2>
-      <p>Your Coverboard subscription has been canceled. Your data is preserved
+      <h2 style="margin:0 0 12px">Subscription cancelled</h2>
+      <p>Your Coverboard subscription has been cancelled. Your data is preserved
       for 90 days. Reactivate any time from the billing page.</p>
       <p><a href="${getAppBaseUrl()}/settings/billing" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Reactivate</a></p>
     `),
@@ -124,10 +124,10 @@ export async function emailDeletionScheduled({
 export async function emailDeletionCanceled({ to }: { to: string }) {
   await sendEmail({
     to,
-    subject: "Your Coverboard data deletion was canceled",
+    subject: "Your Coverboard data deletion was cancelled",
     html: billingEmailLayout(`
-      <h2 style="margin:0 0 12px">Deletion canceled</h2>
-      <p>Your scheduled data deletion has been canceled and your account is
+      <h2 style="margin:0 0 12px">Deletion cancelled</h2>
+      <p>Your scheduled data deletion has been cancelled and your account is
       fully active. Welcome back.</p>
       <p><a href="${getAppBaseUrl()}/dashboard" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Open dashboard</a></p>
     `),

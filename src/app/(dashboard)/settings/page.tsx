@@ -362,7 +362,7 @@ export default function SettingsPage() {
     try {
       const res = await fetch("/api/account/delete/cancel", { method: "POST" });
       if (res.ok) {
-        toast("Deletion canceled — your data is safe", "success");
+        toast("Deletion cancelled — your data is safe", "success");
         await refreshOrgSettings();
       } else if (res.status === 409) {
         // The only 409 is a locked team: its plan has ended, and only paying
@@ -2100,7 +2100,7 @@ export default function SettingsPage() {
                 className="border-red-200 text-red-700 hover:bg-red-50"
               >
                 {cancelingDeletion
-                  ? "Canceling…"
+                  ? "Cancelling…"
                   : "Cancel deletion and keep my data"}
               </Button>
             </CardContent>

@@ -135,7 +135,7 @@ export default function BillingPage() {
       : status === "past_due"
       ? "Past due"
       : status === "canceled"
-      ? "Canceled"
+      ? "Cancelled"
       : status === "paused"
       ? "Paused"
       : status ?? "—";
