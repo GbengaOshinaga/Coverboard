@@ -14,16 +14,40 @@
  *   - Existing unused tokens are invalidated when a new one is issued, so a
  *     user can resend without leaving the old link valid
  *
- * Tokens are stored plaintext, matching the existing `PasswordResetToken`
- * convention. Hashing them at rest is a hardening project that should cover
- * both token tables together; not in scope here.
+ * Only the token's hash is stored, as for password-reset and invite links
+ * (src/lib/auth-tokens.ts); the email carries the token itself.
  */
-import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email";
 import { emailVerificationEmail } from "@/lib/email-templates";
 import { getAppBaseUrl } from "@/lib/app-url";
 import { maybeSendFounderEmail } from "@/lib/founder-outreach";
+import { NextResponse } from "next/server";
+import { hashToken, newLinkToken } from "@/lib/auth-tokens";
+
+/**
+ * Inviting people needs a verified email. Signing in doesn't (a trial starts
+ * straight away), but without this anyone could sign up as someone else's
+ * work address and send invites from Coverboard to real staff in that
+ * person's name. Every invite route checks it: adding someone, bulk import,
+ * resending an invite and onboarding.
+ */
+export const VERIFY_BEFORE_INVITING =
+  "Verify your email address before inviting people. Use the link we sent you, or send a new one from the banner at the top of the page.";
+
+export async function hasVerifiedEmail(userId: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { emailVerified: true },
+  });
+  return Boolean(user?.emailVerified);
+}
+
+/** The 403 an invite route sends when the inviter's email isn't verified, or null. */
+export async function inviteVerificationGate(userId: string): Promise<NextResponse | null> {
+  if (await hasVerifiedEmail(userId)) return null;
+  return NextResponse.json({ error: VERIFY_BEFORE_INVITING }, { status: 403 });
+}
 
 export const EMAIL_VERIFICATION_EXPIRES_HOURS = 24;
 
@@ -42,13 +66,13 @@ export async function createVerificationToken(userId: string): Promise<string> {
     data: { usedAt: new Date() },
   });
 
-  const token = crypto.randomBytes(32).toString("hex");
+  const { token, tokenHash } = newLinkToken();
   const expiresAt = new Date(
     Date.now() + EMAIL_VERIFICATION_EXPIRES_HOURS * 60 * 60 * 1000
   );
 
   await prisma.emailVerificationToken.create({
-    data: { token, userId, expiresAt },
+    data: { token: tokenHash, userId, expiresAt },
   });
 
   return token;
@@ -88,7 +112,7 @@ export async function consumeVerificationToken(
   if (!rawToken) return { ok: false, reason: "invalid" };
 
   const tokenRow = await prisma.emailVerificationToken.findUnique({
-    where: { token: rawToken },
+    where: { token: hashToken(rawToken) },
     include: { user: { select: { id: true, emailVerified: true } } },
   });
 

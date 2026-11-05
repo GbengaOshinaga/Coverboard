@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { checkAuthRateLimit, getClientIp } from "@/lib/rate-limit";
 import { evaluatePasswordStrength } from "@/lib/password-strength";
 import { z } from "zod";
+import { hashToken } from "@/lib/auth-tokens";
 
 const schema = z.object({
   token: z.string().min(1),
@@ -31,7 +32,7 @@ export async function POST(request: Request) {
     const { token, password } = parsed.data;
 
     const resetToken = await prisma.passwordResetToken.findUnique({
-      where: { token },
+      where: { token: hashToken(token) },
       include: { user: { select: { id: true, email: true, name: true, emailVerified: true } } },
     });
 
@@ -71,7 +72,12 @@ export async function POST(request: Request) {
         where: { id: resetToken.userId },
         // The link came to their inbox, so using it verifies the address
         // (invited members never see the separate verification email).
-        data: { passwordHash, emailVerified: resetToken.user.emailVerified ?? new Date() },
+        // Signs out every existing session, in case the old password was known.
+        data: {
+          passwordHash,
+          emailVerified: resetToken.user.emailVerified ?? new Date(),
+          sessionVersion: { increment: 1 },
+        },
       }),
       prisma.passwordResetToken.update({
         where: { id: resetToken.id },

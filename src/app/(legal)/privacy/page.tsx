@@ -6,6 +6,7 @@
 // sub-processor.
 
 import type { Metadata } from "next";
+import { COMPANY } from "@/config/company";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
@@ -13,7 +14,7 @@ export const metadata: Metadata = {
     "How Coverboard collects, uses, stores and shares personal data — your rights under UK GDPR.",
 };
 
-const LAST_UPDATED = "2 June 2026";
+const LAST_UPDATED = "4 November 2026";
 
 export default function PrivacyPage() {
   return (
@@ -27,32 +28,35 @@ export default function PrivacyPage() {
 
       <section className="space-y-3 text-sm leading-relaxed text-gray-700">
         <p>
-          This Privacy Policy explains how Coverboard
+          This Privacy Policy explains how {COMPANY.name}
           (&ldquo;Coverboard&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;)
           collects, uses and protects personal data when you use our
           team-leave management service (the &ldquo;Service&rdquo;) and our
           website.
         </p>
         <p>
-          Coverboard is a UK company hosted in the United Kingdom. We comply
-          with the UK General Data Protection Regulation (UK GDPR) and the
-          Data Protection Act 2018.
+          {COMPANY.name} is a company registered in{" "}
+          {COMPANY.registeredIn} (company number {COMPANY.number}), with its
+          registered office at {COMPANY.registeredOffice}. The Service is
+          hosted in the United Kingdom. We comply with the UK General Data
+          Protection Regulation (UK GDPR) and the Data Protection Act 2018.
         </p>
       </section>
 
       <Section title="1. Controller and processor roles">
         <p>
-          For data about your customers&rsquo; employees that an
-          organisation stores in the Service (leave records, sickness notes,
-          earnings history, etc.), the Customer is the <strong>data
-          controller</strong> and Coverboard is the <strong>data
+          For data about an organisation&rsquo;s (the
+          &ldquo;Customer&rsquo;s&rdquo;) staff that it stores in the Service
+          (leave records, sickness notes, earnings history, etc.), the
+          Customer is the <strong>data
+          controller</strong> and {COMPANY.name} is the <strong>data
           processor</strong>. We process this data on the Customer&rsquo;s
           documented instructions, as set out in our Terms of Service.
         </p>
         <p>
           For data we collect directly from individuals interacting with our
           website or signing up for an account (your name, email, billing
-          details), Coverboard is the controller.
+          details), {COMPANY.name} is the controller.
         </p>
       </Section>
 
@@ -389,7 +393,8 @@ export default function PrivacyPage() {
           >
             dpo@coverboard.io
           </a>
-          . For general or billing questions, use{" "}
+          , or write to {COMPANY.name}, {COMPANY.registeredOffice}. For
+          general or billing questions, use{" "}
           <a
             href="mailto:support@coverboard.io"
             className="text-brand-600 hover:underline"

@@ -137,13 +137,21 @@ Since 6 April 2025, parents whose baby is admitted to neonatal care (within 28 d
 
 ---
 
+## Trade union time off
+
+Union reps, union learning reps and equality reps of a recognised union have the right to **reasonable paid time off** for union duties, such as negotiating with the employer or helping a member at a disciplinary or grievance meeting. Union members have the right to **reasonable unpaid time off** for union activities, such as union meetings or voting in union elections; an employer can choose to pay it. The law sets **no fixed amount**: the rep and the employer agree what's reasonable, and the [Acas Code of Practice](https://www.acas.org.uk/acas-code-of-practice-on-time-off-for-trade-union-duties-and-activities) explains how ([GOV.UK](https://www.gov.uk/rights-of-trade-union-reps/time-off-work)).
+
+Coverboard adds **Trade Union Duties** (paid) and **Trade Union Activities** (unpaid) for UK organisations. Neither has an allowance, so booking them never warns about a balance.
+
+---
+
 ## A note on contractual leave
 
 Everything above is the statutory minimum — the floor, not the ceiling. Many employers offer more generous terms: extra holiday days, enhanced maternity pay, paid compassionate leave, and so on. These are called contractual entitlements.
 
 Coverboard supports both. Statutory leave types are added automatically when you add UK employees during onboarding. You can add contractual leave types (such as "Enhanced Maternity Pay top-up" or "Compassionate Leave") through **Settings → Leave types** and configure per-country allowances under **Settings → Country policies**.
 
-> Custom leave policies are available on the **Pro** plan. Bradford Factor, SSP tracking, pro-rata, right to work and bank-holiday region config are available from **Growth** upwards. Parental tracker, KIT/SPLIT day tracking, holiday pay 52-week averaging and the full UK compliance report pack are available from **Scale**.
+> Every plan includes all the UK statutory leave types, pro-rata holiday, carry-over and bank holidays by UK nation. SSP worked out on each absence, with the SSP report and fit-note alerts, is on **Starter** and above. Maternity, paternity, adoption, shared parental and neonatal pay, KIT and SPLIT days, 52-week holiday pay, the payroll report, Bradford Factor and right to work are on **Growth** and above. Custom leave types and absence trend analysis are on **Scale** and above.
 
 ---
 
@@ -161,5 +169,7 @@ Coverboard supports both. Statutory leave types are added automatically when you
 | Unpaid Parental Leave | 18 weeks per child | No | Day-one right |
 | Carer's leave | 1 week/year | No | Caring for a dependant |
 | Neonatal care leave | 12 weeks | Yes | Baby in neonatal care |
+| Trade union duties | Reasonable time | Yes | Union rep duties |
+| Trade union activities | Reasonable time | No (employer may pay) | Union member activities |
 
 > Statutory pay rates change every April when HMRC publishes the new tax-year figures. The rates shown above are the current 2026/27 values, and Coverboard keeps them up to date so your calculations stay accurate.

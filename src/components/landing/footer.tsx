@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CompanyNotice } from "@/components/legal/company-notice";
 
 export function LandingFooter() {
   return (
@@ -50,9 +51,7 @@ export function LandingFooter() {
             <code className="font-mono text-xs">eu-west-2</code> via Supabase.
             Compliant with the UK GDPR.
           </p>
-          <p>
-            &copy; {new Date().getFullYear()} Coverboard. All rights reserved.
-          </p>
+          <CompanyNotice />
         </div>
       </div>
     </footer>

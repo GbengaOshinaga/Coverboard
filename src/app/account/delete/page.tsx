@@ -95,7 +95,7 @@ export default function DeleteAccountPage() {
             <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-900">
               <p className="font-semibold">What happens next</p>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-red-800">
-                <li>Your subscription will be canceled immediately.</li>
+                <li>Your subscription will be cancelled immediately.</li>
                 <li>Your data will be scheduled for deletion in 30 days.</li>
                 <li>
                   During that 30 days you can cancel the deletion from

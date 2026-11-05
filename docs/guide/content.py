@@ -1019,3 +1019,40 @@ _feature("planlimits").update(plan="Free, Starter, Growth, Scale")
 _add("planlimits", how=["Scale is capped at 200 people (from 21 Oct 2026); Pro is the only plan with no limit. The same checks apply as for the other caps: adding people, CSV import, onboarding invites, bringing a leaver back, and admins held at Billing while the team is over the limit."])
 _add("billing", how=["Starter (£19) includes SSP, the SSP report, fit-note alerts and weekly earnings records; family leave pay, holiday pay, the payroll report, Bradford and right to work are Growth and above. Pro is described as for groups that need a record of who saw what."])
 _add("fitnotes", how=["An absence is only listed as missing a fit note if it lasted more than 7 days; a short self-certified absence is never listed, however long ago it was. The dashboard, the leave operations report and the Monday email share this rule."])
+_add("glossary", how=["The Help page opens with How do I… steps: for admins and managers, adding someone, approving or rejecting, booking for someone, recording sickness and setting up shifts and minimum cover; for staff, booking time off, reporting sickness, checking holiday left and seeing who's off.",
+                      "The SSP, SMP and ShPP meanings give this year's weekly rates, read from the same settings as the pay calculations, so they change with the April update.",
+                      "Contact is one line: the support email and the reply we aim for on the team's plan, with Scale's and Pro's faster replies shown to everyone else. An ended trial says so instead of showing a Trial badge."],
+     code=[("src/app/(dashboard)/help/page.tsx", "Help page")])
+_add("landing", how=["Each pricing card gives its email reply time (a week on Free, Starter and Growth; 3 working days on Scale; 2 on Pro) from SUPPORT_REPLY in plans.ts, which the Help page reads too. Pro lists its unlimited admins like Scale."],
+     code=[("src/lib/plans.ts", "SUPPORT_REPLY")])
+
+# ════════════════════════════════════════════════════════════════════════
+# Updates, 2 Nov 2026: inviting needs a verified email.
+# ════════════════════════════════════════════════════════════════════════
+_add("invites", how=["Only someone whose own email is verified can invite: adding someone, bulk import, resend invite and onboarding invites are refused until then, with a message pointing to the verification link. Onboarding hides the invite fields and offers to send the link again.",
+                     "Invited people aren't marked verified when added; using their set-password link (or signing in with Google) verifies them."],
+     code=[("src/lib/email-verification.ts", "inviteVerificationGate()")])
+_add("signup", how=["Signing in doesn't wait for email verification, so a trial starts straight away; the banner says verifying is needed to invite people. Someone who really owns an address used by another sign-up can take the account over with Forgot password."])
+_add("slack", how=["Jira coverage: staff only see their own open tickets; admins and managers see anyone's on the team, plus who's free to take them (people still on the team, names only, no emails). Reassigning only goes to an active member of the same team. Booking for someone else checks their tickets, not the booker's."],
+     code=[("src/app/api/jira/coverage/route.ts", "Jira coverage"),
+           ("src/app/api/jira/reassign/route.ts", "Jira reassign")])
+_add("signup", how=["Emails are stored in lower case wherever they come in, so Jo@Care.co.uk and jo@care.co.uk are one account.",
+                    "Changing or resetting a password signs out every other session (User.sessionVersion); the device that changed it stays signed in.",
+                    "Reset, invite and verification links are stored only as SHA-256 hashes."],
+     code=[("src/lib/email-address.ts", "normalizeEmail(), emailField()"),
+           ("src/lib/auth-tokens.ts", "hashToken(), newLinkToken()")])
+_add("reports", how=["Every CSV goes through one cell function (csvCell), which puts an apostrophe before text starting with = + - or @ so spreadsheet apps show it rather than run it; numbers are left alone."],
+     code=[("src/lib/csv-export.ts", "csvCell()")])
+
+# ════════════════════════════════════════════════════════════════════════
+# Updates, 3 Nov 2026: trade union time off.
+# ════════════════════════════════════════════════════════════════════════
+_add("statutorytypes", how=["UK teams get Trade Union Duties (paid, for reps, learning reps and equality reps) and Trade Union Activities (unpaid, for members). The law sets no fixed amount, so neither has an allowance; both sit with everyday leave and explain themselves with the glossary hint.",
+                            "No leave type without an allowance (sickness, unpaid leave, union time) warns that a booking exceeds a balance.",
+                            "npm run backfill:uk-leave-types now only adds missing UK types; types a team already has, and their allowances, are left as the team set them."],
+     code=[("src/lib/country-policies.ts", "GB leave types"),
+           ("scripts/backfill-uk-statutory-leave-types.ts", "Add missing UK leave types")])
+_add("signup", how=["Changing your password re-issues this browser's session on the server, so it stays signed in while every other session is signed out."])
+_add("landing", how=["Every public footer (home, pricing, guides, tools, terms, privacy) and every app email shows the company's registered name, number, registered office and where it's registered, from src/config/company.ts. The terms name Coverboard Ltd as the company customers contract with, and the privacy policy names it as controller."],
+     code=[("src/config/company.ts", "Company details"),
+           ("src/components/legal/company-notice.tsx", "Footer notice")])

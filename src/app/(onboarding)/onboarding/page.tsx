@@ -14,7 +14,7 @@ import {
   getDefaultLeaveTypes,
   getCountryPolicies,
 } from "@/lib/country-policies";
-import { Check, Plus, Trash2, ArrowRight, ArrowLeft, Globe, BookOpen, Users, Upload, Loader2 } from "lucide-react";
+import { Check, Plus, Trash2, ArrowRight, ArrowLeft, Globe, BookOpen, Users, Upload, Loader2, MailCheck } from "lucide-react";
 
 const INDUSTRY_OPTIONS = [
   { value: "", label: "Select an industry (optional)" },
@@ -55,15 +55,25 @@ export default function OnboardingPage() {
   const [setupStep, setSetupStep] = useState(0);
   // The plan's room for people (null: unlimited). Finishing setup checks it too.
   const [inviteLimit, setInviteLimit] = useState<{ max: number; room: number } | null>(null);
+  // Inviting needs a verified email; until then the invite fields are hidden.
+  const [emailVerified, setEmailVerified] = useState(true);
+  const [verifyResent, setVerifyResent] = useState<"" | "sending" | "sent" | "failed">("");
 
   useEffect(() => {
     fetch("/api/onboarding/invite-limit")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.max != null) setInviteLimit({ max: data.max, room: data.room });
+        if (data?.emailVerified === false) setEmailVerified(false);
       })
       .catch(() => {});
   }, []);
+
+  async function resendVerification() {
+    setVerifyResent("sending");
+    const res = await fetch("/api/auth/resend-verification", { method: "POST" }).catch(() => null);
+    setVerifyResent(res?.ok ? "sent" : "failed");
+  }
   const atInviteLimit = inviteLimit !== null && invites.length >= inviteLimit.room;
 
   // Cycle reassuring progress messages while the workspace is being created,
@@ -158,9 +168,9 @@ export default function OnboardingPage() {
     setLoading(true);
 
     // Filter out empty invites
-    const validInvites = invites.filter(
-      (inv) => inv.name.trim() && inv.email.trim() && inv.countryCode
-    );
+    const validInvites = emailVerified
+      ? invites.filter((inv) => inv.name.trim() && inv.email.trim() && inv.countryCode)
+      : [];
 
     try {
       const res = await fetch("/api/onboarding/complete", {
@@ -458,11 +468,36 @@ export default function OnboardingPage() {
             <CardTitle>Invite your team</CardTitle>
             <CardDescription>
               Add a few people now to get started, or skip and invite everyone
-              later from the Team page. We&apos;ll create accounts for them
-              with temporary passwords.
+              later from the Team page. We&apos;ll email each of them a link
+              to set their password.
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {!emailVerified ? (
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">
+                <p className="flex items-start gap-2">
+                  <MailCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>
+                    Verify your email address first, using the link we sent you.
+                    Then you can invite people from the Team page. Finish setup
+                    now and come back to it.
+                  </span>
+                </p>
+                <button
+                  type="button"
+                  onClick={resendVerification}
+                  disabled={verifyResent === "sending" || verifyResent === "sent"}
+                  className="mt-2 font-medium text-amber-900 underline underline-offset-2 disabled:no-underline disabled:opacity-70"
+                >
+                  {verifyResent === "sent"
+                    ? "Sent. Check your inbox."
+                    : verifyResent === "failed"
+                      ? "Couldn't send it. Try again"
+                      : "Send the link again"}
+                </button>
+              </div>
+            ) : (
+            <>
             <div className="mb-4 flex items-start gap-2.5 rounded-md border border-brand-100 bg-brand-50/60 px-3 py-2.5 text-sm text-brand-800">
               <Upload className="mt-0.5 h-4 w-4 shrink-0" />
               <p>
@@ -543,6 +578,8 @@ export default function OnboardingPage() {
                 Add another person
               </button>
             )}
+            </>
+            )}
 
             <div className="mt-6 flex justify-between">
               <Button variant="outline" onClick={() => setStep(1)}>
@@ -564,13 +601,15 @@ export default function OnboardingPage() {
                   onClick={handleComplete}
                   disabled={loading}
                 >
-                  {loading ? "Setting up…" : "Skip & finish"}
+                  {loading ? "Setting up…" : emailVerified ? "Skip & finish" : "Finish setup"}
                 </Button>
+                {emailVerified && (
                 <Button onClick={handleComplete} disabled={loading}>
                   {loading
                     ? "Setting up…"
                     : `Finish setup${invites.some((inv) => inv.email.trim()) ? " & invite" : ""}`}
                 </Button>
+                )}
               </div>
             </div>
           </CardContent>

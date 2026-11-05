@@ -129,16 +129,21 @@ export default function BillingPage() {
   const status = summary.subscriptionStatus;
   const statusLabel =
     status === "trialing"
-      ? "Trialing"
+      ? "Trialling"
       : status === "active"
       ? "Active"
       : status === "past_due"
       ? "Past due"
       : status === "canceled"
-      ? "Canceled"
+      ? "Cancelled"
       : status === "paused"
       ? "Paused"
-      : status ?? "—";
+      : status === "canceling"
+      ? // Set by Switch to Free: the paid plan runs to the end of the period.
+        "Moving to Free at period end"
+      : status
+      ? status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, " ")
+      : "—";
   const statusVariant: "default" | "warning" | "outline" =
     status === "active"
       ? "default"

@@ -4,6 +4,7 @@
 // by a qualified solicitor. Get this looked at before going live.
 
 import type { Metadata } from "next";
+import { COMPANY } from "@/config/company";
 
 export const metadata: Metadata = {
   title: "Terms of Service",
@@ -11,7 +12,7 @@ export const metadata: Metadata = {
     "The agreement between you and Coverboard for using the Coverboard service.",
 };
 
-const LAST_UPDATED = "2 June 2026";
+const LAST_UPDATED = "4 November 2026";
 
 export default function TermsPage() {
   return (
@@ -39,10 +40,13 @@ export default function TermsPage() {
       <Section title="1. Who we are">
         <p>
           Coverboard provides software for managing employee leave, statutory
-          pay tracking and related People-Ops workflows. References to
-          &ldquo;Coverboard&rdquo; mean the entity that operates the Service.
-          Our registered details and a contact email for legal notices are
-          available at <em>support@coverboard.io</em>.
+          pay tracking and related People-Ops workflows. The Service is
+          provided by {COMPANY.name}, a company registered in{" "}
+          {COMPANY.registeredIn} with company number {COMPANY.number}, whose
+          registered office is at {COMPANY.registeredOffice}. References to
+          &ldquo;Coverboard&rdquo;, &ldquo;we&rdquo; and &ldquo;us&rdquo; mean{" "}
+          {COMPANY.name}. Legal notices can be sent to the registered office
+          or to <em>support@coverboard.io</em>.
         </p>
       </Section>
 

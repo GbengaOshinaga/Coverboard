@@ -139,8 +139,9 @@ export default function ProfilePage() {
         const data = await res.json();
         setPasswordError(data.error ?? "Failed to change password");
       } else {
+        // Other sessions are signed out; the server re-issued this one.
         setPasswordSuccess(true);
-        toast("Password changed", "success");
+        toast("Password changed. You've been signed out everywhere else.", "success");
         setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");

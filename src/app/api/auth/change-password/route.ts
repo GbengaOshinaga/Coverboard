@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
+import { encode, getToken } from "next-auth/jwt";
 import bcrypt from "bcryptjs";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -10,7 +11,12 @@ const schema = z.object({
   newPassword: z.string().min(8, "New password must be at least 8 characters"),
 });
 
-export async function POST(request: Request) {
+// The session cookie, named and secured as NextAuth does (getToken's defaults).
+const SECURE_COOKIE = process.env.NEXTAUTH_URL?.startsWith("https://") ?? !!process.env.VERCEL;
+const SESSION_COOKIE = SECURE_COOKIE ? "__Secure-next-auth.session-token" : "next-auth.session-token";
+const SESSION_MAX_AGE = authOptions.session?.maxAge ?? 30 * 24 * 60 * 60;
+
+export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -49,12 +55,33 @@ export async function POST(request: Request) {
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
 
-    await prisma.user.update({
+    // Ends every session signed in with the old password. This browser keeps
+    // its session: its token is re-issued here with the new version, so it's
+    // never signed out (rather than signing out and back in from the page).
+    const updated = await prisma.user.update({
       where: { id: userId },
-      data: { passwordHash },
+      data: { passwordHash, sessionVersion: { increment: 1 } },
+      select: { sessionVersion: true },
     });
 
-    return NextResponse.json({ success: true });
+    const response = NextResponse.json({ success: true });
+    const secret = process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET;
+    const token = await getToken({ req: request, secret, secureCookie: SECURE_COOKIE });
+    if (token && secret) {
+      const value = await encode({
+        token: { ...token, sessionVersion: updated.sessionVersion },
+        secret,
+        maxAge: SESSION_MAX_AGE,
+      });
+      response.cookies.set(SESSION_COOKIE, value, {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: SECURE_COOKIE,
+        maxAge: SESSION_MAX_AGE,
+      });
+    }
+    return response;
   } catch (error) {
     console.error("Change password error:", error);
     return NextResponse.json(

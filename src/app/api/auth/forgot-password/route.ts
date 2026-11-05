@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
-import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email";
 import { passwordResetEmail } from "@/lib/email-templates";
 import { getAppBaseUrl } from "@/lib/app-url";
 import { checkAuthRateLimit, getClientIp } from "@/lib/rate-limit";
 import { z } from "zod";
+import { emailField } from "@/lib/email-address";
+import { newLinkToken } from "@/lib/auth-tokens";
 
 const schema = z.object({
-  email: z.string().email(),
+  email: emailField(),
 });
 
 export async function POST(request: Request) {
@@ -47,12 +48,12 @@ export async function POST(request: Request) {
       data: { usedAt: new Date() },
     });
 
-    const token = crypto.randomBytes(32).toString("hex");
+    const { token, tokenHash } = newLinkToken();
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
     await prisma.passwordResetToken.create({
       data: {
-        token,
+        token: tokenHash,
         expiresAt,
         userId: user.id,
       },

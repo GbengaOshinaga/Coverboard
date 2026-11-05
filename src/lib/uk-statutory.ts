@@ -17,9 +17,17 @@ export async function hasUkStatutoryLeaveTypes(
   return count > 0;
 }
 
+/**
+ * Adds the UK statutory leave types, their policies and bank holidays.
+ * `onlyAddMissing` leaves existing types and policies exactly as the team set
+ * them and only creates new ones: for backfilling types added to the GB list
+ * later, without resetting a team's own allowances.
+ */
 export async function enableUkStatutoryLeaveTypes(
-  organizationId: string
+  organizationId: string,
+  options: { onlyAddMissing?: boolean } = {}
 ): Promise<void> {
+  const keep = options.onlyAddMissing === true;
   const ukPolicies = getCountryPolicies(["GB"]);
   const byLeaveType = new Map(
     ukPolicies.map((p) => [p.leaveType, p] as const)
@@ -50,17 +58,19 @@ export async function enableUkStatutoryLeaveTypes(
         countryCode: "GB",
         organizationId,
       },
-      update: {
-        isPaid: p.category !== "UNPAID",
-        category: p.category,
-        defaultDays: p.annualAllowance,
-        allowanceUnit: p.allowanceUnit ?? "DAYS",
-        requiresEvidence: p.requiresEvidence,
-        minNoticeDays: p.minNoticeDays,
-        durationLogic: p.durationLogic,
-        applyProRata: p.applyProRata ?? false,
-        countryCode: "GB",
-      },
+      update: keep
+        ? {}
+        : {
+            isPaid: p.category !== "UNPAID",
+            category: p.category,
+            defaultDays: p.annualAllowance,
+            allowanceUnit: p.allowanceUnit ?? "DAYS",
+            requiresEvidence: p.requiresEvidence,
+            minNoticeDays: p.minNoticeDays,
+            durationLogic: p.durationLogic,
+            applyProRata: p.applyProRata ?? false,
+            countryCode: "GB",
+          },
     })
     )
   );
@@ -84,10 +94,12 @@ export async function enableUkStatutoryLeaveTypes(
           carryOverMax: p.carryOverMax,
           leaveTypeId: lt.id,
         },
-        update: {
-          annualAllowance: p.annualAllowance,
-          carryOverMax: p.carryOverMax,
-        },
+        update: keep
+          ? {}
+          : {
+              annualAllowance: p.annualAllowance,
+              carryOverMax: p.carryOverMax,
+            },
       });
     })
   );

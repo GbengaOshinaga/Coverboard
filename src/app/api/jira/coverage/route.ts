@@ -4,6 +4,13 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { searchJiraIssues, resolveJiraAccountId, getJiraClient } from "@/lib/jira";
 
+/**
+ * Open Jira issues for someone about to be off, and (for admins and managers,
+ * who can reassign) who's free to take them. Staff can only check their own:
+ * a colleague's tickets aren't theirs to see, and the teammate list is for
+ * reassigning, which staff can't do. No emails are returned; the team list
+ * hides them from staff and the screen doesn't need them.
+ */
 export async function GET(request: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
@@ -22,7 +29,12 @@ export async function GET(request: Request) {
     );
   }
 
-  const orgId = (session.user as Record<string, unknown>).organizationId as string;
+  const sessionUser = session.user as Record<string, unknown>;
+  const orgId = sessionUser.organizationId as string;
+  const canManage = sessionUser.role === "ADMIN" || sessionUser.role === "MANAGER";
+  if (!canManage && userId !== sessionUser.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   // Check if Jira is connected
   const client = await getJiraClient(orgId);
@@ -31,8 +43,8 @@ export async function GET(request: Request) {
   }
 
   // Resolve the user's Jira account
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
+  const user = await prisma.user.findFirst({
+    where: { id: userId, organizationId: orgId },
     select: { email: true, name: true },
   });
 
@@ -53,6 +65,9 @@ export async function GET(request: Request) {
 
   // Search for open issues
   const issues = await searchJiraIssues(orgId, jiraAccountId);
+  if (!canManage) {
+    return NextResponse.json({ connected: true, userMapped: true, issues, availableTeammates: [] });
+  }
 
   // Find available teammates (not on approved leave during the same dates)
   const start = new Date(startDate);
@@ -74,9 +89,10 @@ export async function GET(request: Request) {
   const availableTeammates = await prisma.user.findMany({
     where: {
       organizationId: orgId,
+      isActive: true,
       id: { notIn: Array.from(busySet) },
     },
-    select: { id: true, name: true, email: true },
+    select: { id: true, name: true },
     orderBy: { name: "asc" },
   });
 

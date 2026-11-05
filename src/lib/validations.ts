@@ -3,6 +3,7 @@ import {
   EMPLOYMENT_TYPES,
   normalizeEmploymentType,
 } from "@/lib/employment-types";
+import { emailField } from "@/lib/email-address";
 
 export const leaveRequestSchema = z
   .object({
@@ -25,7 +26,7 @@ export type LeaveRequestInput = z.infer<typeof leaveRequestSchema>;
 export const teamMemberSchema = z
   .object({
     name: z.string().min(2, "Name must be at least 2 characters"),
-    email: z.string().email("Invalid email address"),
+    email: emailField(),
     role: z.enum(["ADMIN", "MANAGER", "MEMBER"]),
     memberType: z.enum(["EMPLOYEE", "CONTRACTOR", "FREELANCER"]),
     employmentType: z

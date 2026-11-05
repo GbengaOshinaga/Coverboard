@@ -1,6 +1,7 @@
 import { WebClient } from "@slack/web-api";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
+import { normalizeEmail } from "@/lib/email-address";
 
 const slackClientId = process.env.SLACK_CLIENT_ID ?? "";
 const slackClientSecret = process.env.SLACK_CLIENT_SECRET ?? "";
@@ -134,7 +135,7 @@ export async function resolveSlackUser(
     if (!email) return null;
 
     const user = await prisma.user.findFirst({
-      where: { email, organizationId, isActive: true },
+      where: { email: normalizeEmail(email), organizationId, isActive: true },
       include: { organization: true },
     });
 

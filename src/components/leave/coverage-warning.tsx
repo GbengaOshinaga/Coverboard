@@ -24,7 +24,6 @@ type JiraIssue = {
 type Teammate = {
   id: string;
   name: string;
-  email: string;
 };
 
 type CoverageData = {

@@ -242,10 +242,12 @@ export async function createLeaveRequest(
       const avgHoursPerDay = balance.avgHoursPerDay ?? 0;
       resolvedHoursBooked =
         input.hoursBooked ?? Number((requestedDays * avgHoursPerDay).toFixed(2));
-      if (resolvedHoursBooked > balance.remaining) {
+      if (balance.allowance > 0 && resolvedHoursBooked > balance.remaining) {
         balanceWarning = `This request (${resolvedHoursBooked} hours) exceeds your remaining balance of ${balance.remaining.toFixed(1)} hours for ${balance.leaveTypeName}.`;
       }
-    } else if (balance && requestedDays > balance.remaining) {
+    } else if (balance && balance.allowance > 0 && requestedDays > balance.remaining) {
+      // Types with no allowance (sickness, unpaid leave, union time) have no
+      // balance to exceed.
       balanceWarning = `This request (${requestedDays} days) exceeds your remaining balance of ${balance.remaining} days for ${balance.leaveTypeName}.`;
     }
   } catch {

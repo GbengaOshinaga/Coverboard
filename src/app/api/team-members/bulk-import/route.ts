@@ -8,6 +8,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { teamMemberSchema } from "@/lib/validations";
 import { sendTeamInviteEmail } from "@/lib/email-notifications";
+import { inviteVerificationGate } from "@/lib/email-verification";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
 import { hasUkStatutoryLeaveTypes } from "@/lib/uk-statutory";
 import { maxAdminsForPlan, maxEmployeesForPlan } from "@/lib/plans";
@@ -38,6 +39,8 @@ export async function POST(request: Request) {
   if (userRole !== "ADMIN" && userRole !== "MANAGER") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  const unverified = await inviteVerificationGate(sessionUser.id as string);
+  if (unverified) return unverified;
 
   let body: unknown;
   try {
@@ -215,9 +218,7 @@ export async function POST(request: Request) {
           countryCode: data.countryCode,
           workCountry: data.workCountry,
           organizationId: orgId,
-          // Invited members get their set-password link at this address, so
-          // using it proves control — no separate verification needed.
-          emailVerified: new Date(),
+          // Not verified until they use their set-password link.
         },
         select: {
           id: true,

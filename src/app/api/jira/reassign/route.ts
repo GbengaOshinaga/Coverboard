@@ -35,8 +35,9 @@ export async function POST(request: Request) {
     const { issueKey, newAssigneeUserId } = parsed.data;
     const orgId = (session.user as Record<string, unknown>).organizationId as string;
 
-    const newAssignee = await prisma.user.findUnique({
-      where: { id: newAssigneeUserId },
+    // Only someone on this team, who hasn't left.
+    const newAssignee = await prisma.user.findFirst({
+      where: { id: newAssigneeUserId, organizationId: orgId, isActive: true },
       select: { email: true },
     });
 

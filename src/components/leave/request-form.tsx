@@ -867,7 +867,7 @@ export function RequestForm({
       {/* Jira coverage warning (informational) */}
       {startDate && endDate && currentUserId && (
         <CoverageWarning
-          userId={currentUserId}
+          userId={subjectId || currentUserId}
           startDate={new Date(startDate).toISOString()}
           endDate={new Date(endDate).toISOString()}
         />

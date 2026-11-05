@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isEmailConfigured, resend } from "@/lib/email";
 import { sendTeamInviteEmailStrict } from "@/lib/email-notifications";
+import { inviteVerificationGate } from "@/lib/email-verification";
 import { recordAudit, requestAuditContext } from "@/lib/audit";
 
 const RESENDS_PER_HOUR = 5;
@@ -30,6 +31,8 @@ export async function POST(
   const orgId = sessionUser.organizationId as string;
   const actorId = sessionUser.id as string;
   const { id: memberId } = await params;
+  const unverified = await inviteVerificationGate(actorId);
+  if (unverified) return unverified;
 
   if (memberId === actorId) {
     return NextResponse.json(

@@ -18,6 +18,7 @@
  */
 
 import ExcelJS from "exceljs";
+import { csvCell } from "@/lib/csv-export";
 
 export type ExportFormat = "json" | "csv" | "excel";
 
@@ -53,33 +54,16 @@ function csvValueOf<T>(row: T, column: ExportColumn<T>): unknown {
   return value;
 }
 
-/** RFC 4180 CSV cell escaping. Wraps in quotes only when necessary. */
-function escapeCsvCell(raw: unknown): string {
-  if (raw === null || raw === undefined) return "";
-  let value: string;
-  if (raw instanceof Date) {
-    value = raw.toISOString();
-  } else if (typeof raw === "object") {
-    value = JSON.stringify(raw);
-  } else {
-    value = String(raw);
-  }
-  if (/[",\n\r]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
-}
-
 export function toCsv<T>(
   rows: ReadonlyArray<T>,
   columns: ReadonlyArray<ExportColumn<T>>,
   options: { includeBom?: boolean } = {}
 ): string {
   const includeBom = options.includeBom ?? true;
-  const header = columns.map((c) => escapeCsvCell(c.header)).join(",");
+  const header = columns.map((c) => csvCell(c.header)).join(",");
   const body = rows
     .map((row) =>
-      columns.map((c) => escapeCsvCell(csvValueOf(row, c))).join(",")
+      columns.map((c) => csvCell(csvValueOf(row, c))).join(",")
     )
     .join("\r\n");
   // \r\n line endings per RFC 4180 — Excel cares.

@@ -2,6 +2,7 @@ import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { getAppBaseUrl } from "@/lib/app-url";
+import { newLinkToken } from "@/lib/auth-tokens";
 
 /**
  * Invites email a one-time "set your password" link instead of a password.
@@ -22,10 +23,10 @@ export async function createSetPasswordLink(userId: string): Promise<string> {
     where: { userId, usedAt: null },
     data: { usedAt: new Date() },
   });
-  const token = crypto.randomBytes(32).toString("hex");
+  const { token, tokenHash } = newLinkToken();
   await prisma.passwordResetToken.create({
     data: {
-      token,
+      token: tokenHash,
       userId,
       expiresAt: new Date(Date.now() + INVITE_LINK_DAYS * 24 * 60 * 60 * 1000),
     },

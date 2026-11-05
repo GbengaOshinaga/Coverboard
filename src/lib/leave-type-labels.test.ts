@@ -43,3 +43,12 @@ test("leave-type list hints: balance left, 'up to' for leave per birth or loss, 
   assert.equal(leaveTypeListHint({ name: "Unpaid Leave", defaultDays: 0 }, { allowance: 0, remaining: 0 }), null);
   assert.equal(leaveTypeListHint({ name: "Neonatal Care Leave", defaultDays: 12, allowanceUnit: "WEEKS" }, null), null);
 });
+
+test("trade union time off is everyday leave, listed after the common types", () => {
+  assert.equal(leaveTypeGroup("Trade Union Duties"), "Everyday");
+  const names = ["Trade Union Duties", "Annual Leave", "Statutory Maternity Leave", "Trade Union Activities", "Carer's Leave"];
+  assert.deepEqual([...names].sort((a, b) => compareLeaveTypesForList({ name: a }, { name: b })), [
+    "Annual Leave", "Carer's Leave", "Trade Union Activities", "Trade Union Duties", "Statutory Maternity Leave",
+  ]);
+  assert.equal(leaveTypeListHint({ name: "Trade Union Duties", defaultDays: 0 }, { allowance: 0, remaining: 0 }), null);
+});

@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { CompanyNotice } from "@/components/legal/company-notice";
 
 export default async function GuidesLayout({ children }: { children: ReactNode }) {
   const session = await getServerSession(authOptions);
@@ -45,9 +46,7 @@ export default async function GuidesLayout({ children }: { children: ReactNode }
       </header>
       <main className="mx-auto max-w-3xl px-6 py-12">{children}</main>
       <footer className="border-t border-gray-200 bg-white">
-        <div className="mx-auto max-w-3xl px-6 py-6 text-center text-xs text-gray-500">
-          &copy; {new Date().getFullYear()} Coverboard. All rights reserved.
-        </div>
+        <CompanyNotice className="mx-auto max-w-3xl px-6 py-6 text-center text-xs text-gray-500" />
       </footer>
     </div>
   );

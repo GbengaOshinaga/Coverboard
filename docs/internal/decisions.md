@@ -103,6 +103,19 @@ If you change one, update its entry and add the date. If you make a new decision
 
 ---
 
+### 32. Inviting needs a verified email (2026-11-02)
+- **Decision:** signing up with email and password doesn't need a verified address, so a trial starts straight away. Inviting anyone does: adding someone, bulk import, resending an invite and the invites in onboarding are refused until the inviter has used their verification link. Invited people are marked verified only when they use their set-password link (or sign in with Google), not when they're added.
+- **Why:** otherwise anyone could sign up as ceo@real-company.com without access to that inbox and send Coverboard invites to that company's real staff, in that person's name. Blocking sign-in instead would slow every genuine trial.
+- **Squatted addresses:** whoever really owns the address can take the account over with Forgot password, which also verifies it.
+- **Where:** `inviteVerificationGate` in `src/lib/email-verification.ts`, called by each invite route; the onboarding page hides the invite fields until the email is verified.
+
+### 33. Account security basics (2026-11-02)
+- **Emails are stored in lower case**, everywhere one comes in (`normalizeEmail` and `emailField` in `src/lib/email-address.ts`), so capitals can't create a second account or stop someone signing in. Migration `20261102090000_lowercase_emails` converts existing rows and stops if two accounts differ only by capitals.
+- **Changing or resetting a password signs out every other session.** `User.sessionVersion` goes up, and `auth.ts` refuses a session from before the change on its next request. The browser that made the change keeps its session: the change-password route re-issues its session cookie with the new version, so it's never signed out.
+- **One-time links are stored hashed.** Password-reset, invite and verification tokens are kept as SHA-256 hashes (`src/lib/auth-tokens.ts`); the email carries the token.
+- **CSV exports can't run formulas.** Text starting with = + - or @ gets an apostrophe in front (`csvCell` in `src/lib/csv-export.ts`, the one cell function for every CSV). Excel downloads write text cells, which never run.
+- **Not done, on purpose:** Jira and Slack connection keys aren't encrypted yet (that protects only against a leaked database and needs a new secret setting); sign-in rate limits read the forwarded IP header, which Vercel sets itself, so it can't be faked there.
+
 ## Plans and billing
 
 ### 11. Plan limits count people still on the team, admins included
