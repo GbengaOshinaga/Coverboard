@@ -45,9 +45,10 @@ export default function PrivacyPage() {
 
       <Section title="1. Controller and processor roles">
         <p>
-          For data about the Customer&rsquo;s staff that an organisation
-          (the &ldquo;Customer&rdquo;) stores in the Service (leave records,
-          sickness notes, earnings history, etc.), the Customer is the <strong>data
+          For data about an organisation&rsquo;s (the
+          &ldquo;Customer&rsquo;s&rdquo;) staff that it stores in the Service
+          (leave records, sickness notes, earnings history, etc.), the
+          Customer is the <strong>data
           controller</strong> and {COMPANY.name} is the <strong>data
           processor</strong>. We process this data on the Customer&rsquo;s
           documented instructions, as set out in our Terms of Service.
