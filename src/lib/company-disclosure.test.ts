@@ -12,4 +12,5 @@ test("every email layout ends with the company's registered details", () => {
     assert.ok(html.includes(COMPANY.registeredOffice), "registered office");
   }
   assert.match(COMPANY_DISCLOSURE, /registered in England and Wales, company number \d{8}\./);
+  assert.match(COMPANY.icoRegistration, /^Z[A-Z0-9]\d{6}$/, "ICO registration number");
 });
