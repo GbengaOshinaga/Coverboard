@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     "How Coverboard collects, uses, stores and shares personal data — your rights under UK GDPR.",
 };
 
-const LAST_UPDATED = "4 November 2026";
+const LAST_UPDATED = "7 November 2026";
 
 export default function PrivacyPage() {
   return (
@@ -37,7 +37,9 @@ export default function PrivacyPage() {
         <p>
           {COMPANY.name} is a company registered in{" "}
           {COMPANY.registeredIn} (company number {COMPANY.number}), with its
-          registered office at {COMPANY.registeredOffice}. The Service is
+          registered office at {COMPANY.registeredOffice}. We are
+          registered with the Information Commissioner&rsquo;s Office
+          (registration number {COMPANY.icoRegistration}). The Service is
           hosted in the United Kingdom. We comply with the UK General Data
           Protection Regulation (UK GDPR) and the Data Protection Act 2018.
         </p>
